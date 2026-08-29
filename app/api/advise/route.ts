@@ -20,7 +20,7 @@ function openAiErrorMessage(status: number, detailText: string): string {
       return "OpenAI account has no available credits. Add billing or top up at platform.openai.com/account/billing.";
     }
     if (status === 429) {
-      return "OpenAI rate limit reached. Wait a minute and try again.";
+      return "OpenAI rate limit reached. Wait 60 seconds, tap once only, then try again. Avoid clicking repeatedly while testing.";
     }
     if (code === "model_not_found") {
       return "Configured OpenAI model is unavailable. Set OPENAI_MODEL to gpt-4o-mini in Vercel or remove that variable.";
@@ -31,6 +31,29 @@ function openAiErrorMessage(status: number, detailText: string): string {
   }
 
   return "AI service request failed. Try again shortly.";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callOpenAi(apiKey: string, model: string, userContent: string) {
+  return fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.3,
+      max_tokens: 900,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userContent },
+      ],
+    }),
+  });
 }
 
 export async function POST(request: Request) {
@@ -63,25 +86,13 @@ export async function POST(request: Request) {
   const model = process.env.OPENAI_MODEL ?? DEFAULT_MODEL;
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        max_tokens: 900,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: JSON.stringify(parsed.data, null, 2),
-          },
-        ],
-      }),
-    });
+    const userContent = JSON.stringify(parsed.data, null, 2);
+    let response = await callOpenAi(apiKey, model, userContent);
+
+    if (response.status === 429) {
+      await sleep(2500);
+      response = await callOpenAi(apiKey, model, userContent);
+    }
 
     if (!response.ok) {
       const detail = await response.text();

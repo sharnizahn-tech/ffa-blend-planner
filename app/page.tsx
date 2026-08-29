@@ -135,6 +135,7 @@ export default function Home() {
   const [aiOpinion, setAiOpinion] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiCooldown, setAiCooldown] = useState(0);
 
   const estimatedFFB = (millCapacity * hours * utilisation) / 100;
   const incomingCPO = (estimatedFFB * oer) / 100;
@@ -158,9 +159,19 @@ export default function Home() {
     setAiError(null);
   }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, best]);
 
+  useEffect(() => {
+    if (aiCooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setAiCooldown((seconds) => (seconds <= 1 ? 0 : seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [aiCooldown]);
+
   const fetchAiOpinion = async () => {
+    if (aiLoading || aiCooldown > 0) return;
     setAiLoading(true);
     setAiError(null);
+    setAiCooldown(60);
     try {
       const payload: AdviseRequest = {
         production: {
@@ -549,6 +560,7 @@ export default function Home() {
         aiOpinion={aiOpinion}
         aiLoading={aiLoading}
         aiError={aiError}
+        aiCooldown={aiCooldown}
         onGetAiOpinion={fetchAiOpinion}
       />
       <DecisionSafeguards
@@ -866,6 +878,7 @@ function SmartRecommendation({
   aiOpinion,
   aiLoading,
   aiError,
+  aiCooldown,
   onGetAiOpinion,
 }: {
   best: { allocation: number[]; results: Result[]; score: number } | null;
@@ -878,8 +891,15 @@ function SmartRecommendation({
   aiOpinion: string | null;
   aiLoading: boolean;
   aiError: string | null;
+  aiCooldown: number;
   onGetAiOpinion: () => void;
 }) {
+  const aiDisabled = aiLoading || aiCooldown > 0;
+  const aiButtonLabel = aiLoading
+    ? "Generating…"
+    : aiCooldown > 0
+      ? `Wait ${aiCooldown}s`
+      : "Get AI opinion";
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
       <div className="bg-[#173f30] p-4 text-white sm:p-5">
@@ -966,11 +986,11 @@ function SmartRecommendation({
                 <button
                   type="button"
                   onClick={onGetAiOpinion}
-                  disabled={aiLoading}
+                  disabled={aiDisabled}
                   className="btn-touch w-full shrink-0 border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60 sm:w-auto"
                 >
                   {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                  {aiLoading ? "Generating…" : "Get AI opinion"}
+                  {aiButtonLabel}
                 </button>
               </div>
 
@@ -1002,11 +1022,11 @@ function SmartRecommendation({
               <button
                 type="button"
                 onClick={onGetAiOpinion}
-                disabled={aiLoading}
+                disabled={aiDisabled}
                 className="btn-touch w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
               >
                 {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                {aiLoading ? "Generating…" : "Get AI opinion on this situation"}
+                {aiCooldown > 0 && !aiLoading ? `Wait ${aiCooldown}s` : aiButtonLabel}
               </button>
               {aiError && (
                 <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
