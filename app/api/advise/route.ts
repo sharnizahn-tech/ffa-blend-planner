@@ -3,7 +3,7 @@ import { adviseRequestSchema, SYSTEM_PROMPT } from "@/lib/advise";
 
 export const runtime = "nodejs";
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
+const FALLBACK_MODELS = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-8b"];
 
 function geminiErrorMessage(status: number, detailText: string): string {
   try {
@@ -23,7 +23,7 @@ function geminiErrorMessage(status: number, detailText: string): string {
       return "Gemini rate limit reached. Wait 60 seconds, tap once only, then try again.";
     }
     if (code === "NOT_FOUND") {
-      return "Gemini model unavailable. Set GEMINI_MODEL to gemini-2.0-flash in Vercel or remove that variable.";
+      return "Gemini model unavailable. Remove GEMINI_MODEL from Vercel or set it to gemini-1.5-flash.";
     }
     if (message) return message;
   } catch {
@@ -88,22 +88,43 @@ export async function POST(request: Request) {
     );
   }
 
-  const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+  const configuredModel = process.env.GEMINI_MODEL?.trim();
+  const models = configuredModel ? [configuredModel] : FALLBACK_MODELS;
 
   try {
     const userContent = JSON.stringify(parsed.data, null, 2);
-    let response = await callGemini(apiKey, model, userContent);
+    let response: Response | null = null;
+    let lastDetail = "";
 
-    if (response.status === 429) {
-      await sleep(2500);
+    for (const model of models) {
       response = await callGemini(apiKey, model, userContent);
+
+      if (response.status === 429) {
+        await sleep(2500);
+        response = await callGemini(apiKey, model, userContent);
+      }
+
+      if (response.ok) break;
+
+      lastDetail = await response.text();
+      console.error("Gemini advise error:", response.status, model, lastDetail);
+
+      const isModelMissing =
+        response.status === 404 ||
+        lastDetail.includes("NOT_FOUND") ||
+        lastDetail.toLowerCase().includes("not found");
+
+      if (!isModelMissing || models.length === 1) {
+        return NextResponse.json(
+          { error: geminiErrorMessage(response.status, lastDetail) },
+          { status: 502 },
+        );
+      }
     }
 
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error("Gemini advise error:", response.status, detail);
+    if (!response?.ok) {
       return NextResponse.json(
-        { error: geminiErrorMessage(response.status, detail) },
+        { error: geminiErrorMessage(response?.status ?? 502, lastDetail) },
         { status: 502 },
       );
     }
