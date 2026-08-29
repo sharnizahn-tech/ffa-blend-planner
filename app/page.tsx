@@ -906,10 +906,10 @@ function SmartRecommendation({
 }) {
   const aiDisabled = aiLoading || aiCooldown > 0;
   const aiButtonLabel = aiLoading
-    ? "Generating…"
+    ? "Generating… / Menjana…"
     : aiCooldown > 0
       ? `Wait ${aiCooldown}s`
-      : "Get AI opinion";
+      : "Get AI opinion / Dapatkan pendapat AI";
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
       <div className="bg-[#173f30] p-4 text-white sm:p-5">
@@ -987,9 +987,9 @@ function SmartRecommendation({
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="section-label">AI advisor</p>
+                  <p className="section-label">AI advisor / Penasihat AI</p>
                   <p className="mt-1 text-sm text-[#58665e]">
-                    Plain-language opinion from OpenAI based on your calculated plan — numbers stay
+                    Plain-language opinion in English and Bahasa Melayu from OpenAI — numbers stay
                     from the engine.
                   </p>
                 </div>
@@ -1014,7 +1014,9 @@ function SmartRecommendation({
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
                   <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
                     <Bot size={16} />
-                    {aiSource === "offline" ? "Instant mill summary" : "AI opinion (OpenAI)"}
+                    {aiSource === "offline"
+                      ? "Instant mill summary / Ringkasan kilang"
+                      : "AI opinion (EN + BM)"}
                   </div>
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
                     {aiOpinion}
@@ -1046,7 +1048,9 @@ function SmartRecommendation({
               {aiOpinion && (
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
                   {aiSource === "offline" && (
-                    <div className="mb-2 text-xs font-bold text-[#a85128]">Offline summary (OpenAI unavailable)</div>
+                    <div className="mb-2 text-xs font-bold text-[#a85128]">
+                      Offline summary / Ringkasan luar talian (OpenAI unavailable)
+                    </div>
                   )}
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
                     {aiOpinion}

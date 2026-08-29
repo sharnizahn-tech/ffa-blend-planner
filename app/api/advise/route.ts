@@ -173,7 +173,7 @@ export async function POST(request: Request) {
 
     const offlineOpinion = buildOfflineOpinion(payload);
     return NextResponse.json({
-      opinion: `${offlineOpinion}\n\nNote: OpenAI was unavailable (${result.error}). This summary was generated offline from your calculated plan.`,
+      opinion: `${offlineOpinion}\n\nNote / Nota: OpenAI was unavailable (${result.error}). This summary was generated offline from your calculated plan.\nOpenAI tidak tersedia (${result.error}). Ringkasan ini dijana luar talian daripada pelan yang dikira.`,
       source: "offline",
     });
   } catch (error) {
