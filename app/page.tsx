@@ -88,11 +88,13 @@ function findBestPlan(
       (s, r) => s + (r.ffa > target ? r.incoming : 0),
       0,
     );
+    const ffaMass = results.reduce((s, r) => s + r.finalFFA * r.finalStock, 0);
     const score =
       excess * 100 +
       contamination * 20 +
       highTankFeed * 2 +
-      allocation.filter((x) => x > 0).length * 3;
+      allocation.filter((x) => x > 0).length * 3 +
+      ffaMass * 0.05;
     if (!best || score < best.score) best = { allocation, results, score };
   };
   const build = (index: number, remaining: number, values: number[]) => {
@@ -121,8 +123,8 @@ function statusLabel(
   copy: Copy,
 ) {
   if (overflow) return copy.tanks.overflow;
-  if (finalFFA > target) return copy.tanks.highFfa;
-  return copy.tanks.withinTarget;
+  if (finalFFA > target) return copy.tanks.aboveLimit;
+  return copy.tanks.goodFfa;
 }
 
 function LanguageToggle({ lang, onChange }: { lang: Lang; onChange: (lang: Lang) => void }) {
@@ -345,7 +347,7 @@ export default function Home() {
         icon={<AlertTriangle size={18} />}
         label={copy.metrics.highFfaStock}
         value={`${n(highFFAStock, 0)} MT`}
-        note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.withinTarget}
+        note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.goodQuality}
         warning={!!highFFAStock}
       />
       <Metric
@@ -358,7 +360,7 @@ export default function Home() {
         icon={<Beaker size={18} />}
         label={copy.metrics.incomingFfa}
         value={`${n(incomingFFA, 2)}%`}
-        note={copy.metrics.targetLe(target)}
+        note={copy.metrics.ffaLimitNote(target)}
         warning={incomingFFA > target}
       />
     </section>
@@ -382,8 +384,9 @@ export default function Home() {
           unit="%"
           accent
         />
-        <Field label={copy.forecast.ffaTarget} value={target} onChange={setTarget} unit="%" />
+        <Field label={copy.forecast.ffaLimit} value={target} onChange={setTarget} unit="%" />
       </div>
+      <p className="mt-3 text-xs leading-relaxed text-[#758078]">{copy.forecast.ffaLimitHint}</p>
     </Panel>
   );
 
@@ -996,7 +999,7 @@ function SmartRecommendation({
           </span>
         </div>
         <h2 className="text-lg font-bold leading-snug sm:text-xl">
-          {bestMeetsTarget ? copy.plan.safeAllocation : copy.plan.targetNotAchievable}
+          {bestMeetsTarget ? copy.plan.safeAllocation : copy.plan.limitNotAchievable}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">{copy.plan.planBasis}</p>
       </div>
@@ -1027,7 +1030,7 @@ function SmartRecommendation({
                 icon={<Info size={17} />}
                 title={copy.plan.assessment}
                 text={
-                  bestMeetsTarget ? copy.plan.assessmentMeetsTarget : copy.plan.assessmentMinImpact
+                  bestMeetsTarget ? copy.plan.assessmentMeetsLimit : copy.plan.assessmentMinImpact
                 }
               />
               <Advice
@@ -1150,7 +1153,7 @@ function DecisionSafeguards({
     [!results.some((r) => r.overflow), copy.safeguards.noOverflow],
     [allocationTotal === 100, copy.safeguards.allocation100],
     [highFFAStock === 0, copy.safeguards.noHighFfa],
-    [results.every((r) => r.finalFFA <= target), copy.safeguards.finalFfaLe(target)],
+    [results.every((r) => r.finalFFA <= target), copy.safeguards.finalFfaWithinLimit(target)],
   ];
 
   return (

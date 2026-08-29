@@ -81,8 +81,8 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
       lang,
       "Summary",
       "Ringkasan",
-      `Expected incoming CPO is ${n(p.incomingCpoMt)} MT from ${n(p.estimatedFfbMt, 0)} MT FFB at ${n(p.incomingFfaPct, 2)}% FFA against a target of ${n(p.targetFfaPct, 2)}%.`,
-      `CPO masuk dijangka ialah ${n(p.incomingCpoMt)} MT daripada ${n(p.estimatedFfbMt, 0)} MT TBS pada ${n(p.incomingFfaPct, 2)}% FFA berbanding sasaran ${n(p.targetFfaPct, 2)}%.`,
+      `Expected incoming CPO is ${n(p.incomingCpoMt)} MT from ${n(p.estimatedFfbMt, 0)} MT FFB at ${n(p.incomingFfaPct, 2)}% FFA. Good FFA limit is ${n(p.targetFfaPct, 2)}% — lower is better.`,
+      `CPO masuk dijangka ialah ${n(p.incomingCpoMt)} MT daripada ${n(p.estimatedFfbMt, 0)} MT TBS pada ${n(p.incomingFfaPct, 2)}% FFA. Had FFA baik ialah ${n(p.targetFfaPct, 2)}% — lebih rendah lebih baik.`,
     ),
   );
 
@@ -116,11 +116,11 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
       "Key risks",
       "Risiko utama",
       flags.highFfaStockMt > 0
-        ? `${n(flags.highFfaStockMt, 0)} MT is already above target FFA${tankList}. Avoid feeding more high-FFA CPO into those tanks unless no safer capacity exists.`
-        : "No tank currently holds stock above the FFA target.",
+        ? `${n(flags.highFfaStockMt, 0)} MT is already above the good FFA limit${tankList}. Avoid feeding more high-FFA CPO into those tanks unless no safer capacity exists.`
+        : "No tank currently holds stock above the good FFA limit.",
       flags.highFfaStockMt > 0
-        ? `${n(flags.highFfaStockMt, 0)} MT sudah melebihi sasaran FFA${tankList}. Elakkan memasukkan lebih banyak CPO FFA tinggi ke tangki tersebut melainkan tiada kapasiti yang lebih selamat.`
-        : "Tiada tangki yang menyimpan stok melebihi sasaran FFA pada masa ini.",
+        ? `${n(flags.highFfaStockMt, 0)} MT sudah melebihi had FFA baik${tankList}. Elakkan memasukkan lebih banyak CPO FFA tinggi ke tangki tersebut melainkan tiada kapasiti yang lebih selamat.`
+        : "Tiada tangki yang menyimpan stok melebihi had FFA baik pada masa ini.",
     ),
   );
 
@@ -138,10 +138,10 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
         "Recommended action",
         "Tindakan disyorkan",
         recommendedPlan.meetsTarget
-          ? `Engine best plan keeps final FFA within target: ${planText}.`
+          ? `Engine best plan keeps final FFA at or below the good FFA limit (lower is better): ${planText}.`
           : `Engine best plan minimises quality impact: ${planText}.`,
         recommendedPlan.meetsTarget
-          ? `Pelan terbaik enjin mengekalkan FFA akhir dalam sasaran: ${planText}.`
+          ? `Pelan terbaik enjin mengekalkan FFA akhir pada atau di bawah had FFA baik (lebih rendah lebih baik): ${planText}.`
           : `Pelan terbaik enjin meminimumkan kesan kualiti: ${planText}.`,
       ),
     );
@@ -200,6 +200,7 @@ export function buildSystemPrompt(lang: "en" | "bm", userQuestion?: string) {
 Rules:
 - Use ONLY the numbers and flags provided in the user message. Never invent tank readings, percentages, or MT values.
 - The recommendedPlan comes from a deterministic calculation engine. Treat it as the mathematical best plan unless flags show it is infeasible.
+- targetFfaPct is the GOOD FFA LIMIT (maximum for good quality), not a target to hit. FFA lower than this limit is better; 4.8% means at or below 4.8% is good, and lower values are preferable.
 - Explain WHY the recommended allocation is best, which tanks are risky, and what operational actions the engineer should take before transfer.
 - Compare currentPlan vs recommendedPlan when they differ.
 - If recommendedPlan is null, explain why no feasible plan exists and what constraints block a solution.

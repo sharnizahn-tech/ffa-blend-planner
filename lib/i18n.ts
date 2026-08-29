@@ -18,9 +18,9 @@ export const translations = {
       incomingFfa: "Incoming FFA",
       acrossTanks: (count: number) => `Across ${count} tanks`,
       actionRequired: "Action required",
-      withinTarget: "Within target",
+      goodQuality: "Good quality",
       fromFfb: (ffb: number) => `From ${n(ffb, 0)} MT FFB`,
-      targetLe: (target: number) => `Target ≤ ${n(target, 2)}%`,
+      ffaLimitNote: (limit: number) => `Limit ≤ ${n(limit, 2)}% · lower is better`,
     },
     forecast: {
       title: "Production forecast",
@@ -30,7 +30,8 @@ export const translations = {
       utilisation: "Utilisation",
       expectedOer: "Expected OER",
       incomingFfa: "Incoming FFA",
-      ffaTarget: "FFA target",
+      ffaLimit: "Good FFA limit",
+      ffaLimitHint: "4.8% is the maximum for good FFA — the lower, the better.",
     },
     allocation: {
       mustEqual100: "Allocation total must equal 100%",
@@ -50,8 +51,8 @@ export const translations = {
       filledAfter: (pct: number) => `${n(pct, 0)}% filled after`,
       remove: (name: string) => `Remove ${name}`,
       overflow: "Overflow",
-      highFfa: "High FFA",
-      withinTarget: "Within target",
+      aboveLimit: "Above limit",
+      goodFfa: "Good FFA",
     },
     alerts: {
       overflowTitle: "Tank overflow detected",
@@ -63,21 +64,21 @@ export const translations = {
       planChecked: "PLAN CHECKED",
       checkInput: "CHECK INPUT",
       safeAllocation: "A safe allocation is available",
-      targetNotAchievable: "FFA target cannot be fully achieved",
+      limitNotAchievable: "Good FFA limit cannot be met for all tanks",
       planBasis:
-        "Based on tank capacity, current stock, FFA target and protection of acceptable-quality stock.",
+        "Based on tank capacity, current stock, and the good FFA limit (lower FFA is better; 4.8% is the maximum for good quality).",
       recommendedAllocation: "Recommended allocation",
       priorityAction: "Priority action",
       assessment: "Assessment",
       beforeTransfer: "Before transfer",
       priorityHighFfa: (mt: number, tanks: string) =>
-        `${n(mt, 0)} MT above target${tanks ? ` (${tanks})` : ""}. Avoid adding more high-FFA CPO there unless no safer capacity is available. Prioritise controlled despatch or blending with verified low-FFA CPO.`,
+        `${n(mt, 0)} MT already above the good FFA limit${tanks ? ` (${tanks})` : ""}. Avoid adding more high-FFA CPO there unless no safer capacity is available. Prioritise low-FFA stock and controlled despatch.`,
       priorityAllOk:
-        "All current tanks are within target. Protect acceptable stock and maintain sufficient free capacity.",
-      assessmentMeetsTarget:
-        "This plan stays within tank capacity and keeps calculated final FFA within target.",
+        "All tanks are at or below the good FFA limit. Protect low-FFA stock and maintain free capacity.",
+      assessmentMeetsLimit:
+        "This plan stays within tank capacity and keeps final FFA at or below the good FFA limit. Lower final FFA is better.",
       assessmentMinImpact:
-        "No allocation can make every tank meet the target using this incoming FFA. This plan minimises quality impact and protects lower-FFA stock as far as practical.",
+        "No allocation can keep every tank at or below the good FFA limit with this incoming FFA. This plan minimises quality impact and favours lower-FFA stock.",
       beforeTransferText:
         "Engineer must verify latest tank dipping, laboratory FFA, available capacity and valve routing. This recommendation is not an approval.",
       noFeasiblePlan:
@@ -101,8 +102,9 @@ export const translations = {
       title: "Decision safeguards",
       noOverflow: "No tank overflow",
       allocation100: "Allocation equals 100%",
-      noHighFfa: "No high-FFA stock held",
-      finalFfaLe: (target: number) => `Final FFA ≤ ${n(target, 2)}%`,
+      noHighFfa: "No stock above good FFA limit",
+      finalFfaWithinLimit: (limit: number) =>
+        `Final FFA ≤ ${n(limit, 2)}% (good limit · lower is better)`,
     },
   },
   bm: {
@@ -119,9 +121,9 @@ export const translations = {
       incomingFfa: "FFA masuk",
       acrossTanks: (count: number) => `Merentasi ${count} tangki`,
       actionRequired: "Tindakan diperlukan",
-      withinTarget: "Dalam sasaran",
+      goodQuality: "Kualiti baik",
       fromFfb: (ffb: number) => `Daripada ${n(ffb, 0)} MT TBS`,
-      targetLe: (target: number) => `Sasaran ≤ ${n(target, 2)}%`,
+      ffaLimitNote: (limit: number) => `Had ≤ ${n(limit, 2)}% · lebih rendah lebih baik`,
     },
     forecast: {
       title: "Ramalan pengeluaran",
@@ -131,7 +133,8 @@ export const translations = {
       utilisation: "Utilisasi",
       expectedOer: "OER dijangka",
       incomingFfa: "FFA masuk",
-      ffaTarget: "Sasaran FFA",
+      ffaLimit: "Had FFA baik",
+      ffaLimitHint: "4.8% ialah maksimum untuk FFA baik — lebih rendah lebih baik.",
     },
     allocation: {
       mustEqual100: "Jumlah peruntukan mesti 100%",
@@ -151,8 +154,8 @@ export const translations = {
       filledAfter: (pct: number) => `${n(pct, 0)}% penuh selepas`,
       remove: (name: string) => `Buang ${name}`,
       overflow: "Melimpah",
-      highFfa: "FFA tinggi",
-      withinTarget: "Dalam sasaran",
+      aboveLimit: "Melebihi had",
+      goodFfa: "FFA baik",
     },
     alerts: {
       overflowTitle: "Limpahan tangki dikesan",
@@ -164,21 +167,21 @@ export const translations = {
       planChecked: "PELAN DISAHKAN",
       checkInput: "SEMAK INPUT",
       safeAllocation: "Peruntukan selamat tersedia",
-      targetNotAchievable: "Sasaran FFA tidak boleh dicapai sepenuhnya",
+      limitNotAchievable: "Had FFA baik tidak boleh dicapai untuk semua tangki",
       planBasis:
-        "Berdasarkan kapasiti tangki, stok semasa, sasaran FFA dan perlindungan stok berkualiti baik.",
+        "Berdasarkan kapasiti tangki, stok semasa, dan had FFA baik (FFA lebih rendah lebih baik; 4.8% ialah maksimum untuk kualiti baik).",
       recommendedAllocation: "Peruntukan disyorkan",
       priorityAction: "Tindakan keutamaan",
       assessment: "Penilaian",
       beforeTransfer: "Sebelum pemindahan",
       priorityHighFfa: (mt: number, tanks: string) =>
-        `${n(mt, 0)} MT melebihi sasaran${tanks ? ` (${tanks})` : ""}. Elakkan menambah CPO FFA tinggi ke situ melainkan tiada kapasiti lebih selamat. Utamakan despatch terkawal atau campuran dengan CPO FFA rendah yang disahkan.`,
+        `${n(mt, 0)} MT sudah melebihi had FFA baik${tanks ? ` (${tanks})` : ""}. Elakkan menambah CPO FFA tinggi ke situ melainkan tiada kapasiti lebih selamat. Utamakan stok FFA rendah dan despatch terkawal.`,
       priorityAllOk:
-        "Semua tangki semasa dalam sasaran. Lindungi stok yang boleh diterima dan kekalkan ruang kosong yang mencukupi.",
-      assessmentMeetsTarget:
-        "Pelan ini kekal dalam kapasiti tangki dan mengekalkan FFA akhir yang dikira dalam sasaran.",
+        "Semua tangki pada atau di bawah had FFA baik. Lindungi stok FFA rendah dan kekalkan ruang kosong.",
+      assessmentMeetsLimit:
+        "Pelan ini kekal dalam kapasiti tangki dan mengekalkan FFA akhir pada atau di bawah had FFA baik. FFA akhir lebih rendah lebih baik.",
       assessmentMinImpact:
-        "Tiada peruntukan boleh membuat setiap tangki memenuhi sasaran dengan FFA masuk ini. Pelan ini meminimumkan kesan kualiti dan melindungi stok FFA rendah sejauh mungkin.",
+        "Tiada peruntukan boleh mengekalkan setiap tangki pada atau di bawah had FFA baik dengan FFA masuk ini. Pelan ini meminimumkan kesan kualiti dan mengutamakan stok FFA rendah.",
       beforeTransferText:
         "Jurutera mesti sahkan dipping tangki terkini, FFA makmal, kapasiti available dan laluan injap. Cadangan ini bukan kelulusan.",
       noFeasiblePlan:
@@ -202,8 +205,9 @@ export const translations = {
       title: "Safeguard keputusan",
       noOverflow: "Tiada limpahan tangki",
       allocation100: "Peruntukan sama dengan 100%",
-      noHighFfa: "Tiada stok FFA tinggi",
-      finalFfaLe: (target: number) => `FFA akhir ≤ ${n(target, 2)}%`,
+      noHighFfa: "Tiada stok melebihi had FFA baik",
+      finalFfaWithinLimit: (limit: number) =>
+        `FFA akhir ≤ ${n(limit, 2)}% (had baik · lebih rendah lebih baik)`,
     },
   },
 } as const;
