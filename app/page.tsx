@@ -36,7 +36,6 @@ type MobileTab = "overview" | "tanks" | "plan";
 const initialTanks: Tank[] = [
   { name: "BST 1", capacity: 2000, stock: 465, ffa: 4.54 },
   { name: "BST 2", capacity: 2000, stock: 716, ffa: 6.23 },
-  { name: "BST 3", capacity: 2000, stock: 100, ffa: 4.0 },
 ];
 
 const n = (v: number, d = 1) =>
@@ -153,7 +152,7 @@ export default function Home() {
   const [oer, setOer] = useState(19);
   const [incomingFFA, setIncomingFFA] = useState(6.7);
   const [target, setTarget] = useState(4.8);
-  const [allocation, setAllocation] = useState([0, 100, 0]);
+  const [allocation, setAllocation] = useState([0, 100]);
   const [mobileTab, setMobileTab] = useState<MobileTab>("overview");
   const [expandedTanks, setExpandedTanks] = useState<Set<number>>(
     () => new Set(initialTanks.map((_, i) => i)),
@@ -335,7 +334,7 @@ export default function Home() {
     });
 
   const metrics = (
-    <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <section className="grid grid-cols-4 gap-1.5 sm:gap-3 lg:grid-cols-4">
       <Metric
         icon={<Gauge size={18} />}
         label={copy.metrics.currentStock}
@@ -767,16 +766,24 @@ function Metric({
 }) {
   return (
     <article
-      className={`rounded-2xl border bg-white p-4 shadow-sm ${
+      className={`rounded-xl border bg-white p-2 shadow-sm sm:rounded-2xl sm:p-4 ${
         warning ? "border-[#efc7aa]" : "border-[#dfe5dc]"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-[#6c7971]">{label}</span>
-        <span className={warning ? "text-[#c36331]" : "text-[#2e7652]"}>{icon}</span>
+      <div className="flex items-start justify-between gap-1">
+        <span className="text-[9px] font-semibold leading-tight text-[#6c7971] sm:text-xs">{label}</span>
+        <span className={`shrink-0 scale-75 sm:scale-100 ${warning ? "text-[#c36331]" : "text-[#2e7652]"}`}>
+          {icon}
+        </span>
       </div>
-      <p className="mt-2 text-xl font-extrabold sm:text-2xl">{value}</p>
-      <p className={`mt-1 text-xs ${warning ? "text-[#b55a2d]" : "text-[#7a867f]"}`}>{note}</p>
+      <p className="mt-1 text-sm font-extrabold leading-tight sm:mt-2 sm:text-xl lg:text-2xl">{value}</p>
+      <p
+        className={`mt-0.5 hidden text-[10px] leading-tight sm:mt-1 sm:block sm:text-xs ${
+          warning ? "text-[#b55a2d]" : "text-[#7a867f]"
+        }`}
+      >
+        {note}
+      </p>
     </article>
   );
 }
