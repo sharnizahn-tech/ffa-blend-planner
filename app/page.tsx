@@ -39,6 +39,13 @@ const initialTanks: Tank[] = [
   { name: "BST 2", capacity: 2000, stock: 716, ffa: 6.23 },
 ];
 
+function suggestTankName(tanks: Tank[]) {
+  let n = 1;
+  const taken = new Set(tanks.map((t) => t.name.trim().toLowerCase()));
+  while (taken.has(`bst ${n}`)) n += 1;
+  return `BST ${n}`;
+}
+
 const n = (v: number, d = 1) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -322,17 +329,14 @@ export default function Home() {
     );
   const useSuggested = () => best && setAllocation(best.allocation);
   const addTank = () => {
-    const next = tanks.length + 1;
-    setTanks((p) => [...p, { name: `BST ${next}`, capacity: 2000, stock: 0, ffa: 0 }]);
+    setTanks((p) => [...p, { name: suggestTankName(p), capacity: 2000, stock: 0, ffa: 0 }]);
     setAllocation((p) => [...p, 0]);
-    setExpandedTanks((p) => new Set([...p, next - 1]));
+    setExpandedTanks((p) => new Set([...p, tanks.length]));
     setMobileTab("tanks");
   };
   const removeTank = (index: number) => {
-    if (tanks.length <= 2) return;
-    setTanks((p) =>
-      p.filter((_, i) => i !== index).map((t, i) => ({ ...t, name: `BST ${i + 1}` })),
-    );
+    if (tanks.length <= 1) return;
+    setTanks((p) => p.filter((_, i) => i !== index));
     setAllocation((p) => p.filter((_, i) => i !== index));
     setExpandedTanks((p) => {
       const next = new Set<number>();
@@ -472,7 +476,7 @@ export default function Home() {
               className={`shrink-0 text-[#708078] transition-transform ${expanded ? "rotate-180" : ""}`}
             />
           </button>
-          {tanks.length > 2 && (
+          {tanks.length > 1 && (
             <button
               type="button"
               onClick={() => removeTank(i)}
@@ -486,6 +490,12 @@ export default function Home() {
         </div>
         {expanded && (
           <div id={`tank-body-${i}`} className="tank-card__body space-y-3">
+            <TextField
+              label={copy.tanks.name}
+              value={tank.name}
+              onChange={(v) => updateTank(i, "name", v)}
+              placeholder={copy.tanks.namePlaceholder}
+            />
             <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
               <MiniField
                 label={copy.tanks.capacity}
@@ -543,11 +553,17 @@ export default function Home() {
           <div className="tank-icon">
             <Droplets size={18} />
           </div>
-          <div className="min-w-0">
-            <p className="font-bold">{tank.name}</p>
-            <p className="text-xs text-[#708078]">{copy.tanks.filledAfter(r.utilisation)}</p>
+          <div className="min-w-0 flex-1">
+            <TextField
+              label={copy.tanks.name}
+              value={tank.name}
+              onChange={(v) => updateTank(i, "name", v)}
+              placeholder={copy.tanks.namePlaceholder}
+              compact
+            />
+            <p className="mt-1 text-xs text-[#708078]">{copy.tanks.filledAfter(r.utilisation)}</p>
           </div>
-          {tanks.length > 2 && (
+          {tanks.length > 1 && (
             <button
               type="button"
               onClick={() => removeTank(i)}
@@ -888,6 +904,58 @@ function NumericInput({
       }}
       className={className}
     />
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  compact?: boolean;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? value;
+
+  return (
+    <label className="block w-full">
+      <span
+        className={`mb-1 block font-semibold uppercase text-[#7a867f] ${
+          compact ? "text-[10px]" : "text-[11px] font-bold text-[#77837c]"
+        }`}
+      >
+        {label}
+      </span>
+      <div
+        className={`input-touch flex rounded-lg border px-3 ${
+          compact ? "border-[#dfe5df] bg-white" : "rounded-xl border-[#dce3dd] bg-[#f9faf8]"
+        }`}
+      >
+        <input
+          aria-label={label}
+          type="text"
+          value={display}
+          placeholder={placeholder}
+          onFocus={() => setDraft(value)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            if (draft === null) return;
+            const trimmed = draft.trim();
+            if (trimmed) onChange(trimmed);
+            setDraft(null);
+          }}
+          className={`min-w-0 flex-1 bg-transparent py-2 outline-none ${
+            compact ? "text-sm font-bold" : "text-base font-bold"
+          }`}
+        />
+      </div>
+    </label>
   );
 }
 

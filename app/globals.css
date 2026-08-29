@@ -217,7 +217,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
   .tank-row {
     display: grid;
-    grid-template-columns: 115px repeat(4, minmax(82px, 1fr)) repeat(2, minmax(88px, 1fr)) 108px;
+    grid-template-columns: minmax(130px, 1.2fr) repeat(4, minmax(82px, 1fr)) repeat(2, minmax(88px, 1fr)) 108px;
     align-items: end;
     gap: 10px;
     border: 1px solid #dce4dd;
