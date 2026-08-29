@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { AdviseRequest } from "@/lib/advise";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
+import { FormattedOpinion } from "@/lib/format-opinion";
 
 type Tank = { name: string; capacity: number; stock: number; ffa: number };
 type Result = Tank & {
@@ -997,30 +998,6 @@ function AlertBanner({ title, text }: { title: string; text: string }) {
         <p className="mt-1 text-sm leading-relaxed text-[#7a4a32]">{text}</p>
       </div>
     </div>
-  );
-}
-
-function FormattedOpinion({ text }: { text: string }) {
-  const parts: React.ReactNode[] = [];
-  const regex = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*/g;
-  let lastIndex = 0;
-  let key = 0;
-
-  for (const match of text.matchAll(regex)) {
-    const index = match.index ?? 0;
-    if (index > lastIndex) parts.push(text.slice(lastIndex, index));
-    parts.push(
-      <strong key={key++} className="font-bold text-[#173f30]">
-        {match[1] ?? match[2]}
-      </strong>,
-    );
-    lastIndex = index + match[0].length;
-  }
-
-  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
-
-  return (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">{parts}</div>
   );
 }
 
