@@ -298,10 +298,20 @@ export default function Home() {
     }
   };
 
-  const updateTank = (i: number, key: keyof Tank, value: string) =>
+  const updateTank = (i: number, key: keyof Tank, value: string | number) =>
     setTanks((p) =>
       p.map((t, j) =>
-        j === i ? { ...t, [key]: key === "name" ? value : Number(value) } : t,
+        j === i
+          ? {
+              ...t,
+              [key]:
+                key === "name"
+                  ? String(value)
+                  : typeof value === "number"
+                    ? value
+                    : Number(value) || 0,
+            }
+          : t,
       ),
     );
   const useSuggested = () => best && setAllocation(best.allocation);
@@ -493,7 +503,7 @@ export default function Home() {
                 label={copy.tanks.allocation}
                 value={allocation[i]}
                 onChange={(v) =>
-                  setAllocation((p) => p.map((x, j) => (j === i ? Number(v) : x)))
+                  setAllocation((p) => p.map((x, j) => (j === i ? v : x)))
                 }
                 unit="%"
                 emphasis
@@ -564,7 +574,7 @@ export default function Home() {
         <MiniField
           label={copy.tanks.allocation}
           value={allocation[i]}
-          onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? Number(v) : x)))}
+          onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
           unit="%"
           emphasis
         />
@@ -825,6 +835,53 @@ function Panel({
   );
 }
 
+function formatNumericValue(value: number) {
+  return Number.isFinite(value) ? String(value) : "";
+}
+
+function parseNumericDraft(draft: string) {
+  if (draft === "" || draft === "." || draft === "-" || draft === "-.") return null;
+  const parsed = Number(draft);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function NumericInput({
+  label,
+  value,
+  onChange,
+  className,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? formatNumericValue(value);
+
+  return (
+    <input
+      aria-label={label}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      value={display}
+      onFocus={() => setDraft(formatNumericValue(value))}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (next === "" || /^-?\d*\.?\d*$/.test(next)) setDraft(next);
+      }}
+      onBlur={() => {
+        if (draft === null) return;
+        const parsed = parseNumericDraft(draft);
+        if (parsed !== null) onChange(parsed);
+        setDraft(null);
+      }}
+      className={className}
+    />
+  );
+}
+
 function Field({
   label,
   value,
@@ -846,14 +903,11 @@ function Field({
           accent ? "border-[#e5b18f] bg-[#fff9f5]" : "border-[#dce3dd] bg-[#f9faf8]"
         }`}
       >
-        <input
-          aria-label={label}
-          type="number"
-          step="any"
-          inputMode="decimal"
+        <NumericInput
+          label={label}
           value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="min-w-0 flex-1 bg-transparent py-2 text-base font-bold outline-none"
+          onChange={onChange}
+          className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-bold outline-none"
         />
         <span className="shrink-0 text-[11px] text-[#7d8982]">{unit}</span>
       </div>
@@ -870,7 +924,7 @@ function MiniField({
 }: {
   label: string;
   value: number;
-  onChange: (v: string) => void;
+  onChange: (v: number) => void;
   unit: string;
   emphasis?: boolean;
 }) {
@@ -882,14 +936,11 @@ function MiniField({
           emphasis ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5df] bg-white"
         }`}
       >
-        <input
-          aria-label={label}
-          type="number"
-          step="any"
-          inputMode="decimal"
+        <NumericInput
+          label={label}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
+          onChange={onChange}
+          className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
         />
         <span className="shrink-0 self-center text-[10px] text-[#7a867f]">{unit}</span>
       </div>
