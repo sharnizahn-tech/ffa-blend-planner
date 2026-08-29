@@ -1,21 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Beaker,
+  Bot,
   CheckCircle2,
   ChevronDown,
   Droplets,
   Gauge,
   Info,
   LayoutDashboard,
+  Loader2,
   Plus,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Trash2,
 } from "lucide-react";
+import type { AdviseRequest } from "@/lib/advise";
 
 type Tank = { name: string; capacity: number; stock: number; ffa: number };
 type Result = Tank & {
@@ -129,6 +132,9 @@ export default function Home() {
   const [expandedTanks, setExpandedTanks] = useState<Set<number>>(
     () => new Set(initialTanks.map((_, i) => i)),
   );
+  const [aiOpinion, setAiOpinion] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const estimatedFFB = (millCapacity * hours * utilisation) / 100;
   const incomingCPO = (estimatedFFB * oer) / 100;
@@ -146,6 +152,86 @@ export default function Home() {
   const valid = allocationTotal === 100 && !results.some((r) => r.overflow);
   const bestMeetsTarget = !!best && best.results.every((r) => r.finalFFA <= target);
   const hasOverflow = results.some((r) => r.overflow);
+
+  useEffect(() => {
+    setAiOpinion(null);
+    setAiError(null);
+  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, best]);
+
+  const fetchAiOpinion = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const payload: AdviseRequest = {
+        production: {
+          millCapacityMtHr: millCapacity,
+          operatingHours: hours,
+          utilisationPct: utilisation,
+          oerPct: oer,
+          estimatedFfbMt: estimatedFFB,
+          incomingCpoMt: incomingCPO,
+          incomingFfaPct: incomingFFA,
+          targetFfaPct: target,
+        },
+        tanks: tanks.map((t) => ({
+          name: t.name,
+          capacityMt: t.capacity,
+          stockMt: t.stock,
+          ffaPct: t.ffa,
+        })),
+        currentAllocationPct: allocation,
+        currentPlan: results.map((r) => ({
+          name: r.name,
+          allocationPct: r.allocation,
+          incomingMt: r.incoming,
+          finalStockMt: r.finalStock,
+          finalFfaPct: r.finalFFA,
+          utilisationPct: r.utilisation,
+          overflow: r.overflow,
+        })),
+        recommendedPlan: best
+          ? {
+              allocationPct: best.allocation,
+              score: best.score,
+              meetsTarget: best.results.every((r) => r.finalFFA <= target),
+              tanks: best.results.map((r) => ({
+                name: r.name,
+                allocationPct: r.allocation,
+                incomingMt: r.incoming,
+                finalStockMt: r.finalStock,
+                finalFfaPct: r.finalFFA,
+                utilisationPct: r.utilisation,
+                overflow: r.overflow,
+              })),
+            }
+          : null,
+        flags: {
+          allocationTotalPct: allocationTotal,
+          allocationValid: allocationTotal === 100,
+          hasOverflow,
+          highFfaStockMt: highFFAStock,
+          currentPlanValid: valid,
+        },
+      };
+
+      const response = await fetch("/api/advise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json()) as { opinion?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to get AI opinion.");
+      }
+
+      setAiOpinion(data.opinion ?? null);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : "Unable to get AI opinion.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const updateTank = (i: number, key: keyof Tank, value: string) =>
     setTanks((p) =>
@@ -460,6 +546,10 @@ export default function Home() {
         highFFAStock={highFFAStock}
         incomingCPO={incomingCPO}
         onApply={useSuggested}
+        aiOpinion={aiOpinion}
+        aiLoading={aiLoading}
+        aiError={aiError}
+        onGetAiOpinion={fetchAiOpinion}
       />
       <DecisionSafeguards
         results={results}
@@ -773,6 +863,10 @@ function SmartRecommendation({
   highFFAStock,
   incomingCPO,
   onApply,
+  aiOpinion,
+  aiLoading,
+  aiError,
+  onGetAiOpinion,
 }: {
   best: { allocation: number[]; results: Result[]; score: number } | null;
   tanks: Tank[];
@@ -781,6 +875,10 @@ function SmartRecommendation({
   highFFAStock: number;
   incomingCPO: number;
   onApply: () => void;
+  aiOpinion: string | null;
+  aiLoading: boolean;
+  aiError: string | null;
+  onGetAiOpinion: () => void;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
@@ -855,11 +953,75 @@ function SmartRecommendation({
               <RefreshCw size={16} />
               Apply recommended allocation
             </button>
+
+            <div className="mt-5 border-t border-[#e8ede8] pt-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="section-label">AI advisor</p>
+                  <p className="mt-1 text-sm text-[#58665e]">
+                    Plain-language opinion based on your calculated plan — numbers stay from the
+                    engine.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onGetAiOpinion}
+                  disabled={aiLoading}
+                  className="btn-touch w-full shrink-0 border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60 sm:w-auto"
+                >
+                  {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
+                  {aiLoading ? "Generating…" : "Get AI opinion"}
+                </button>
+              </div>
+
+              {aiError && (
+                <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
+                  {aiError}
+                </div>
+              )}
+
+              {aiOpinion && (
+                <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
+                    <Bot size={16} />
+                    AI opinion
+                  </div>
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
+                    {aiOpinion}
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         ) : (
-          <p className="text-sm leading-relaxed text-[#8a3d20]">
-            No feasible plan is available. Available capacity is lower than expected incoming CPO.
-          </p>
+          <>
+            <p className="text-sm leading-relaxed text-[#8a3d20]">
+              No feasible plan is available. Available capacity is lower than expected incoming CPO.
+            </p>
+            <div className="mt-5 border-t border-[#e8ede8] pt-5">
+              <button
+                type="button"
+                onClick={onGetAiOpinion}
+                disabled={aiLoading}
+                className="btn-touch w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
+              >
+                {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
+                {aiLoading ? "Generating…" : "Get AI opinion on this situation"}
+              </button>
+              {aiError && (
+                <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
+                  {aiError}
+                </div>
+              )}
+              {aiOpinion && (
+                <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
+                    {aiOpinion}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </section>
