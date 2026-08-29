@@ -41,6 +41,11 @@ const initialTanks: Tank[] = [
 const n = (v: number, d = 1) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
+const allocationMt = (incomingCpo: number, pct: number) => (incomingCpo * pct) / 100;
+
+const allocationUnit = (incomingCpo: number, pct: number) =>
+  `% (${n(allocationMt(incomingCpo, pct))} MT)`;
+
 function calculate(
   tanks: Tank[],
   allocation: number[],
@@ -505,7 +510,7 @@ export default function Home() {
                 onChange={(v) =>
                   setAllocation((p) => p.map((x, j) => (j === i ? v : x)))
                 }
-                unit="%"
+                unit={allocationUnit(incomingCPO, allocation[i] ?? 0)}
                 emphasis
               />
             </div>
@@ -575,7 +580,7 @@ export default function Home() {
           label={copy.tanks.allocation}
           value={allocation[i]}
           onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
-          unit="%"
+          unit={allocationUnit(incomingCPO, allocation[i] ?? 0)}
           emphasis
         />
         <div className="result-cell">
@@ -623,7 +628,10 @@ export default function Home() {
         highFFAStock={highFFAStock}
         highFfaTankNames={highFfaTankNames}
         incomingCPO={incomingCPO}
-        onApply={useSuggested}
+        onApply={() => {
+          useSuggested();
+          setMobileTab("tanks");
+        }}
         aiOpinion={aiOpinion}
         aiSource={aiSource}
         aiLoading={aiLoading}
@@ -942,7 +950,9 @@ function MiniField({
           onChange={onChange}
           className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
         />
-        <span className="shrink-0 self-center text-[10px] text-[#7a867f]">{unit}</span>
+        <span className="shrink-0 self-center text-[9px] leading-tight text-[#7a867f] sm:text-[10px]">
+          {unit}
+        </span>
       </div>
     </label>
   );
@@ -1062,8 +1072,9 @@ function SmartRecommendation({
               {best.allocation.map((x, i) => (
                 <div key={i} className="rounded-xl bg-[#f2f5f0] p-3 text-center">
                   <p className="text-xs text-[#708078]">{tanks[i].name}</p>
-                  <p className="mt-1 text-xl font-extrabold text-[#173f30]">{x}%</p>
-                  <p className="text-[11px] text-[#708078]">{n((incomingCPO * x) / 100)} MT</p>
+                  <p className="mt-1 text-lg font-extrabold leading-tight text-[#173f30] sm:text-xl">
+                    {x}% ({n(allocationMt(incomingCPO, x))} MT)
+                  </p>
                 </div>
               ))}
             </div>
