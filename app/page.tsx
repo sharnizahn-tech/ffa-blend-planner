@@ -1096,9 +1096,8 @@ function SmartRecommendation({
               {best.allocation.map((x, i) => (
                 <div key={i} className="rounded-xl bg-[#f2f5f0] p-3 text-center">
                   <p className="text-xs text-[#708078]">{tanks[i].name}</p>
-                  <p className="mt-1 text-lg font-extrabold leading-tight text-[#173f30] sm:text-xl">
-                    {x}% ({n(allocationMt(incomingCPO, x))} MT)
-                  </p>
+                  <p className="mt-1 text-xl font-extrabold text-[#173f30]">{x}%</p>
+                  <p className="text-[11px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
                 </div>
               ))}
             </div>
