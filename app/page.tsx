@@ -133,6 +133,7 @@ export default function Home() {
     () => new Set(initialTanks.map((_, i) => i)),
   );
   const [aiOpinion, setAiOpinion] = useState<string | null>(null);
+  const [aiSource, setAiSource] = useState<"gemini" | "offline" | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiCooldown, setAiCooldown] = useState(0);
@@ -156,6 +157,7 @@ export default function Home() {
 
   useEffect(() => {
     setAiOpinion(null);
+    setAiSource(null);
     setAiError(null);
   }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, best]);
 
@@ -231,12 +233,17 @@ export default function Home() {
         body: JSON.stringify(payload),
       });
 
-      const data = (await response.json()) as { opinion?: string; error?: string };
+      const data = (await response.json()) as {
+        opinion?: string;
+        error?: string;
+        source?: "gemini" | "offline";
+      };
       if (!response.ok) {
         throw new Error(data.error ?? "Unable to get AI opinion.");
       }
 
       setAiOpinion(data.opinion ?? null);
+      setAiSource(data.source ?? "gemini");
     } catch (error) {
       setAiError(error instanceof Error ? error.message : "Unable to get AI opinion.");
     } finally {
@@ -558,6 +565,7 @@ export default function Home() {
         incomingCPO={incomingCPO}
         onApply={useSuggested}
         aiOpinion={aiOpinion}
+        aiSource={aiSource}
         aiLoading={aiLoading}
         aiError={aiError}
         aiCooldown={aiCooldown}
@@ -876,6 +884,7 @@ function SmartRecommendation({
   incomingCPO,
   onApply,
   aiOpinion,
+  aiSource,
   aiLoading,
   aiError,
   aiCooldown,
@@ -889,6 +898,7 @@ function SmartRecommendation({
   incomingCPO: number;
   onApply: () => void;
   aiOpinion: string | null;
+  aiSource: "gemini" | "offline" | null;
   aiLoading: boolean;
   aiError: string | null;
   aiCooldown: number;
@@ -1004,7 +1014,7 @@ function SmartRecommendation({
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
                   <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
                     <Bot size={16} />
-                    AI opinion
+                    {aiSource === "offline" ? "Instant mill summary" : "AI opinion (Gemini)"}
                   </div>
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
                     {aiOpinion}
@@ -1035,6 +1045,9 @@ function SmartRecommendation({
               )}
               {aiOpinion && (
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
+                  {aiSource === "offline" && (
+                    <div className="mb-2 text-xs font-bold text-[#a85128]">Offline summary (Gemini busy)</div>
+                  )}
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
                     {aiOpinion}
                   </div>
