@@ -1000,6 +1000,30 @@ function AlertBanner({ title, text }: { title: string; text: string }) {
   );
 }
 
+function FormattedOpinion({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  const regex = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const match of text.matchAll(regex)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) parts.push(text.slice(lastIndex, index));
+    parts.push(
+      <strong key={key++} className="font-bold text-[#173f30]">
+        {match[1] ?? match[2]}
+      </strong>,
+    );
+    lastIndex = index + match[0].length;
+  }
+
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+
+  return (
+    <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">{parts}</div>
+  );
+}
+
 function SmartRecommendation({
   copy,
   best,
@@ -1144,9 +1168,7 @@ function SmartRecommendation({
                     <Bot size={16} />
                     {aiSource === "offline" ? copy.ai.opinionOffline : copy.ai.opinionLive}
                   </div>
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
-                    {aiOpinion}
-                  </div>
+                  <FormattedOpinion text={aiOpinion} />
                 </div>
               )}
             </div>
@@ -1185,9 +1207,7 @@ function SmartRecommendation({
                       {copy.ai.offlineUnavailable}
                     </div>
                   )}
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
-                    {aiOpinion}
-                  </div>
+                  <FormattedOpinion text={aiOpinion} />
                 </div>
               )}
             </div>

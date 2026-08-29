@@ -66,8 +66,8 @@ const n = (v: number, d = 1) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
 function section(lang: "en" | "bm", headingEn: string, headingBm: string, en: string, ms: string) {
-  if (lang === "bm") return `${headingBm}\n\n${ms}`;
-  return `${headingEn}\n\n${en}`;
+  if (lang === "bm") return `**${headingBm}**\n\n${ms}`;
+  return `**${headingEn}**\n\n${en}`;
 }
 
 export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = "en"): string {
@@ -209,6 +209,7 @@ Rules:
 - ${languageRule}
 - ${questionRule}
 - Use short sections with plain headings appropriate to the response language.
+- Emphasise important items with Markdown bold using double asterisks only, e.g. **BST 2**, **4.8%**, **120 MT**. Do not use triple asterisks.
 - Keep tank names (e.g. BST 1) unchanged.
 - Keep the tone professional, concise, and practical for shift engineers.
 - End with one sentence: this is decision support only — authorised engineer verification is required before transfer.
