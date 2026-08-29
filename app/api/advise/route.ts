@@ -3,27 +3,27 @@ import { adviseRequestSchema, SYSTEM_PROMPT } from "@/lib/advise";
 
 export const runtime = "nodejs";
 
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL = "gemini-2.0-flash";
 
-function openAiErrorMessage(status: number, detailText: string): string {
+function geminiErrorMessage(status: number, detailText: string): string {
   try {
     const detail = JSON.parse(detailText) as {
-      error?: { message?: string; code?: string; type?: string };
+      error?: { message?: string; code?: number; status?: string };
     };
     const message = detail.error?.message ?? "";
-    const code = detail.error?.code ?? "";
+    const code = detail.error?.status ?? "";
 
-    if (status === 401 || code === "invalid_api_key") {
-      return "Invalid OpenAI API key. In Vercel, check OPENAI_API_KEY has no extra spaces and matches platform.openai.com/api-keys.";
+    if (status === 400 && message.toLowerCase().includes("api key")) {
+      return "Invalid Gemini API key. In Vercel, check GEMINI_API_KEY matches your key from aistudio.google.com/apikey.";
     }
-    if (code === "insufficient_quota" || message.toLowerCase().includes("quota")) {
-      return "OpenAI account has no available credits. Add billing or top up at platform.openai.com/account/billing.";
+    if (status === 403 || code === "PERMISSION_DENIED") {
+      return "Gemini API access denied. Enable the Generative Language API and verify GEMINI_API_KEY.";
     }
-    if (status === 429) {
-      return "OpenAI rate limit reached. Wait 60 seconds, tap once only, then try again. Avoid clicking repeatedly while testing.";
+    if (status === 429 || code === "RESOURCE_EXHAUSTED") {
+      return "Gemini rate limit reached. Wait 60 seconds, tap once only, then try again.";
     }
-    if (code === "model_not_found") {
-      return "Configured OpenAI model is unavailable. Set OPENAI_MODEL to gpt-4o-mini in Vercel or remove that variable.";
+    if (code === "NOT_FOUND") {
+      return "Gemini model unavailable. Set GEMINI_MODEL to gemini-2.0-flash in Vercel or remove that variable.";
     }
     if (message) return message;
   } catch {
@@ -37,32 +37,37 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callOpenAi(apiKey: string, model: string, userContent: string) {
-  return fetch("https://api.openai.com/v1/chat/completions", {
+async function callGemini(apiKey: string, model: string, userContent: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  return fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model,
-      temperature: 0.3,
-      max_tokens: 900,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userContent },
+      systemInstruction: {
+        parts: [{ text: SYSTEM_PROMPT }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: userContent }],
+        },
       ],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 900,
+      },
     }),
   });
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(
       {
         error:
-          "AI advisor is not configured. Add OPENAI_API_KEY in Vercel project environment variables.",
+          "AI advisor is not configured. Add GEMINI_API_KEY in Vercel project environment variables.",
       },
       { status: 503 },
     );
@@ -83,31 +88,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const model = process.env.OPENAI_MODEL ?? DEFAULT_MODEL;
+  const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
 
   try {
     const userContent = JSON.stringify(parsed.data, null, 2);
-    let response = await callOpenAi(apiKey, model, userContent);
+    let response = await callGemini(apiKey, model, userContent);
 
     if (response.status === 429) {
       await sleep(2500);
-      response = await callOpenAi(apiKey, model, userContent);
+      response = await callGemini(apiKey, model, userContent);
     }
 
     if (!response.ok) {
       const detail = await response.text();
-      console.error("OpenAI advise error:", response.status, detail);
+      console.error("Gemini advise error:", response.status, detail);
       return NextResponse.json(
-        { error: openAiErrorMessage(response.status, detail) },
+        { error: geminiErrorMessage(response.status, detail) },
         { status: 502 },
       );
     }
 
     const data = (await response.json()) as {
-      choices?: { message?: { content?: string | null } }[];
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
 
-    const opinion = data.choices?.[0]?.message?.content?.trim();
+    const opinion = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     if (!opinion) {
       return NextResponse.json(
         { error: "AI returned an empty response." },

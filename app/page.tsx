@@ -979,8 +979,8 @@ function SmartRecommendation({
                 <div>
                   <p className="section-label">AI advisor</p>
                   <p className="mt-1 text-sm text-[#58665e]">
-                    Plain-language opinion based on your calculated plan — numbers stay from the
-                    engine.
+                    Plain-language opinion from Gemini Flash based on your calculated plan — numbers
+                    stay from the engine.
                   </p>
                 </div>
                 <button
