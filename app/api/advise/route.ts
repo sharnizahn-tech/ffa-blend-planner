@@ -5,8 +5,36 @@ export const runtime = "nodejs";
 
 const DEFAULT_MODEL = "gpt-4o-mini";
 
+function openAiErrorMessage(status: number, detailText: string): string {
+  try {
+    const detail = JSON.parse(detailText) as {
+      error?: { message?: string; code?: string; type?: string };
+    };
+    const message = detail.error?.message ?? "";
+    const code = detail.error?.code ?? "";
+
+    if (status === 401 || code === "invalid_api_key") {
+      return "Invalid OpenAI API key. In Vercel, check OPENAI_API_KEY has no extra spaces and matches platform.openai.com/api-keys.";
+    }
+    if (code === "insufficient_quota" || message.toLowerCase().includes("quota")) {
+      return "OpenAI account has no available credits. Add billing or top up at platform.openai.com/account/billing.";
+    }
+    if (status === 429) {
+      return "OpenAI rate limit reached. Wait a minute and try again.";
+    }
+    if (code === "model_not_found") {
+      return "Configured OpenAI model is unavailable. Set OPENAI_MODEL to gpt-4o-mini in Vercel or remove that variable.";
+    }
+    if (message) return message;
+  } catch {
+    // Fall through to generic message.
+  }
+
+  return "AI service request failed. Try again shortly.";
+}
+
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(
       {
@@ -59,7 +87,7 @@ export async function POST(request: Request) {
       const detail = await response.text();
       console.error("OpenAI advise error:", response.status, detail);
       return NextResponse.json(
-        { error: "AI service request failed. Try again shortly." },
+        { error: openAiErrorMessage(response.status, detail) },
         { status: 502 },
       );
     }
