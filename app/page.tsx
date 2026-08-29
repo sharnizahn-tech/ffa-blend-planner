@@ -19,6 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { AdviseRequest } from "@/lib/advise";
+import { getCopy, type Copy, type Lang } from "@/lib/i18n";
 
 type Tank = { name: string; capacity: number; stock: number; ffa: number };
 type Result = Tank & {
@@ -113,10 +114,35 @@ function tankState(result: Result, target: number): TankState {
   return "safe";
 }
 
-function statusLabel(state: TankState, overflow: boolean, finalFFA: number, target: number) {
-  if (overflow) return "Overflow";
-  if (finalFFA > target) return "High FFA";
-  return "Within target";
+function statusLabel(
+  state: TankState,
+  overflow: boolean,
+  finalFFA: number,
+  target: number,
+  copy: Copy,
+) {
+  if (overflow) return copy.tanks.overflow;
+  if (finalFFA > target) return copy.tanks.highFfa;
+  return copy.tanks.withinTarget;
+}
+
+function LanguageToggle({ lang, onChange }: { lang: Lang; onChange: (lang: Lang) => void }) {
+  return (
+    <div className="flex shrink-0 rounded-full border border-white/20 bg-white/10 p-0.5 text-xs font-bold">
+      {(["en", "bm"] as const).map((code) => (
+        <button
+          key={code}
+          type="button"
+          onClick={() => onChange(code)}
+          className={`rounded-full px-3 py-1.5 transition-colors ${
+            lang === code ? "bg-[#d7f08a] text-[#123c2c]" : "text-white/80 hover:text-white"
+          }`}
+        >
+          {code.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export default function Home() {
@@ -137,6 +163,24 @@ export default function Home() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiCooldown, setAiCooldown] = useState(0);
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [lang, setLang] = useState<Lang>("en");
+
+  const copy = getCopy(lang);
+  const highFfaTankNames = tanks
+    .filter((t) => t.ffa > target)
+    .map((t) => t.name)
+    .join(", ");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("ffa-lang");
+    if (saved === "en" || saved === "bm") setLang(saved);
+  }, []);
+
+  const setLanguage = (next: Lang) => {
+    setLang(next);
+    localStorage.setItem("ffa-lang", next);
+  };
 
   const estimatedFFB = (millCapacity * hours * utilisation) / 100;
   const incomingCPO = (estimatedFFB * oer) / 100;
@@ -225,6 +269,8 @@ export default function Home() {
           highFfaStockMt: highFFAStock,
           currentPlanValid: valid,
         },
+        userQuestion: aiQuestion.trim() || undefined,
+        language: lang,
       };
 
       const response = await fetch("/api/advise", {
@@ -239,13 +285,13 @@ export default function Home() {
         source?: "openai" | "offline";
       };
       if (!response.ok) {
-        throw new Error(data.error ?? "Unable to get AI opinion.");
+        throw new Error(data.error ?? copy.ai.errorGeneric);
       }
 
       setAiOpinion(data.opinion ?? null);
       setAiSource(data.source ?? "openai");
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : "Unable to get AI opinion.");
+      setAiError(error instanceof Error ? error.message : copy.ai.errorGeneric);
     } finally {
       setAiLoading(false);
     }
@@ -292,28 +338,28 @@ export default function Home() {
     <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Metric
         icon={<Gauge size={18} />}
-        label="Current stock"
+        label={copy.metrics.currentStock}
         value={`${n(currentStock, 0)} MT`}
-        note={`Across ${tanks.length} tanks`}
+        note={copy.metrics.acrossTanks(tanks.length)}
       />
       <Metric
         icon={<AlertTriangle size={18} />}
-        label="High-FFA stock"
+        label={copy.metrics.highFfaStock}
         value={`${n(highFFAStock, 0)} MT`}
-        note={highFFAStock ? "Action required" : "Within target"}
+        note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.withinTarget}
         warning={!!highFFAStock}
       />
       <Metric
         icon={<Droplets size={18} />}
-        label="Expected CPO"
+        label={copy.metrics.expectedCpo}
         value={`${n(incomingCPO)} MT`}
-        note={`From ${n(estimatedFFB, 0)} MT FFB`}
+        note={copy.metrics.fromFfb(estimatedFFB)}
       />
       <Metric
         icon={<Beaker size={18} />}
-        label="Incoming FFA"
+        label={copy.metrics.incomingFfa}
         value={`${n(incomingFFA, 2)}%`}
-        note={`Target ≤ ${n(target, 2)}%`}
+        note={copy.metrics.targetLe(target)}
         warning={incomingFFA > target}
       />
     </section>
@@ -321,23 +367,23 @@ export default function Home() {
 
   const forecastPanel = (
     <Panel
-      title="Production forecast"
-      subtitle="Estimate the CPO that must be routed"
+      title={copy.forecast.title}
+      subtitle={copy.forecast.subtitle}
       icon={<Gauge size={19} />}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-        <Field label="Capacity" value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
-        <Field label="Operating hours" value={hours} onChange={setHours} unit="hr" />
-        <Field label="Utilisation" value={utilisation} onChange={setUtilisation} unit="%" />
-        <Field label="Expected OER" value={oer} onChange={setOer} unit="%" />
+        <Field label={copy.forecast.capacity} value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
+        <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hr" />
+        <Field label={copy.forecast.utilisation} value={utilisation} onChange={setUtilisation} unit="%" />
+        <Field label={copy.forecast.expectedOer} value={oer} onChange={setOer} unit="%" />
         <Field
-          label="Incoming FFA"
+          label={copy.forecast.incomingFfa}
           value={incomingFFA}
           onChange={setIncomingFFA}
           unit="%"
           accent
         />
-        <Field label="FFA target" value={target} onChange={setTarget} unit="%" />
+        <Field label={copy.forecast.ffaTarget} value={target} onChange={setTarget} unit="%" />
       </div>
     </Panel>
   );
@@ -356,7 +402,7 @@ export default function Home() {
         ) : (
           <AlertTriangle size={17} />
         )}
-        Allocation total must equal 100%
+        {copy.allocation.mustEqual100}
       </span>
       <strong className="text-base">{allocationTotal}%</strong>
     </div>
@@ -366,11 +412,11 @@ export default function Home() {
     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
       <button type="button" onClick={addTank} className="btn-touch w-full border border-[#b9c8bd] bg-white text-[#173f30] sm:w-auto">
         <Plus size={16} />
-        Add BST
+        {copy.allocation.addBst}
       </button>
       <button type="button" onClick={useSuggested} className="btn-touch w-full bg-[#173f30] text-white sm:w-auto">
         <Sparkles size={16} />
-        Use best plan
+        {copy.allocation.useBestPlan}
       </button>
     </div>
   );
@@ -395,12 +441,12 @@ export default function Home() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate font-bold">{tank.name}</p>
-              <p className="text-xs text-[#708078]">{n(r.utilisation, 0)}% filled after</p>
+              <p className="text-xs text-[#708078]">{copy.tanks.filledAfter(r.utilisation)}</p>
             </div>
             <span className={`status-pill shrink-0 ${state}`}>
               {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
               <span className="hidden min-[400px]:inline">
-                {statusLabel(state, r.overflow, r.finalFFA, target)}
+                {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
               </span>
             </span>
             <ChevronDown
@@ -412,8 +458,8 @@ export default function Home() {
             <button
               type="button"
               onClick={() => removeTank(i)}
-              aria-label={`Remove ${tank.name}`}
-              title={`Remove ${tank.name}`}
+              aria-label={copy.tanks.remove(tank.name)}
+              title={copy.tanks.remove(tank.name)}
               className="remove-tank"
             >
               <Trash2 size={16} />
@@ -424,25 +470,25 @@ export default function Home() {
           <div id={`tank-body-${i}`} className="tank-card__body space-y-3">
             <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
               <MiniField
-                label="Capacity"
+                label={copy.tanks.capacity}
                 value={tank.capacity}
                 onChange={(v) => updateTank(i, "capacity", v)}
                 unit="MT"
               />
               <MiniField
-                label="Stock now"
+                label={copy.tanks.stockNow}
                 value={tank.stock}
                 onChange={(v) => updateTank(i, "stock", v)}
                 unit="MT"
               />
               <MiniField
-                label="FFA now"
+                label={copy.tanks.ffaNow}
                 value={tank.ffa}
                 onChange={(v) => updateTank(i, "ffa", v)}
                 unit="%"
               />
               <MiniField
-                label="Allocation"
+                label={copy.tanks.allocation}
                 value={allocation[i]}
                 onChange={(v) =>
                   setAllocation((p) => p.map((x, j) => (j === i ? Number(v) : x)))
@@ -453,11 +499,11 @@ export default function Home() {
             </div>
             <div className="grid grid-cols-2 gap-3 rounded-xl bg-white/70 p-3">
               <div className="result-cell">
-                <span>Final stock</span>
+                <span>{copy.tanks.finalStock}</span>
                 <strong>{n(r.finalStock)} MT</strong>
               </div>
               <div className="result-cell">
-                <span>Final FFA</span>
+                <span>{copy.tanks.finalFfa}</span>
                 <strong className={r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}>
                   {n(r.finalFFA, 2)}%
                 </strong>
@@ -481,14 +527,14 @@ export default function Home() {
           </div>
           <div className="min-w-0">
             <p className="font-bold">{tank.name}</p>
-            <p className="text-xs text-[#708078]">{n(r.utilisation, 0)}% filled after</p>
+            <p className="text-xs text-[#708078]">{copy.tanks.filledAfter(r.utilisation)}</p>
           </div>
           {tanks.length > 2 && (
             <button
               type="button"
               onClick={() => removeTank(i)}
-              aria-label={`Remove ${tank.name}`}
-              title={`Remove ${tank.name}`}
+              aria-label={copy.tanks.remove(tank.name)}
+              title={copy.tanks.remove(tank.name)}
               className="remove-tank"
             >
               <Trash2 size={15} />
@@ -496,43 +542,43 @@ export default function Home() {
           )}
         </div>
         <MiniField
-          label="Capacity"
+          label={copy.tanks.capacity}
           value={tank.capacity}
           onChange={(v) => updateTank(i, "capacity", v)}
           unit="MT"
         />
         <MiniField
-          label="Stock now"
+          label={copy.tanks.stockNow}
           value={tank.stock}
           onChange={(v) => updateTank(i, "stock", v)}
           unit="MT"
         />
         <MiniField
-          label="FFA now"
+          label={copy.tanks.ffaNow}
           value={tank.ffa}
           onChange={(v) => updateTank(i, "ffa", v)}
           unit="%"
         />
         <MiniField
-          label="Allocation"
+          label={copy.tanks.allocation}
           value={allocation[i]}
           onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? Number(v) : x)))}
           unit="%"
           emphasis
         />
         <div className="result-cell">
-          <span>Final stock</span>
+          <span>{copy.tanks.finalStock}</span>
           <strong>{n(r.finalStock)} MT</strong>
         </div>
         <div className="result-cell">
-          <span>Final FFA</span>
+          <span>{copy.tanks.finalFfa}</span>
           <strong className={r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}>
             {n(r.finalFFA, 2)}%
           </strong>
         </div>
         <div className={`status-pill ${state}`}>
           {state === "safe" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{" "}
-          {statusLabel(state, r.overflow, r.finalFFA, target)}
+          {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
         </div>
       </div>
     );
@@ -540,8 +586,8 @@ export default function Home() {
 
   const tanksPanel = (
     <Panel
-      title="Tank readings & allocation"
-      subtitle="Add or remove BSTs to match the mill configuration"
+      title={copy.tanks.title}
+      subtitle={copy.tanks.subtitle}
       icon={<Droplets size={19} />}
       action={tankActions}
       stackAction
@@ -557,11 +603,13 @@ export default function Home() {
   const planPanel = (
     <>
       <SmartRecommendation
+        copy={copy}
         best={best}
         tanks={tanks}
         valid={valid}
         bestMeetsTarget={bestMeetsTarget}
         highFFAStock={highFFAStock}
+        highFfaTankNames={highFfaTankNames}
         incomingCPO={incomingCPO}
         onApply={useSuggested}
         aiOpinion={aiOpinion}
@@ -569,9 +617,12 @@ export default function Home() {
         aiLoading={aiLoading}
         aiError={aiError}
         aiCooldown={aiCooldown}
+        aiQuestion={aiQuestion}
+        onAiQuestionChange={setAiQuestion}
         onGetAiOpinion={fetchAiOpinion}
       />
       <DecisionSafeguards
+        copy={copy}
         results={results}
         allocationTotal={allocationTotal}
         highFFAStock={highFFAStock}
@@ -581,9 +632,9 @@ export default function Home() {
   );
 
   const navItems: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
-    { id: "overview", label: "Overview", icon: <LayoutDashboard size={20} /> },
-    { id: "tanks", label: "Tanks", icon: <Droplets size={20} /> },
-    { id: "plan", label: "Plan", icon: <Sparkles size={20} /> },
+    { id: "overview", label: copy.nav.overview, icon: <LayoutDashboard size={20} /> },
+    { id: "tanks", label: copy.nav.tanks, icon: <Droplets size={20} /> },
+    { id: "plan", label: copy.nav.plan, icon: <Sparkles size={20} /> },
   ];
 
   return (
@@ -596,13 +647,16 @@ export default function Home() {
                 <Droplets size={24} />
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold sm:text-xl">FFA Blend Planner</h1>
-                <p className="truncate text-xs text-[#b9d3c4]">CPO quality decision support</p>
+                <h1 className="truncate text-lg font-bold sm:text-xl">{copy.appTitle}</h1>
+                <p className="truncate text-xs text-[#b9d3c4]">{copy.appSubtitle}</p>
               </div>
             </div>
-            <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs md:flex">
-              <span className="h-2 w-2 rounded-full bg-[#bde85f]" />
-              Ready
+            <div className="flex shrink-0 items-center gap-2">
+              <LanguageToggle lang={lang} onChange={setLanguage} />
+              <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs md:flex">
+                <span className="h-2 w-2 rounded-full bg-[#bde85f]" />
+                {copy.ready}
+              </div>
             </div>
           </div>
           <nav className="top-nav" aria-label="Section navigation">
@@ -628,8 +682,8 @@ export default function Home() {
               {metrics}
               {hasOverflow && (
                 <AlertBanner
-                  title="Tank overflow detected"
-                  text="One or more tanks exceed capacity with the current allocation. Adjust percentages or tank readings."
+                  title={copy.alerts.overflowTitle}
+                  text={copy.alerts.overflowText}
                 />
               )}
               {forecastPanel}
@@ -653,7 +707,7 @@ export default function Home() {
         </div>
 
         <p className="mt-5 pb-2 text-center text-xs leading-relaxed text-[#758078] md:pb-4">
-          Decision-support tool only · Final transfer requires authorised engineer verification
+          {copy.footer}
         </p>
       </div>
 
@@ -680,7 +734,7 @@ export default function Home() {
           className="btn-touch w-full bg-[#173f30] text-white"
         >
           <Sparkles size={16} />
-          Use best plan
+          {copy.allocation.useBestPlan}
         </button>
         <button
           type="button"
@@ -691,7 +745,7 @@ export default function Home() {
           className="btn-touch w-full bg-[#d7f08a] text-[#173f30]"
         >
           <RefreshCw size={16} />
-          Apply recommended allocation
+          {copy.allocation.applyRecommended}
         </button>
       </div>
     </main>
@@ -876,11 +930,13 @@ function AlertBanner({ title, text }: { title: string; text: string }) {
 }
 
 function SmartRecommendation({
+  copy,
   best,
   tanks,
   valid,
   bestMeetsTarget,
   highFFAStock,
+  highFfaTankNames,
   incomingCPO,
   onApply,
   aiOpinion,
@@ -888,13 +944,17 @@ function SmartRecommendation({
   aiLoading,
   aiError,
   aiCooldown,
+  aiQuestion,
+  onAiQuestionChange,
   onGetAiOpinion,
 }: {
+  copy: Copy;
   best: { allocation: number[]; results: Result[]; score: number } | null;
   tanks: Tank[];
   valid: boolean;
   bestMeetsTarget: boolean;
   highFFAStock: number;
+  highFfaTankNames: string;
   incomingCPO: number;
   onApply: () => void;
   aiOpinion: string | null;
@@ -902,44 +962,41 @@ function SmartRecommendation({
   aiLoading: boolean;
   aiError: string | null;
   aiCooldown: number;
+  aiQuestion: string;
+  onAiQuestionChange: (value: string) => void;
   onGetAiOpinion: () => void;
 }) {
   const aiDisabled = aiLoading || aiCooldown > 0;
   const aiButtonLabel = aiLoading
-    ? "Generating… / Menjana…"
+    ? copy.ai.generating
     : aiCooldown > 0
-      ? `Wait ${aiCooldown}s`
-      : "Get AI opinion / Dapatkan pendapat AI";
+      ? copy.ai.wait(aiCooldown)
+      : copy.ai.ask;
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
       <div className="bg-[#173f30] p-4 text-white sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-bold">
             <Sparkles size={19} className="text-[#d7f08a]" />
-            Smart recommendation
+            {copy.plan.smartRecommendation}
           </div>
           <span
             className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
               valid ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
             }`}
           >
-            {valid ? "PLAN CHECKED" : "CHECK INPUT"}
+            {valid ? copy.plan.planChecked : copy.plan.checkInput}
           </span>
         </div>
         <h2 className="text-lg font-bold leading-snug sm:text-xl">
-          {bestMeetsTarget
-            ? "A safe allocation is available"
-            : "FFA target cannot be fully achieved"}
+          {bestMeetsTarget ? copy.plan.safeAllocation : copy.plan.targetNotAchievable}
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">
-          Based on tank capacity, current stock, FFA target and protection of acceptable-quality
-          stock.
-        </p>
+        <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">{copy.plan.planBasis}</p>
       </div>
       <div className="p-4 sm:p-5">
         {best ? (
           <>
-            <p className="section-label">Recommended allocation</p>
+            <p className="section-label">{copy.plan.recommendedAllocation}</p>
             <div className="mt-3 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:grid-cols-3">
               {best.allocation.map((x, i) => (
                 <div key={i} className="rounded-xl bg-[#f2f5f0] p-3 text-center">
@@ -952,26 +1009,24 @@ function SmartRecommendation({
             <div className="mt-5 space-y-3">
               <Advice
                 icon={<ShieldCheck size={17} />}
-                title="Priority action"
+                title={copy.plan.priorityAction}
                 text={
                   highFFAStock
-                    ? `BST 2 contains ${n(highFFAStock, 0)} MT above target. Avoid adding more high-FFA CPO there unless no safer capacity is available. Prioritise controlled despatch or blending with verified low-FFA CPO.`
-                    : "All current tanks are within target. Protect acceptable stock and maintain sufficient free capacity."
+                    ? copy.plan.priorityHighFfa(highFFAStock, highFfaTankNames)
+                    : copy.plan.priorityAllOk
                 }
               />
               <Advice
                 icon={<Info size={17} />}
-                title="Assessment"
+                title={copy.plan.assessment}
                 text={
-                  bestMeetsTarget
-                    ? "This plan stays within tank capacity and keeps calculated final FFA within target."
-                    : "No allocation can make every tank meet the target using this incoming FFA. This plan minimises quality impact and protects lower-FFA stock as far as practical."
+                  bestMeetsTarget ? copy.plan.assessmentMeetsTarget : copy.plan.assessmentMinImpact
                 }
               />
               <Advice
                 icon={<AlertTriangle size={17} />}
-                title="Before transfer"
-                text="Engineer must verify latest tank dipping, laboratory FFA, available capacity and valve routing. This recommendation is not an approval."
+                title={copy.plan.beforeTransfer}
+                text={copy.plan.beforeTransferText}
                 warning
               />
             </div>
@@ -981,28 +1036,29 @@ function SmartRecommendation({
               className="btn-touch mt-5 hidden w-full bg-[#d7f08a] text-[#173f30] md:flex"
             >
               <RefreshCw size={16} />
-              Apply recommended allocation
+              {copy.allocation.applyRecommended}
             </button>
 
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="section-label">AI advisor / Penasihat AI</p>
-                  <p className="mt-1 text-sm text-[#58665e]">
-                    Plain-language opinion in English and Bahasa Melayu from OpenAI — numbers stay
-                    from the engine.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onGetAiOpinion}
-                  disabled={aiDisabled}
-                  className="btn-touch w-full shrink-0 border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60 sm:w-auto"
-                >
-                  {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                  {aiButtonLabel}
-                </button>
-              </div>
+              <p className="section-label">{copy.ai.advisor}</p>
+              <p className="mt-1 text-sm text-[#58665e]">{copy.ai.description}</p>
+              <textarea
+                value={aiQuestion}
+                onChange={(e) => onAiQuestionChange(e.target.value)}
+                placeholder={copy.ai.questionPlaceholder}
+                rows={3}
+                maxLength={500}
+                className="mt-3 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
+              />
+              <button
+                type="button"
+                onClick={onGetAiOpinion}
+                disabled={aiDisabled}
+                className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60 sm:w-auto"
+              >
+                {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
+                {aiButtonLabel}
+              </button>
 
               {aiError && (
                 <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
@@ -1014,9 +1070,7 @@ function SmartRecommendation({
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
                   <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
                     <Bot size={16} />
-                    {aiSource === "offline"
-                      ? "Instant mill summary / Ringkasan kilang"
-                      : "AI opinion (EN + BM)"}
+                    {aiSource === "offline" ? copy.ai.opinionOffline : copy.ai.opinionLive}
                   </div>
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
                     {aiOpinion}
@@ -1027,18 +1081,25 @@ function SmartRecommendation({
           </>
         ) : (
           <>
-            <p className="text-sm leading-relaxed text-[#8a3d20]">
-              No feasible plan is available. Available capacity is lower than expected incoming CPO.
-            </p>
+            <p className="text-sm leading-relaxed text-[#8a3d20]">{copy.plan.noFeasiblePlan}</p>
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
+              <p className="section-label">{copy.ai.advisor}</p>
+              <textarea
+                value={aiQuestion}
+                onChange={(e) => onAiQuestionChange(e.target.value)}
+                placeholder={copy.ai.questionPlaceholder}
+                rows={3}
+                maxLength={500}
+                className="mt-2 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
+              />
               <button
                 type="button"
                 onClick={onGetAiOpinion}
                 disabled={aiDisabled}
-                className="btn-touch w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
+                className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
               >
                 {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                {aiCooldown > 0 && !aiLoading ? `Wait ${aiCooldown}s` : aiButtonLabel}
+                {aiCooldown > 0 && !aiLoading ? copy.ai.wait(aiCooldown) : aiButtonLabel}
               </button>
               {aiError && (
                 <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
@@ -1049,7 +1110,7 @@ function SmartRecommendation({
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
                   {aiSource === "offline" && (
                     <div className="mb-2 text-xs font-bold text-[#a85128]">
-                      Offline summary / Ringkasan luar talian (OpenAI unavailable)
+                      {copy.ai.offlineUnavailable}
                     </div>
                   )}
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
@@ -1066,26 +1127,28 @@ function SmartRecommendation({
 }
 
 function DecisionSafeguards({
+  copy,
   results,
   allocationTotal,
   highFFAStock,
   target,
 }: {
+  copy: Copy;
   results: Result[];
   allocationTotal: number;
   highFFAStock: number;
   target: number;
 }) {
   const checks: [boolean, string][] = [
-    [!results.some((r) => r.overflow), "No tank overflow"],
-    [allocationTotal === 100, "Allocation equals 100%"],
-    [highFFAStock === 0, "No high-FFA stock held"],
-    [results.every((r) => r.finalFFA <= target), `Final FFA ≤ ${target}%`],
+    [!results.some((r) => r.overflow), copy.safeguards.noOverflow],
+    [allocationTotal === 100, copy.safeguards.allocation100],
+    [highFFAStock === 0, copy.safeguards.noHighFfa],
+    [results.every((r) => r.finalFFA <= target), copy.safeguards.finalFfaLe(target)],
   ];
 
   return (
     <section className="rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
-      <p className="section-label">Decision safeguards</p>
+      <p className="section-label">{copy.safeguards.title}</p>
       <div className="mt-4 space-y-3 text-sm">
         {checks.map(([ok, label], i) => (
           <div key={i} className="flex min-h-[44px] items-center justify-between gap-3">

@@ -56,6 +56,8 @@ export const adviseRequestSchema = z.object({
     highFfaStockMt: z.number(),
     currentPlanValid: z.boolean(),
   }),
+  userQuestion: z.string().trim().max(500).optional(),
+  language: z.enum(["en", "bm"]).optional(),
 });
 
 export type AdviseRequest = z.infer<typeof adviseRequestSchema>;
@@ -63,19 +65,22 @@ export type AdviseRequest = z.infer<typeof adviseRequestSchema>;
 const n = (v: number, d = 1) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-function bilingualSection(heading: string, en: string, ms: string) {
-  return `${heading}\n\n${en}\n\n${ms}`;
+function section(lang: "en" | "bm", headingEn: string, headingBm: string, en: string, ms: string) {
+  if (lang === "bm") return `${headingBm}\n\n${ms}`;
+  return `${headingEn}\n\n${en}`;
 }
 
-export function buildOfflineOpinion(payload: AdviseRequest): string {
+export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = "en"): string {
   const { production: p, flags, recommendedPlan, currentPlan, tanks } = payload;
   const highTanks = tanks.filter((t) => t.ffaPct > p.targetFfaPct).map((t) => t.name);
   const tankList = highTanks.length ? ` (${highTanks.join(", ")})` : "";
   const sections: string[] = [];
 
   sections.push(
-    bilingualSection(
-      "Summary / Ringkasan",
+    section(
+      lang,
+      "Summary",
+      "Ringkasan",
       `Expected incoming CPO is ${n(p.incomingCpoMt)} MT from ${n(p.estimatedFfbMt, 0)} MT FFB at ${n(p.incomingFfaPct, 2)}% FFA against a target of ${n(p.targetFfaPct, 2)}%.`,
       `CPO masuk dijangka ialah ${n(p.incomingCpoMt)} MT daripada ${n(p.estimatedFfbMt, 0)} MT TBS pada ${n(p.incomingFfaPct, 2)}% FFA berbanding sasaran ${n(p.targetFfaPct, 2)}%.`,
     ),
@@ -83,8 +88,10 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
 
   if (!flags.allocationValid) {
     sections.push(
-      bilingualSection(
-        "Allocation / Peruntukan",
+      section(
+        lang,
+        "Allocation",
+        "Peruntukan",
         `Allocation is ${n(flags.allocationTotalPct, 0)}% — adjust to 100% before transfer.`,
         `Peruntukan ialah ${n(flags.allocationTotalPct, 0)}% — laraskan kepada 100% sebelum pemindahan.`,
       ),
@@ -93,8 +100,10 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
 
   if (flags.hasOverflow) {
     sections.push(
-      bilingualSection(
-        "Capacity / Kapasiti",
+      section(
+        lang,
+        "Capacity",
+        "Kapasiti",
         "At least one tank would overflow with the current allocation. Reduce percentages or free capacity first.",
         "Sekurang-kurangnya satu tangki akan melimpah dengan peruntukan semasa. Kurangkan peratusan atau kosongkan ruang tangki dahulu.",
       ),
@@ -102,8 +111,10 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
   }
 
   sections.push(
-    bilingualSection(
-      "Key risks / Risiko utama",
+    section(
+      lang,
+      "Key risks",
+      "Risiko utama",
       flags.highFfaStockMt > 0
         ? `${n(flags.highFfaStockMt, 0)} MT is already above target FFA${tankList}. Avoid feeding more high-FFA CPO into those tanks unless no safer capacity exists.`
         : "No tank currently holds stock above the FFA target.",
@@ -122,8 +133,10 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
       );
     const planText = parts.join("; ");
     sections.push(
-      bilingualSection(
-        "Recommended action / Tindakan disyorkan",
+      section(
+        lang,
+        "Recommended action",
+        "Tindakan disyorkan",
         recommendedPlan.meetsTarget
           ? `Engine best plan keeps final FFA within target: ${planText}.`
           : `Engine best plan minimises quality impact: ${planText}.`,
@@ -138,8 +151,10 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
     );
     if (differs) {
       sections.push(
-        bilingualSection(
-          "Manual vs recommended / Manual vs disyorkan",
+        section(
+          lang,
+          "Manual vs recommended",
+          "Manual vs disyorkan",
           "Current manual allocation differs from the recommended plan — review before transfer.",
           "Peruntukan manual semasa berbeza daripada pelan disyorkan — semak sebelum pemindahan.",
         ),
@@ -147,8 +162,10 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
     }
   } else {
     sections.push(
-      bilingualSection(
-        "Recommended action / Tindakan disyorkan",
+      section(
+        lang,
+        "Recommended action",
+        "Tindakan disyorkan",
         "No feasible allocation fits available tank capacity with expected incoming CPO.",
         "Tiada peruntukan yang munasabah muat dalam kapasiti tangki available dengan CPO masuk dijangka.",
       ),
@@ -156,8 +173,10 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
   }
 
   sections.push(
-    bilingualSection(
-      "Before transfer / Sebelum pemindahan",
+    section(
+      lang,
+      "Before transfer",
+      "Sebelum pemindahan",
       "Verify latest dipping, laboratory FFA, available capacity, and valve routing. This offline summary is decision support only — authorised engineer verification is required before transfer.",
       "Sahkan dipping tangki terkini, FFA makmal, kapasiti available, dan laluan injap. Ringkasan luar talian ini ialah sokongan keputusan sahaja — pengesahan jurutera berwibawa diperlukan sebelum pemindahan.",
     ),
@@ -166,7 +185,17 @@ export function buildOfflineOpinion(payload: AdviseRequest): string {
   return sections.join("\n\n");
 }
 
-export const SYSTEM_PROMPT = `You are a senior palm oil mill CPO blending advisor supporting engineers at a Malaysian mill.
+export function buildSystemPrompt(lang: "en" | "bm", userQuestion?: string) {
+  const languageRule =
+    lang === "bm"
+      ? "Write your entire response in Bahasa Melayu. Use natural Malaysian mill terminology (TBS, tangki, FFA, CPO, dipping, injap)."
+      : "Write your entire response in English.";
+
+  const questionRule = userQuestion
+    ? `The engineer asked: "${userQuestion}". Answer this question first using only the provided data, then give brief supporting context from the plan.`
+    : "Give a structured opinion covering summary, key risks, recommended action, and before-transfer checks.";
+
+  return `You are a senior palm oil mill CPO blending advisor supporting engineers at a Malaysian mill.
 
 Rules:
 - Use ONLY the numbers and flags provided in the user message. Never invent tank readings, percentages, or MT values.
@@ -176,9 +205,11 @@ Rules:
 - If recommendedPlan is null, explain why no feasible plan exists and what constraints block a solution.
 - If hasOverflow is true or allocationValid is false, say so clearly first.
 - Mention lab verification, dipping, valve routing, and despatch/hold options when relevant.
-- Write EVERY section in BOTH English and Bahasa Melayu. Use bilingual headings like "Summary / Ringkasan", "Key risks / Risiko utama", "Recommended action / Tindakan disyorkan", "Before transfer / Sebelum pemindahan".
-- Under each heading: first the English paragraph, then a blank line, then the Bahasa Melayu paragraph. Keep tank names (e.g. BST 1) unchanged in both languages.
-- Use natural Malaysian mill terminology in Malay (TBS, tangki, FFA, CPO, dipping, injap).
+- ${languageRule}
+- ${questionRule}
+- Use short sections with plain headings appropriate to the response language.
+- Keep tank names (e.g. BST 1) unchanged.
 - Keep the tone professional, concise, and practical for shift engineers.
-- End with one bilingual disclaimer sentence (English then Malay): decision support only — authorised engineer verification is required before transfer.
+- End with one sentence: this is decision support only — authorised engineer verification is required before transfer.
 - Do not approve transfers. Do not output JSON.`;
+}

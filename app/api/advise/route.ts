@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   adviseRequestSchema,
   buildOfflineOpinion,
-  SYSTEM_PROMPT,
+  buildSystemPrompt,
   type AdviseRequest,
 } from "@/lib/advise";
 
@@ -70,6 +70,7 @@ async function callOpenAi(
   apiKey: string,
   baseUrl: string,
   model: string,
+  systemPrompt: string,
   userContent: string,
 ) {
   return fetch(`${baseUrl}/chat/completions`, {
@@ -83,7 +84,7 @@ async function callOpenAi(
       temperature: 0.3,
       max_tokens: 900,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
     }),
@@ -94,6 +95,7 @@ async function requestOpenAiOpinion(
   apiKey: string,
   baseUrl: string,
   models: string[],
+  systemPrompt: string,
   userContent: string,
 ): Promise<{ opinion: string; source: "openai" } | { error: string }> {
   let lastDetail = "";
@@ -101,7 +103,7 @@ async function requestOpenAiOpinion(
 
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await callOpenAi(apiKey, baseUrl, model, userContent);
+      const response = await callOpenAi(apiKey, baseUrl, model, systemPrompt, userContent);
 
       if (response.ok) {
         const data = (await response.json()) as {
@@ -157,6 +159,7 @@ export async function POST(request: Request) {
   }
 
   const payload: AdviseRequest = parsed.data;
+  const lang = payload.language ?? "en";
   const baseUrl = getOpenAiBaseUrl();
   const configuredModel = process.env.OPENAI_MODEL?.trim();
   const models = configuredModel
@@ -164,22 +167,41 @@ export async function POST(request: Request) {
     : FALLBACK_MODELS;
 
   try {
-    const userContent = JSON.stringify(payload, null, 2);
-    const result = await requestOpenAiOpinion(apiKey, baseUrl, models, userContent);
+    const userContent = JSON.stringify(
+      {
+        planData: {
+          production: payload.production,
+          tanks: payload.tanks,
+          currentAllocationPct: payload.currentAllocationPct,
+          currentPlan: payload.currentPlan,
+          recommendedPlan: payload.recommendedPlan,
+          flags: payload.flags,
+        },
+        engineerQuestion: payload.userQuestion ?? null,
+      },
+      null,
+      2,
+    );
+    const systemPrompt = buildSystemPrompt(lang, payload.userQuestion);
+    const result = await requestOpenAiOpinion(apiKey, baseUrl, models, systemPrompt, userContent);
 
     if ("opinion" in result) {
       return NextResponse.json(result);
     }
 
-    const offlineOpinion = buildOfflineOpinion(payload);
+    const offlineOpinion = buildOfflineOpinion(payload, lang);
+    const offlineNote =
+      lang === "bm"
+        ? `Nota: OpenAI tidak tersedia (${result.error}). Ringkasan ini dijana luar talian daripada pelan yang dikira.`
+        : `Note: OpenAI was unavailable (${result.error}). This summary was generated offline from your calculated plan.`;
     return NextResponse.json({
-      opinion: `${offlineOpinion}\n\nNote / Nota: OpenAI was unavailable (${result.error}). This summary was generated offline from your calculated plan.\nOpenAI tidak tersedia (${result.error}). Ringkasan ini dijana luar talian daripada pelan yang dikira.`,
+      opinion: `${offlineOpinion}\n\n${offlineNote}`,
       source: "offline",
     });
   } catch (error) {
     console.error("Advise route error:", error);
     return NextResponse.json({
-      opinion: buildOfflineOpinion(payload),
+      opinion: buildOfflineOpinion(payload, lang),
       source: "offline",
     });
   }
