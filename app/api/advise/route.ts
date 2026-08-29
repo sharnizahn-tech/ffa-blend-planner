@@ -8,9 +8,8 @@ import {
 
 export const runtime = "nodejs";
 
-const DEFAULT_BASE_URL = "https://chenzk.top/v1";
-const DEFAULT_MODEL = "gpt-4o-mini";
-const FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o-mini-2024-07-18", "gpt-4o"];
+const DEFAULT_BASE_URL = "https://www.chenzk.top/v1";
+const FALLBACK_MODELS = ["gpt-5.4", "gpt-4o-mini", "gpt-4o"];
 
 function parseOpenAiError(detailText: string) {
   try {
