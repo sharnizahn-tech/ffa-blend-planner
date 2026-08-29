@@ -3,7 +3,12 @@ import { adviseRequestSchema, SYSTEM_PROMPT } from "@/lib/advise";
 
 export const runtime = "nodejs";
 
-const FALLBACK_MODELS = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-8b"];
+const FALLBACK_MODELS = [
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-3.5-flash",
+];
 
 function geminiErrorMessage(status: number, detailText: string): string {
   try {
@@ -23,7 +28,7 @@ function geminiErrorMessage(status: number, detailText: string): string {
       return "Gemini rate limit reached. Wait 60 seconds, tap once only, then try again.";
     }
     if (code === "NOT_FOUND") {
-      return "Gemini model unavailable. Remove GEMINI_MODEL from Vercel or set it to gemini-1.5-flash.";
+      return "Gemini model unavailable. In Vercel, delete GEMINI_MODEL if set, redeploy, then try again.";
     }
     if (message) return message;
   } catch {
@@ -89,7 +94,13 @@ export async function POST(request: Request) {
   }
 
   const configuredModel = process.env.GEMINI_MODEL?.trim();
-  const models = configuredModel ? [configuredModel] : FALLBACK_MODELS;
+  const isDeprecatedModel =
+    !configuredModel ||
+    configuredModel.includes("1.5-flash") ||
+    configuredModel.includes("2.0-flash");
+  const models = isDeprecatedModel
+    ? FALLBACK_MODELS
+    : [configuredModel, ...FALLBACK_MODELS.filter((model) => model !== configuredModel)];
 
   try {
     const userContent = JSON.stringify(parsed.data, null, 2);
