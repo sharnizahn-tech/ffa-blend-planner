@@ -8,39 +8,36 @@ import {
 
 export const runtime = "nodejs";
 
-const FALLBACK_MODELS = [
-  "gemini-2.5-flash-lite",
-  "gemini-flash-lite-latest",
-  "gemini-2.5-flash",
-  "gemini-flash-latest",
-];
+const DEFAULT_BASE_URL = "https://chenzk.top/v1";
+const DEFAULT_MODEL = "gpt-4o-mini";
+const FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o-mini-2024-07-18", "gpt-4o"];
 
-function parseGeminiError(detailText: string) {
+function parseOpenAiError(detailText: string) {
   try {
     return JSON.parse(detailText) as {
-      error?: { message?: string; code?: number; status?: string };
+      error?: { message?: string; code?: string; type?: string };
     };
   } catch {
     return null;
   }
 }
 
-function geminiErrorMessage(status: number, detailText: string): string {
-  const detail = parseGeminiError(detailText);
+function openAiErrorMessage(status: number, detailText: string): string {
+  const detail = parseOpenAiError(detailText);
   const message = detail?.error?.message ?? "";
-  const code = detail?.error?.status ?? "";
+  const code = detail?.error?.code ?? "";
 
-  if (status === 400 && message.toLowerCase().includes("api key")) {
-    return "Invalid Gemini API key. In Vercel, check GEMINI_API_KEY matches your key from aistudio.google.com/apikey.";
+  if (status === 401 || code === "invalid_api_key") {
+    return "Invalid OpenAI API key. Check OPENAI_API_KEY in Vercel.";
   }
-  if (status === 403 || code === "PERMISSION_DENIED") {
-    return "Gemini API access denied. Enable the Generative Language API and verify GEMINI_API_KEY.";
+  if (code === "insufficient_quota" || message.toLowerCase().includes("quota")) {
+    return "OpenAI account or proxy has no available credits.";
   }
-  if (status === 429 || code === "RESOURCE_EXHAUSTED") {
-    return "Gemini rate limit reached. Wait 60 seconds, tap once only, then try again.";
+  if (status === 429) {
+    return "OpenAI rate limit reached. Wait 60 seconds, tap once only, then try again.";
   }
-  if (code === "NOT_FOUND") {
-    return "Gemini model unavailable. In Vercel, delete GEMINI_MODEL if set, redeploy, then try again.";
+  if (code === "model_not_found") {
+    return "OpenAI model unavailable. Set OPENAI_MODEL to gpt-4o-mini in Vercel or remove that variable.";
   }
   if (message) return message;
 
@@ -49,15 +46,13 @@ function geminiErrorMessage(status: number, detailText: string): string {
 
 function shouldTryNextModel(status: number, detailText: string): boolean {
   const lower = detailText.toLowerCase();
-  const code = parseGeminiError(detailText)?.error?.status ?? "";
+  const code = parseOpenAiError(detailText)?.error?.code ?? "";
 
   return (
     status === 404 ||
     status === 429 ||
     status === 503 ||
-    code === "NOT_FOUND" ||
-    code === "RESOURCE_EXHAUSTED" ||
-    code === "UNAVAILABLE" ||
+    code === "model_not_found" ||
     lower.includes("high demand") ||
     lower.includes("not found") ||
     lower.includes("unavailable")
@@ -68,48 +63,53 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callGemini(apiKey: string, model: string, userContent: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+function getOpenAiBaseUrl() {
+  return (process.env.OPENAI_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/$/, "");
+}
 
-  return fetch(url, {
+async function callOpenAi(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  userContent: string,
+) {
+  return fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: SYSTEM_PROMPT }],
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: userContent }],
-        },
+      model,
+      temperature: 0.3,
+      max_tokens: 900,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userContent },
       ],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 900,
-      },
     }),
   });
 }
 
-async function requestGeminiOpinion(
+async function requestOpenAiOpinion(
   apiKey: string,
+  baseUrl: string,
   models: string[],
   userContent: string,
-): Promise<{ opinion: string; source: "gemini" } | { error: string }> {
+): Promise<{ opinion: string; source: "openai" } | { error: string }> {
   let lastDetail = "";
   let lastStatus = 502;
 
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await callGemini(apiKey, model, userContent);
+      const response = await callOpenAi(apiKey, baseUrl, model, userContent);
 
       if (response.ok) {
         const data = (await response.json()) as {
-          candidates?: { content?: { parts?: { text?: string }[] } }[];
+          choices?: { message?: { content?: string | null } }[];
         };
-        const opinion = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (opinion) return { opinion, source: "gemini" };
+        const opinion = data.choices?.[0]?.message?.content?.trim();
+        if (opinion) return { opinion, source: "openai" };
         lastDetail = "empty response";
         lastStatus = 502;
         break;
@@ -117,26 +117,26 @@ async function requestGeminiOpinion(
 
       lastDetail = await response.text();
       lastStatus = response.status;
-      console.error("Gemini advise error:", response.status, model, lastDetail);
+      console.error("OpenAI advise error:", response.status, model, lastDetail);
 
       if (!shouldTryNextModel(response.status, lastDetail)) {
-        return { error: geminiErrorMessage(response.status, lastDetail) };
+        return { error: openAiErrorMessage(response.status, lastDetail) };
       }
 
       if (attempt === 0) await sleep(1500);
     }
   }
 
-  return { error: geminiErrorMessage(lastStatus, lastDetail) };
+  return { error: openAiErrorMessage(lastStatus, lastDetail) };
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(
       {
         error:
-          "AI advisor is not configured. Add GEMINI_API_KEY in Vercel project environment variables.",
+          "AI advisor is not configured. Add OPENAI_API_KEY in Vercel project environment variables.",
       },
       { status: 503 },
     );
@@ -158,18 +158,15 @@ export async function POST(request: Request) {
   }
 
   const payload: AdviseRequest = parsed.data;
-  const configuredModel = process.env.GEMINI_MODEL?.trim();
-  const isDeprecatedModel =
-    !configuredModel ||
-    configuredModel.includes("1.5-flash") ||
-    configuredModel.includes("2.0-flash");
-  const models = isDeprecatedModel
-    ? FALLBACK_MODELS
-    : [configuredModel, ...FALLBACK_MODELS.filter((model) => model !== configuredModel)];
+  const baseUrl = getOpenAiBaseUrl();
+  const configuredModel = process.env.OPENAI_MODEL?.trim();
+  const models = configuredModel
+    ? [configuredModel, ...FALLBACK_MODELS.filter((model) => model !== configuredModel)]
+    : FALLBACK_MODELS;
 
   try {
     const userContent = JSON.stringify(payload, null, 2);
-    const result = await requestGeminiOpinion(apiKey, models, userContent);
+    const result = await requestOpenAiOpinion(apiKey, baseUrl, models, userContent);
 
     if ("opinion" in result) {
       return NextResponse.json(result);
@@ -177,7 +174,7 @@ export async function POST(request: Request) {
 
     const offlineOpinion = buildOfflineOpinion(payload);
     return NextResponse.json({
-      opinion: `${offlineOpinion}\n\nNote: Gemini AI was busy (${result.error}). This summary was generated offline from your calculated plan.`,
+      opinion: `${offlineOpinion}\n\nNote: OpenAI was unavailable (${result.error}). This summary was generated offline from your calculated plan.`,
       source: "offline",
     });
   } catch (error) {

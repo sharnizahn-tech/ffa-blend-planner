@@ -133,7 +133,7 @@ export default function Home() {
     () => new Set(initialTanks.map((_, i) => i)),
   );
   const [aiOpinion, setAiOpinion] = useState<string | null>(null);
-  const [aiSource, setAiSource] = useState<"gemini" | "offline" | null>(null);
+  const [aiSource, setAiSource] = useState<"openai" | "offline" | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiCooldown, setAiCooldown] = useState(0);
@@ -236,14 +236,14 @@ export default function Home() {
       const data = (await response.json()) as {
         opinion?: string;
         error?: string;
-        source?: "gemini" | "offline";
+        source?: "openai" | "offline";
       };
       if (!response.ok) {
         throw new Error(data.error ?? "Unable to get AI opinion.");
       }
 
       setAiOpinion(data.opinion ?? null);
-      setAiSource(data.source ?? "gemini");
+      setAiSource(data.source ?? "openai");
     } catch (error) {
       setAiError(error instanceof Error ? error.message : "Unable to get AI opinion.");
     } finally {
@@ -898,7 +898,7 @@ function SmartRecommendation({
   incomingCPO: number;
   onApply: () => void;
   aiOpinion: string | null;
-  aiSource: "gemini" | "offline" | null;
+  aiSource: "openai" | "offline" | null;
   aiLoading: boolean;
   aiError: string | null;
   aiCooldown: number;
@@ -989,8 +989,8 @@ function SmartRecommendation({
                 <div>
                   <p className="section-label">AI advisor</p>
                   <p className="mt-1 text-sm text-[#58665e]">
-                    Plain-language opinion from Gemini Flash based on your calculated plan — numbers
-                    stay from the engine.
+                    Plain-language opinion from OpenAI based on your calculated plan — numbers stay
+                    from the engine.
                   </p>
                 </div>
                 <button
@@ -1014,7 +1014,7 @@ function SmartRecommendation({
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
                   <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
                     <Bot size={16} />
-                    {aiSource === "offline" ? "Instant mill summary" : "AI opinion (Gemini)"}
+                    {aiSource === "offline" ? "Instant mill summary" : "AI opinion (OpenAI)"}
                   </div>
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
                     {aiOpinion}
@@ -1046,7 +1046,7 @@ function SmartRecommendation({
               {aiOpinion && (
                 <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
                   {aiSource === "offline" && (
-                    <div className="mb-2 text-xs font-bold text-[#a85128]">Offline summary (Gemini busy)</div>
+                    <div className="mb-2 text-xs font-bold text-[#a85128]">Offline summary (OpenAI unavailable)</div>
                   )}
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
                     {aiOpinion}
