@@ -1,5 +1,24 @@
 import { z } from "zod";
 
+const blendPlanSchema = z.object({
+  rank: z.number().optional(),
+  allocationPct: z.array(z.number()),
+  tanks: z.array(
+    z.object({
+      name: z.string(),
+      allocationPct: z.number(),
+      incomingMt: z.number(),
+      finalStockMt: z.number(),
+      finalFfaPct: z.number(),
+      utilisationPct: z.number(),
+      overflow: z.boolean(),
+    }),
+  ),
+  meetsTarget: z.boolean(),
+  score: z.number(),
+  maxFinalFfaPct: z.number().optional(),
+});
+
 export const adviseRequestSchema = z.object({
   production: z.object({
     millCapacityMtHr: z.number(),
@@ -31,24 +50,8 @@ export const adviseRequestSchema = z.object({
       overflow: z.boolean(),
     }),
   ),
-  recommendedPlan: z
-    .object({
-      allocationPct: z.array(z.number()),
-      tanks: z.array(
-        z.object({
-          name: z.string(),
-          allocationPct: z.number(),
-          incomingMt: z.number(),
-          finalStockMt: z.number(),
-          finalFfaPct: z.number(),
-          utilisationPct: z.number(),
-          overflow: z.boolean(),
-        }),
-      ),
-      meetsTarget: z.boolean(),
-      score: z.number(),
-    })
-    .nullable(),
+  recommendedPlan: blendPlanSchema.nullable(),
+  alternativePlans: z.array(blendPlanSchema).optional(),
   flags: z.object({
     allocationTotalPct: z.number(),
     allocationValid: z.boolean(),
@@ -71,7 +74,7 @@ function section(lang: "en" | "bm", headingEn: string, headingBm: string, en: st
 }
 
 export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = "en"): string {
-  const { production: p, flags, recommendedPlan, currentPlan, tanks } = payload;
+  const { production: p, flags, recommendedPlan, alternativePlans, currentPlan, tanks } = payload;
   const highTanks = tanks.filter((t) => t.ffaPct > p.targetFfaPct).map((t) => t.name);
   const tankList = highTanks.length ? ` (${highTanks.join(", ")})` : "";
   const sections: string[] = [];
@@ -125,24 +128,41 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
   );
 
   if (recommendedPlan) {
-    const parts = recommendedPlan.tanks
-      .filter((t) => t.allocationPct > 0)
-      .map(
-        (t) =>
-          `${t.name}: ${t.allocationPct}% (${n(t.incomingMt)} MT → final FFA ${n(t.finalFfaPct, 2)}%)`,
-      );
-    const planText = parts.join("; ");
+    const formatPlan = (plan: NonNullable<AdviseRequest["recommendedPlan"]>, label: string) => {
+      const parts = plan.tanks
+        .filter((t) => t.allocationPct > 0)
+        .map(
+          (t) =>
+            `${t.name}: ${t.allocationPct}% (${n(t.incomingMt)} MT → final FFA ${n(t.finalFfaPct, 2)}%)`,
+        );
+      const planText = parts.join("; ");
+      const maxFfa = plan.maxFinalFfaPct ?? Math.max(...plan.tanks.map((t) => t.finalFfaPct));
+      const status = plan.meetsTarget
+        ? lang === "bm"
+          ? "dalam had FFA baik"
+          : "within the good FFA limit"
+        : lang === "bm"
+          ? `FFA akhir tertinggi ${n(maxFfa, 2)}%`
+          : `highest final FFA ${n(maxFfa, 2)}%`;
+      return lang === "bm"
+        ? `${label} (${status}): ${planText}.`
+        : `${label} (${status}): ${planText}.`;
+    };
+
+    const ranked = [
+      recommendedPlan,
+      ...(alternativePlans ?? []),
+    ] as NonNullable<AdviseRequest["recommendedPlan"]>[];
+
     sections.push(
       section(
         lang,
         "Recommended action",
         "Tindakan disyorkan",
-        recommendedPlan.meetsTarget
-          ? `Engine best plan keeps final FFA at or below the good FFA limit (lower is better): ${planText}.`
-          : `Engine best plan minimises quality impact: ${planText}.`,
-        recommendedPlan.meetsTarget
-          ? `Pelan terbaik enjin mengekalkan FFA akhir pada atau di bawah had FFA baik (lebih rendah lebih baik): ${planText}.`
-          : `Pelan terbaik enjin meminimumkan kesan kualiti: ${planText}.`,
+        ranked.map((plan, i) => formatPlan(plan, i === 0 ? "Best plan" : `Plan ${i + 1}`)).join(" "),
+        ranked
+          .map((plan, i) => formatPlan(plan, i === 0 ? "Pelan terbaik" : `Pelan ${i + 1}`))
+          .join(" "),
       ),
     );
 
@@ -199,7 +219,8 @@ export function buildSystemPrompt(lang: "en" | "bm", userQuestion?: string) {
 
 Rules:
 - Use ONLY the numbers and flags provided in the user message. Never invent tank readings, percentages, or MT values.
-- The recommendedPlan comes from a deterministic calculation engine. Treat it as the mathematical best plan unless flags show it is infeasible.
+- The recommendedPlan is rank 1; alternativePlans (if present) are ranks 2–3 from the same engine. Treat recommendedPlan as the mathematical best unless flags show it is infeasible.
+- When alternativePlans are provided, briefly compare how plans 2 and 3 differ and when an engineer might choose them over plan 1.
 - targetFfaPct is the GOOD FFA LIMIT (maximum for good quality), not a target to hit. FFA lower than this limit is better; 4.8% means at or below 4.8% is good, and lower values are preferable.
 - Explain WHY the recommended allocation is best, which tanks are risky, and what operational actions the engineer should take before transfer.
 - Compare currentPlan vs recommendedPlan when they differ.

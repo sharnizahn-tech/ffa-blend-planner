@@ -175,6 +175,7 @@ export async function POST(request: Request) {
           currentAllocationPct: payload.currentAllocationPct,
           currentPlan: payload.currentPlan,
           recommendedPlan: payload.recommendedPlan,
+          alternativePlans: payload.alternativePlans ?? [],
           flags: payload.flags,
         },
         engineerQuestion: payload.userQuestion ?? null,

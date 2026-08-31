@@ -3,20 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  Beaker,
   Bot,
   CheckCircle2,
-  ChevronDown,
   Droplets,
   Gauge,
+  Globe,
   Info,
   LayoutDashboard,
   Loader2,
   Plus,
   RefreshCw,
+  Send,
   ShieldCheck,
   Sparkles,
   Trash2,
+  TrendingUp,
 } from "lucide-react";
 import type { AdviseRequest } from "@/lib/advise";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
@@ -76,36 +77,51 @@ function calculate(
   });
 }
 
-function findBestPlan(
+type BlendPlan = { allocation: number[]; results: Result[]; score: number };
+
+function sameAllocation(a: number[], b: number[]) {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function scorePlan(
+  tanks: Tank[],
+  allocation: number[],
+  incomingCPO: number,
+  incomingFFA: number,
+  target: number,
+): BlendPlan | null {
+  const results = calculate(tanks, allocation, incomingCPO, incomingFFA);
+  if (results.some((r) => r.overflow)) return null;
+  const excess = results.reduce((s, r) => s + Math.max(0, r.finalFFA - target) * r.finalStock, 0);
+  const contamination = results.reduce(
+    (s, r) => s + (r.ffa <= target && r.finalFFA > target ? r.stock : 0),
+    0,
+  );
+  const highTankFeed = results.reduce((s, r) => s + (r.ffa > target ? r.incoming : 0), 0);
+  const ffaMass = results.reduce((s, r) => s + r.finalFFA * r.finalStock, 0);
+  const score =
+    excess * 100 +
+    contamination * 20 +
+    highTankFeed * 2 +
+    allocation.filter((x) => x > 0).length * 3 +
+    ffaMass * 0.05;
+  return { allocation: [...allocation], results, score };
+}
+
+function findTopPlans(
   tanks: Tank[],
   incomingCPO: number,
   incomingFFA: number,
   target: number,
-): { allocation: number[]; results: Result[]; score: number } | null {
-  let best: { allocation: number[]; results: Result[]; score: number } | null = null;
+  limit = 3,
+): BlendPlan[] {
+  const top: BlendPlan[] = [];
   const assess = (allocation: number[]) => {
-    const results = calculate(tanks, allocation, incomingCPO, incomingFFA);
-    if (results.some((r) => r.overflow)) return;
-    const excess = results.reduce(
-      (s, r) => s + Math.max(0, r.finalFFA - target) * r.finalStock,
-      0,
-    );
-    const contamination = results.reduce(
-      (s, r) => s + (r.ffa <= target && r.finalFFA > target ? r.stock : 0),
-      0,
-    );
-    const highTankFeed = results.reduce(
-      (s, r) => s + (r.ffa > target ? r.incoming : 0),
-      0,
-    );
-    const ffaMass = results.reduce((s, r) => s + r.finalFFA * r.finalStock, 0);
-    const score =
-      excess * 100 +
-      contamination * 20 +
-      highTankFeed * 2 +
-      allocation.filter((x) => x > 0).length * 3 +
-      ffaMass * 0.05;
-    if (!best || score < best.score) best = { allocation, results, score };
+    const plan = scorePlan(tanks, allocation, incomingCPO, incomingFFA, target);
+    if (!plan || top.some((p) => sameAllocation(p.allocation, plan.allocation))) return;
+    top.push(plan);
+    top.sort((a, b) => a.score - b.score);
+    if (top.length > limit) top.length = limit;
   };
   const build = (index: number, remaining: number, values: number[]) => {
     if (index === tanks.length - 1) {
@@ -116,7 +132,26 @@ function findBestPlan(
       build(index + 1, remaining - value, [...values, value]);
   };
   build(0, 100, []);
-  return best;
+  return top;
+}
+
+function planToAdvisePayload(plan: BlendPlan, rank: number, target: number) {
+  return {
+    rank,
+    allocationPct: plan.allocation,
+    score: plan.score,
+    meetsTarget: plan.results.every((r) => r.finalFFA <= target),
+    maxFinalFfaPct: Math.max(...plan.results.map((r) => r.finalFFA)),
+    tanks: plan.results.map((r) => ({
+      name: r.name,
+      allocationPct: r.allocation,
+      incomingMt: r.incoming,
+      finalStockMt: r.finalStock,
+      finalFfaPct: r.finalFFA,
+      utilisationPct: r.utilisation,
+      overflow: r.overflow,
+    })),
+  };
 }
 
 function tankState(result: Result, target: number): TankState {
@@ -145,13 +180,27 @@ function LanguageToggle({ lang, onChange }: { lang: Lang; onChange: (lang: Lang)
           key={code}
           type="button"
           onClick={() => onChange(code)}
-          className={`rounded-full px-3 py-1.5 transition-colors ${
+          className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 transition-colors ${
             lang === code ? "bg-[#d7f08a] text-[#123c2c]" : "text-white/80 hover:text-white"
           }`}
         >
+          {code === "en" && <Globe size={12} />}
           {code.toUpperCase()}
         </button>
       ))}
+    </div>
+  );
+}
+
+function TankCylinder({ fillPct, state }: { fillPct: number; state: TankState }) {
+  const clamped = Math.min(100, Math.max(0, fillPct));
+  return (
+    <div className={`tank-cylinder tank-cylinder--${state}`} aria-hidden>
+      <div className="tank-cylinder__cap" />
+      <div className="tank-cylinder__shell">
+        <div className="tank-cylinder__fill" style={{ height: `${clamped}%` }} />
+        <span className="tank-cylinder__pct">{Math.round(clamped)}%</span>
+      </div>
     </div>
   );
 }
@@ -166,9 +215,6 @@ export default function Home() {
   const [target, setTarget] = useState(4.8);
   const [allocation, setAllocation] = useState([0, 100]);
   const [mobileTab, setMobileTab] = useState<MobileTab>("overview");
-  const [expandedTanks, setExpandedTanks] = useState<Set<number>>(
-    () => new Set(initialTanks.map((_, i) => i)),
-  );
   const [aiOpinion, setAiOpinion] = useState<string | null>(null);
   const [aiSource, setAiSource] = useState<"openai" | "offline" | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -199,10 +245,11 @@ export default function Home() {
     () => calculate(tanks, allocation, incomingCPO, incomingFFA),
     [tanks, allocation, incomingCPO, incomingFFA],
   );
-  const best = useMemo(
-    () => findBestPlan(tanks, incomingCPO, incomingFFA, target),
+  const topPlans = useMemo(
+    () => findTopPlans(tanks, incomingCPO, incomingFFA, target),
     [tanks, incomingCPO, incomingFFA, target],
   );
+  const best = topPlans[0] ?? null;
   const allocationTotal = allocation.reduce((a, b) => a + b, 0);
   const currentStock = tanks.reduce((s, t) => s + t.stock, 0);
   const highFFAStock = tanks.filter((t) => t.ffa > target).reduce((s, t) => s + t.stock, 0);
@@ -214,7 +261,7 @@ export default function Home() {
     setAiOpinion(null);
     setAiSource(null);
     setAiError(null);
-  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, best]);
+  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, topPlans]);
 
   useEffect(() => {
     if (aiCooldown <= 0) return;
@@ -257,22 +304,8 @@ export default function Home() {
           utilisationPct: r.utilisation,
           overflow: r.overflow,
         })),
-        recommendedPlan: best
-          ? {
-              allocationPct: best.allocation,
-              score: best.score,
-              meetsTarget: best.results.every((r) => r.finalFFA <= target),
-              tanks: best.results.map((r) => ({
-                name: r.name,
-                allocationPct: r.allocation,
-                incomingMt: r.incoming,
-                finalStockMt: r.finalStock,
-                finalFfaPct: r.finalFFA,
-                utilisationPct: r.utilisation,
-                overflow: r.overflow,
-              })),
-            }
-          : null,
+        recommendedPlan: best ? planToAdvisePayload(best, 1, target) : null,
+        alternativePlans: topPlans.slice(1).map((plan, i) => planToAdvisePayload(plan, i + 2, target)),
         flags: {
           allocationTotalPct: allocationTotal,
           allocationValid: allocationTotal === 100,
@@ -324,36 +357,21 @@ export default function Home() {
           : t,
       ),
     );
-  const useSuggested = () => best && setAllocation(best.allocation);
+  const applyPlan = (plan: BlendPlan) => setAllocation(plan.allocation);
+  const useSuggested = () => best && applyPlan(best);
   const addTank = () => {
     setTanks((p) => [...p, { name: suggestTankName(p), capacity: 2000, stock: 0, ffa: 0 }]);
     setAllocation((p) => [...p, 0]);
-    setExpandedTanks((p) => new Set([...p, tanks.length]));
     setMobileTab("tanks");
   };
   const removeTank = (index: number) => {
     if (tanks.length <= 1) return;
     setTanks((p) => p.filter((_, i) => i !== index));
     setAllocation((p) => p.filter((_, i) => i !== index));
-    setExpandedTanks((p) => {
-      const next = new Set<number>();
-      p.forEach((idx) => {
-        if (idx < index) next.add(idx);
-        else if (idx > index) next.add(idx - 1);
-      });
-      return next;
-    });
   };
-  const toggleTank = (index: number) =>
-    setExpandedTanks((p) => {
-      const next = new Set(p);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
 
   const metrics = (
-    <section className="grid grid-cols-4 gap-1.5 sm:gap-3 lg:grid-cols-4">
+    <section className="grid grid-cols-4 gap-1.5 sm:gap-3">
       <Metric
         icon={<Gauge size={18} />}
         label={copy.metrics.currentStock}
@@ -374,7 +392,7 @@ export default function Home() {
         note={copy.metrics.fromFfb(estimatedFFB)}
       />
       <Metric
-        icon={<Beaker size={18} />}
+        icon={<TrendingUp size={18} />}
         label={copy.metrics.incomingFfa}
         value={`${n(incomingFFA, 2)}%`}
         note={copy.metrics.ffaLimitNote(target)}
@@ -389,11 +407,11 @@ export default function Home() {
       subtitle={copy.forecast.subtitle}
       icon={<Gauge size={19} />}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <Field label={copy.forecast.capacity} value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
-        <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hr" />
+        <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hrs" />
         <Field label={copy.forecast.utilisation} value={utilisation} onChange={setUtilisation} unit="%" />
-        <Field label={copy.forecast.expectedOer} value={oer} onChange={setOer} unit="%" />
+        <ReadonlyField label={copy.forecast.expectedCpo} value={`${n(incomingCPO)} MT`} />
         <Field
           label={copy.forecast.incomingFfa}
           value={incomingFFA}
@@ -403,6 +421,14 @@ export default function Home() {
         />
         <Field label={copy.forecast.ffaLimit} value={target} onChange={setTarget} unit="%" />
       </div>
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-[#587068]">
+          {copy.forecast.expectedOer}: {n(oer, 1)}%
+        </summary>
+        <div className="mt-2 max-w-xs">
+          <Field label={copy.forecast.expectedOer} value={oer} onChange={setOer} unit="%" />
+        </div>
+      </details>
       <p className="mt-3 text-xs leading-relaxed text-[#758078]">{copy.forecast.ffaLimitHint}</p>
     </Panel>
   );
@@ -440,39 +466,36 @@ export default function Home() {
     </div>
   );
 
-  const renderTankCard = (tank: Tank, i: number) => {
+  const renderTankStrip = (tank: Tank, i: number) => {
     const r = results[i];
     const state = tankState(r, target);
-    const expanded = expandedTanks.has(i);
+    const ffaImproved = r.finalFFA < tank.ffa;
 
     return (
-      <article key={`${tank.name}-${i}`} className={`tank-card ${state}`}>
-        <div className="flex items-center gap-2 pr-2">
-          <button
-            type="button"
-            className="tank-card__toggle min-w-0 flex-1"
-            onClick={() => toggleTank(i)}
-            aria-expanded={expanded}
-            aria-controls={`tank-body-${i}`}
-          >
-            <div className="tank-icon">
-              <Droplets size={18} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">{tank.name}</p>
-              <p className="text-xs text-[#708078]">{copy.tanks.filledAfter(r.utilisation)}</p>
-            </div>
-            <span className={`status-pill shrink-0 ${state}`}>
-              {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-              <span className="hidden min-[400px]:inline">
-                {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
-              </span>
-            </span>
-            <ChevronDown
-              size={18}
-              className={`shrink-0 text-[#708078] transition-transform ${expanded ? "rotate-180" : ""}`}
+      <article key={`${tank.name}-${i}`} className={`tank-strip tank-strip--${state}`}>
+        <div className="tank-strip__visual">
+          <TankCylinder fillPct={r.utilisation} state={state} />
+        </div>
+
+        <div className="tank-strip__identity">
+          <div className="flex flex-wrap items-center gap-2">
+            <TankNameInput
+              value={tank.name}
+              onChange={(v) => updateTank(i, "name", v)}
+              placeholder={copy.tanks.namePlaceholder}
+              ariaLabel={copy.tanks.name}
             />
-          </button>
+            <span className={`status-badge ${state}`}>
+              {state === "safe" ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+              {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
+            </span>
+          </div>
+          <p className="tank-strip__meta">
+            {copy.tanks.filledAfter(r.utilisation)} · {copy.tanks.volumeSummary(tank.stock, tank.capacity)}
+          </p>
+        </div>
+
+        <div className="tank-strip__actions">
           {tanks.length > 1 && (
             <button
               type="button"
@@ -485,142 +508,61 @@ export default function Home() {
             </button>
           )}
         </div>
-        {expanded && (
-          <div id={`tank-body-${i}`} className="tank-card__body space-y-3">
-            <TextField
-              label={copy.tanks.name}
-              value={tank.name}
-              onChange={(v) => updateTank(i, "name", v)}
-              placeholder={copy.tanks.namePlaceholder}
-            />
-            <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
-              <MiniField
-                label={copy.tanks.capacity}
-                value={tank.capacity}
-                onChange={(v) => updateTank(i, "capacity", v)}
-                unit="MT"
-              />
-              <MiniField
-                label={copy.tanks.stockNow}
-                value={tank.stock}
-                onChange={(v) => updateTank(i, "stock", v)}
-                unit="MT"
-              />
-              <MiniField
-                label={copy.tanks.ffaNow}
-                value={tank.ffa}
-                onChange={(v) => updateTank(i, "ffa", v)}
-                unit="%"
-              />
-              <AllocationField
-                label={copy.tanks.allocation}
-                value={allocation[i]}
-                incomingCPO={incomingCPO}
-                onChange={(v) =>
-                  setAllocation((p) => p.map((x, j) => (j === i ? v : x)))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 rounded-xl bg-white/70 p-3">
-              <div className="result-cell">
-                <span>{copy.tanks.finalStock}</span>
-                <strong>{n(r.finalStock)} MT</strong>
-              </div>
-              <div className="result-cell">
-                <span>{copy.tanks.finalFfa}</span>
-                <strong className={r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}>
-                  {n(r.finalFFA, 2)}%
-                </strong>
-              </div>
-            </div>
-          </div>
-        )}
-      </article>
-    );
-  };
 
-  const renderTankRow = (tank: Tank, i: number) => {
-    const r = results[i];
-    const state = tankState(r, target);
-
-    return (
-      <div key={`${tank.name}-${i}-row`} className={`tank-row ${state}`}>
-        <div className="tank-row__icon">
-          <div className="tank-icon">
-            <Droplets size={18} />
-          </div>
-        </div>
-        <div className="tank-row__name min-w-0">
-          <TankNameInput
-            value={tank.name}
-            onChange={(v) => updateTank(i, "name", v)}
-            placeholder={copy.tanks.namePlaceholder}
-            ariaLabel={copy.tanks.name}
-          />
-          <p className="mt-1 text-[10px] leading-tight text-[#708078]">
-            {copy.tanks.filledAfter(r.utilisation)}
+        <div className="tank-strip__readings">
+          <p className="col-span-full mb-0.5 text-[10px] font-bold uppercase tracking-wide text-[#7a867f] md:hidden">
+            {copy.tanks.currentReadings}
           </p>
+          <MiniField
+            label={copy.tanks.capacity}
+            value={tank.capacity}
+            onChange={(v) => updateTank(i, "capacity", v)}
+            unit="MT"
+          />
+          <MiniField
+            label={copy.tanks.stockNow}
+            value={tank.stock}
+            onChange={(v) => updateTank(i, "stock", v)}
+            unit="MT"
+          />
+          <MiniField
+            label={copy.tanks.ffaNow}
+            value={tank.ffa}
+            onChange={(v) => updateTank(i, "ffa", v)}
+            unit="%"
+          />
         </div>
-        <MiniField
-          label={copy.tanks.capacity}
-          value={tank.capacity}
-          onChange={(v) => updateTank(i, "capacity", v)}
-          unit="MT"
-          layout="row"
-        />
-        <MiniField
-          label={copy.tanks.stockNow}
-          value={tank.stock}
-          onChange={(v) => updateTank(i, "stock", v)}
-          unit="MT"
-          layout="row"
-        />
-        <MiniField
-          label={copy.tanks.ffaNow}
-          value={tank.ffa}
-          onChange={(v) => updateTank(i, "ffa", v)}
-          unit="%"
-          layout="row"
-        />
-        <AllocationField
-          label={copy.tanks.allocation}
-          value={allocation[i]}
-          incomingCPO={incomingCPO}
-          onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
-          layout="row"
-        />
-        <div className="result-cell result-cell--row">
-          <span>{copy.tanks.finalStock}</span>
-          <strong className="whitespace-nowrap">{n(r.finalStock)} MT</strong>
+
+        <div className="tank-strip__allocate">
+          <AllocationField
+            label={copy.tanks.allocation}
+            value={allocation[i]}
+            incomingCPO={incomingCPO}
+            onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
+          />
         </div>
-        <div className="result-cell result-cell--row">
-          <span>{copy.tanks.finalFfa}</span>
-          <strong
-            className={`whitespace-nowrap ${r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}`}
-          >
-            {n(r.finalFFA, 2)}%
-          </strong>
+
+        <div className="tank-strip__delta">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#7a867f]">
+            {copy.tanks.beforeAfter}
+          </p>
+          <div className="tank-strip__delta-row">
+            <span>{copy.tanks.stock}</span>
+            <strong>
+              {n(tank.stock, 0)} MT → {n(r.finalStock, 0)} MT
+            </strong>
+          </div>
+          <div className="tank-strip__delta-row">
+            <span>{copy.tanks.ffa}</span>
+            <strong>
+              {n(tank.ffa, 2)}% →{" "}
+              <span className={r.finalFFA > target ? "text-[#a84618]" : ffaImproved ? "text-[#187449]" : ""}>
+                {n(r.finalFFA, 2)}%
+              </span>
+            </strong>
+          </div>
         </div>
-        <div className={`status-pill status-pill--row self-end ${state}`}>
-          {state === "safe" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{" "}
-          {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
-        </div>
-        <div className="tank-row__delete self-end">
-          {tanks.length > 1 ? (
-            <button
-              type="button"
-              onClick={() => removeTank(i)}
-              aria-label={copy.tanks.remove(tank.name)}
-              title={copy.tanks.remove(tank.name)}
-              className="remove-tank"
-            >
-              <Trash2 size={15} />
-            </button>
-          ) : (
-            <span className="block h-11 w-11" aria-hidden />
-          )}
-        </div>
-      </div>
+      </article>
     );
   };
 
@@ -632,10 +574,9 @@ export default function Home() {
       action={tankActions}
       stackAction
     >
-      <div className="space-y-3">
-        {tanks.map((tank, i) => renderTankCard(tank, i))}
-        <div className="tank-row-scroll space-y-3">
-          {tanks.map((tank, i) => renderTankRow(tank, i))}
+      <div className="tank-list-scroll">
+        <div className="space-y-3 pr-1">
+          {tanks.map((tank, i) => renderTankStrip(tank, i))}
         </div>
       </div>
       <div className="mt-4">{allocationBanner}</div>
@@ -646,17 +587,21 @@ export default function Home() {
     <>
       <SmartRecommendation
         copy={copy}
-        best={best}
+        topPlans={topPlans}
         tanks={tanks}
         valid={valid}
         bestMeetsTarget={bestMeetsTarget}
         highFFAStock={highFFAStock}
         highFfaTankNames={highFfaTankNames}
         incomingCPO={incomingCPO}
-        onApply={() => {
-          useSuggested();
+        target={target}
+        onApplyPlan={(plan) => {
+          applyPlan(plan);
           setMobileTab("tanks");
         }}
+      />
+      <AiAdvisorCard
+        copy={copy}
         aiOpinion={aiOpinion}
         aiSource={aiSource}
         aiLoading={aiLoading}
@@ -683,43 +628,29 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#f4f6f2] text-[#17231d]">
-      <header className="sticky top-0 z-30 border-b border-[#dfe5dc] bg-[#123c2c] text-white">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3 sm:px-7 sm:py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#d7f08a] text-[#123c2c]">
-                <Droplets size={24} />
-              </div>
-              <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold sm:text-xl">{copy.appTitle}</h1>
-                <p className="truncate text-xs text-[#b9d3c4]">{copy.appSubtitle}</p>
-              </div>
+    <main className="min-h-screen overflow-x-hidden bg-[#eef1ec] text-[#17231d]">
+      <header className="sticky top-0 z-30 border-b border-[#1a4a38] bg-[#123c2c] text-white shadow-md">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3 px-4 py-3 sm:px-7 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#d7f08a] text-[#123c2c] shadow-inner">
+              <Droplets size={22} />
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <LanguageToggle lang={lang} onChange={setLanguage} />
-              <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs md:flex">
-                <span className="h-2 w-2 rounded-full bg-[#bde85f]" />
-                {copy.ready}
-              </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold sm:text-xl">{copy.appTitle}</h1>
+              <p className="truncate text-xs text-[#b9d3c4]">{copy.appSubtitle}</p>
             </div>
           </div>
-          <nav className="top-nav" aria-label="Section navigation">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`top-nav__item ${mobileTab === item.id ? "active" : ""}`}
-                onClick={() => setMobileTab(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          <div className="flex shrink-0 items-center gap-2">
+            <LanguageToggle lang={lang} onChange={setLanguage} />
+            <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold sm:flex">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[#bde85f]" />
+              {copy.ready}
+            </div>
+          </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1500px] px-4 py-4 pb-36 sm:px-7 sm:py-6 md:pb-8 xl:pb-6">
+      <div className="mx-auto max-w-[1500px] px-4 py-4 pb-36 sm:px-7 sm:py-6 lg:pb-8">
         {/* Mobile tab panels */}
         <div className="mobile-panel space-y-4">
           {mobileTab === "overview" && (
@@ -732,7 +663,6 @@ export default function Home() {
                 />
               )}
               {forecastPanel}
-              {allocationBanner}
             </>
           )}
           {mobileTab === "tanks" && tanksPanel}
@@ -742,7 +672,10 @@ export default function Home() {
         {/* Desktop layout */}
         <div className="desktop-layout space-y-5">
           {metrics}
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,.75fr)]">
+          {hasOverflow && (
+            <AlertBanner title={copy.alerts.overflowTitle} text={copy.alerts.overflowText} />
+          )}
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(340px,.72fr)]">
             <div className="space-y-5">
               {forecastPanel}
               {tanksPanel}
@@ -751,13 +684,13 @@ export default function Home() {
           </div>
         </div>
 
-        <p className="mt-5 pb-2 text-center text-xs leading-relaxed text-[#758078] md:pb-4">
+        <p className="mt-5 pb-2 text-center text-xs leading-relaxed text-[#758078] lg:pb-4">
           {copy.footer}
         </p>
       </div>
 
       {/* Mobile bottom navigation */}
-      <nav className="bottom-nav md:hidden" aria-label="Mobile navigation">
+      <nav className="bottom-nav lg:hidden" aria-label="Mobile navigation">
         {navItems.map((item) => (
           <button
             key={item.id}
@@ -772,7 +705,7 @@ export default function Home() {
       </nav>
 
       {/* Mobile sticky action bar */}
-      <div className="mobile-action-bar md:hidden">
+      <div className="mobile-action-bar lg:hidden">
         <button
           type="button"
           onClick={useSuggested}
@@ -811,20 +744,16 @@ function Metric({
   warning?: boolean;
 }) {
   return (
-    <article
-      className={`rounded-xl border bg-white p-2 shadow-sm sm:rounded-2xl sm:p-4 ${
-        warning ? "border-[#efc7aa]" : "border-[#dfe5dc]"
-      }`}
-    >
+    <article className={`metric-card p-2 sm:p-4 ${warning ? "metric-card--warn" : ""}`}>
       <div className="flex items-start justify-between gap-1">
-        <span className="text-[9px] font-semibold leading-tight text-[#6c7971] sm:text-xs">{label}</span>
+        <span className="text-[9px] font-bold leading-tight text-[#6c7971] sm:text-xs">{label}</span>
         <span className={`shrink-0 scale-75 sm:scale-100 ${warning ? "text-[#c36331]" : "text-[#2e7652]"}`}>
           {icon}
         </span>
       </div>
       <p className="mt-1 text-sm font-extrabold leading-tight sm:mt-2 sm:text-xl lg:text-2xl">{value}</p>
       <p
-        className={`mt-0.5 hidden text-[10px] leading-tight sm:mt-1 sm:block sm:text-xs ${
+        className={`mt-0.5 truncate text-[9px] leading-tight sm:mt-1 sm:text-xs ${
           warning ? "text-[#b55a2d]" : "text-[#7a867f]"
         }`}
       >
@@ -850,7 +779,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
+    <section className="panel-card p-4 sm:p-5">
       <div
         className={`mb-5 flex gap-3 ${stackAction ? "flex-col" : "items-start justify-between"}`}
       >
@@ -943,7 +872,7 @@ function TankNameInput({
         if (trimmed) onChange(trimmed);
         setDraft(null);
       }}
-      className="input-touch w-full min-w-0 rounded-lg border border-[#dfe5df] bg-white px-2.5 py-1.5 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
+      className="min-h-[40px] w-full min-w-[88px] max-w-[140px] rounded-lg border border-[#dfe5df] bg-white px-2 py-1.5 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
     />
   );
 }
@@ -997,6 +926,17 @@ function TextField({
         />
       </div>
     </label>
+  );
+}
+
+function ReadonlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="block w-full">
+      <span className="mb-1.5 block text-[11px] font-bold uppercase text-[#77837c]">{label}</span>
+      <div className="readonly-field">
+        <strong>{value}</strong>
+      </div>
+    </div>
   );
 }
 
@@ -1176,83 +1116,181 @@ function AlertBanner({ title, text }: { title: string; text: string }) {
   );
 }
 
+function PlanOption({
+  rank,
+  plan,
+  tanks,
+  target,
+  incomingCPO,
+  copy,
+  highlighted,
+  compact = false,
+  onApply,
+}: {
+  rank: number;
+  plan: BlendPlan;
+  tanks: Tank[];
+  target: number;
+  incomingCPO: number;
+  copy: Copy;
+  highlighted: boolean;
+  compact?: boolean;
+  onApply: () => void;
+}) {
+  const meetsTarget = plan.results.every((r) => r.finalFFA <= target);
+  const maxFfa = Math.max(...plan.results.map((r) => r.finalFFA));
+
+  if (compact) {
+    return (
+      <div className="rounded-xl border border-[#dfe5dc] bg-[#f9fbf8] p-2.5">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold text-[#173f30]">{copy.plan.planRank(rank)}</span>
+          <button
+            type="button"
+            onClick={onApply}
+            className="rounded-lg bg-[#173f30] px-2 py-1 text-[10px] font-bold text-white"
+          >
+            {copy.plan.useThisPlan}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {plan.allocation.map((x, i) => (
+            <div key={i} className="plan-pill py-2">
+              <span className="text-[10px] text-[#708078]">{tanks[i].name}</span>
+              <strong>{x}%</strong>
+              <span className="text-[10px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[10px] text-[#708078]">
+          {meetsTarget ? copy.plan.withinLimit : copy.plan.maxFinalFfa(maxFfa)}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        highlighted ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold text-[#173f30]">{copy.plan.planRank(rank)}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            meetsTarget ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+          }`}
+        >
+          {meetsTarget ? copy.plan.withinLimit : copy.plan.aboveLimitShort}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 min-[400px]:grid-cols-3">
+        {plan.allocation.map((x, i) => (
+          <div key={i} className="rounded-lg bg-white/80 p-2 text-center">
+            <p className="truncate text-[11px] text-[#708078]">{tanks[i].name}</p>
+            <p className="text-lg font-extrabold text-[#173f30]">{x}%</p>
+            <p className="text-[10px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-[#708078]">{copy.plan.maxFinalFfa(maxFfa)}</p>
+      <button
+        type="button"
+        onClick={onApply}
+        className={`btn-touch mt-2 w-full text-sm ${
+          highlighted ? "bg-[#173f30] text-white" : "bg-[#d7f08a] text-[#173f30]"
+        }`}
+      >
+        <RefreshCw size={14} />
+        {copy.plan.useThisPlan}
+      </button>
+    </div>
+  );
+}
+
 function SmartRecommendation({
   copy,
-  best,
+  topPlans,
+  target,
   tanks,
   valid,
   bestMeetsTarget,
   highFFAStock,
   highFfaTankNames,
   incomingCPO,
-  onApply,
-  aiOpinion,
-  aiSource,
-  aiLoading,
-  aiError,
-  aiCooldown,
-  aiQuestion,
-  onAiQuestionChange,
-  onGetAiOpinion,
+  onApplyPlan,
 }: {
   copy: Copy;
-  best: { allocation: number[]; results: Result[]; score: number } | null;
+  topPlans: BlendPlan[];
+  target: number;
   tanks: Tank[];
   valid: boolean;
   bestMeetsTarget: boolean;
   highFFAStock: number;
   highFfaTankNames: string;
   incomingCPO: number;
-  onApply: () => void;
-  aiOpinion: string | null;
-  aiSource: "openai" | "offline" | null;
-  aiLoading: boolean;
-  aiError: string | null;
-  aiCooldown: number;
-  aiQuestion: string;
-  onAiQuestionChange: (value: string) => void;
-  onGetAiOpinion: () => void;
+  onApplyPlan: (plan: BlendPlan) => void;
 }) {
-  const aiDisabled = aiLoading || aiCooldown > 0;
-  const aiButtonLabel = aiLoading
-    ? copy.ai.generating
-    : aiCooldown > 0
-      ? copy.ai.wait(aiCooldown)
-      : copy.ai.ask;
+  const best = topPlans[0];
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
-      <div className="bg-[#173f30] p-4 text-white sm:p-5">
+    <section className="panel-card overflow-hidden">
+      <div className="smart-card__header p-4 text-white sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-bold">
-            <Sparkles size={19} className="text-[#d7f08a]" />
+          <div className="flex items-center gap-2 text-sm font-bold text-[#d7f08a] sm:text-base">
+            <Sparkles size={18} />
             {copy.plan.smartRecommendation}
           </div>
           <span
-            className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+            className={`rounded-full px-2.5 py-1 text-[10px] font-bold sm:text-[11px] ${
               valid ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
             }`}
           >
             {valid ? copy.plan.planChecked : copy.plan.checkInput}
           </span>
         </div>
-        <h2 className="text-lg font-bold leading-snug sm:text-xl">
+        <h2 className="text-base font-bold leading-snug sm:text-lg">
           {bestMeetsTarget ? copy.plan.safeAllocation : copy.plan.limitNotAchievable}
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">{copy.plan.planBasis}</p>
+        <p className="mt-2 text-xs leading-relaxed text-[#c9dbd1] sm:text-sm">{copy.plan.planBasis}</p>
       </div>
       <div className="p-4 sm:p-5">
         {best ? (
           <>
             <p className="section-label">{copy.plan.recommendedAllocation}</p>
-            <div className="mt-3 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-2 gap-2">
               {best.allocation.map((x, i) => (
-                <div key={i} className="rounded-xl bg-[#f2f5f0] p-3 text-center">
-                  <p className="text-xs text-[#708078]">{tanks[i].name}</p>
-                  <p className="mt-1 text-xl font-extrabold text-[#173f30]">{x}%</p>
-                  <p className="text-[11px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
+                <div key={i} className="plan-pill">
+                  <span className="text-[11px] text-[#708078]">{tanks[i].name}</span>
+                  <strong>{x}%</strong>
+                  <span className="text-[10px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</span>
                 </div>
               ))}
             </div>
+
+            {topPlans.length > 1 && (
+              <div className="mt-4 hidden lg:block">
+                <p className="section-label">{copy.plan.topPlans}</p>
+                <div className="mt-2 space-y-2">
+                  {topPlans.slice(1).map((plan, i) => (
+                    <PlanOption
+                      key={plan.allocation.join("-")}
+                      rank={i + 2}
+                      plan={plan}
+                      tanks={tanks}
+                      target={target}
+                      incomingCPO={incomingCPO}
+                      copy={copy}
+                      highlighted={false}
+                      compact
+                      onApply={() => onApplyPlan(plan)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 space-y-3">
               <Advice
                 icon={<ShieldCheck size={17} />}
@@ -1279,92 +1317,122 @@ function SmartRecommendation({
             </div>
             <button
               type="button"
-              onClick={onApply}
-              className="btn-touch mt-5 hidden w-full bg-[#d7f08a] text-[#173f30] md:flex"
+              onClick={() => onApplyPlan(best)}
+              className="btn-touch mt-5 w-full bg-[#d7f08a] text-[#173f30] shadow-sm"
             >
               <RefreshCw size={16} />
               {copy.allocation.applyRecommended}
             </button>
 
-            <div className="mt-5 border-t border-[#e8ede8] pt-5">
-              <p className="section-label">{copy.ai.advisor}</p>
-              <p className="mt-1 text-sm text-[#58665e]">{copy.ai.description}</p>
-              <textarea
-                value={aiQuestion}
-                onChange={(e) => onAiQuestionChange(e.target.value)}
-                placeholder={copy.ai.questionPlaceholder}
-                rows={3}
-                maxLength={500}
-                className="mt-3 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
-              />
-              <button
-                type="button"
-                onClick={onGetAiOpinion}
-                disabled={aiDisabled}
-                className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60 sm:w-auto"
-              >
-                {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                {aiButtonLabel}
-              </button>
-
-              {aiError && (
-                <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
-                  {aiError}
-                </div>
-              )}
-
-              {aiOpinion && (
-                <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
-                    <Bot size={16} />
-                    {aiSource === "offline" ? copy.ai.opinionOffline : copy.ai.opinionLive}
-                  </div>
-                  <FormattedOpinion text={aiOpinion} />
-                </div>
-              )}
+            <div className="mt-5 space-y-3 lg:hidden">
+              <p className="section-label">{copy.plan.topPlans}</p>
+              {topPlans.map((plan, i) => (
+                <PlanOption
+                  key={`mobile-${plan.allocation.join("-")}`}
+                  rank={i + 1}
+                  plan={plan}
+                  tanks={tanks}
+                  target={target}
+                  incomingCPO={incomingCPO}
+                  copy={copy}
+                  highlighted={i === 0}
+                  onApply={() => onApplyPlan(plan)}
+                />
+              ))}
             </div>
           </>
         ) : (
-          <>
-            <p className="text-sm leading-relaxed text-[#8a3d20]">{copy.plan.noFeasiblePlan}</p>
-            <div className="mt-5 border-t border-[#e8ede8] pt-5">
-              <p className="section-label">{copy.ai.advisor}</p>
-              <textarea
-                value={aiQuestion}
-                onChange={(e) => onAiQuestionChange(e.target.value)}
-                placeholder={copy.ai.questionPlaceholder}
-                rows={3}
-                maxLength={500}
-                className="mt-2 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
-              />
-              <button
-                type="button"
-                onClick={onGetAiOpinion}
-                disabled={aiDisabled}
-                className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
-              >
-                {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                {aiCooldown > 0 && !aiLoading ? copy.ai.wait(aiCooldown) : aiButtonLabel}
-              </button>
-              {aiError && (
-                <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
-                  {aiError}
-                </div>
-              )}
-              {aiOpinion && (
-                <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
-                  {aiSource === "offline" && (
-                    <div className="mb-2 text-xs font-bold text-[#a85128]">
-                      {copy.ai.offlineUnavailable}
-                    </div>
-                  )}
-                  <FormattedOpinion text={aiOpinion} />
-                </div>
-              )}
-            </div>
-          </>
+          <p className="text-sm leading-relaxed text-[#8a3d20]">{copy.plan.noFeasiblePlan}</p>
         )}
       </div>
+    </section>
+  );
+}
+
+function AiAdvisorCard({
+  copy,
+  aiOpinion,
+  aiSource,
+  aiLoading,
+  aiError,
+  aiCooldown,
+  aiQuestion,
+  onAiQuestionChange,
+  onGetAiOpinion,
+}: {
+  copy: Copy;
+  aiOpinion: string | null;
+  aiSource: "openai" | "offline" | null;
+  aiLoading: boolean;
+  aiError: string | null;
+  aiCooldown: number;
+  aiQuestion: string;
+  onAiQuestionChange: (value: string) => void;
+  onGetAiOpinion: () => void;
+}) {
+  const aiDisabled = aiLoading || aiCooldown > 0;
+  const aiButtonLabel = aiLoading
+    ? copy.ai.generating
+    : aiCooldown > 0
+      ? copy.ai.wait(aiCooldown)
+      : copy.ai.ask;
+
+  return (
+    <section className="panel-card p-4 sm:p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Bot size={18} className="text-[#287451]" />
+        <div>
+          <p className="section-label">{copy.ai.advisor}</p>
+          <p className="text-xs leading-relaxed text-[#758078]">{copy.ai.description}</p>
+        </div>
+      </div>
+      <div className="relative">
+        <textarea
+          value={aiQuestion}
+          onChange={(e) => onAiQuestionChange(e.target.value)}
+          placeholder={copy.ai.questionPlaceholder}
+          rows={3}
+          maxLength={500}
+          className="w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 pr-12 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
+        />
+        <button
+          type="button"
+          onClick={onGetAiOpinion}
+          disabled={aiDisabled}
+          aria-label={copy.ai.ask}
+          className="absolute bottom-3 right-3 grid h-9 w-9 place-items-center rounded-lg bg-[#173f30] text-white disabled:opacity-50"
+        >
+          {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} />}
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={onGetAiOpinion}
+        disabled={aiDisabled}
+        className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
+      >
+        {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
+        {aiButtonLabel}
+      </button>
+
+      {aiError && (
+        <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
+          {aiError}
+        </div>
+      )}
+
+      {aiOpinion && (
+        <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
+            <Bot size={16} />
+            {aiSource === "offline" ? copy.ai.opinionOffline : copy.ai.opinionLive}
+          </div>
+          {aiSource === "offline" && (
+            <p className="mb-2 text-xs font-bold text-[#a85128]">{copy.ai.offlineUnavailable}</p>
+          )}
+          <FormattedOpinion text={aiOpinion} />
+        </div>
+      )}
     </section>
   );
 }
@@ -1390,7 +1458,7 @@ function DecisionSafeguards({
   ];
 
   return (
-    <section className="rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
+    <section className="panel-card p-4 sm:p-5">
       <p className="section-label">{copy.safeguards.title}</p>
       <div className="mt-4 space-y-3 text-sm">
         {checks.map(([ok, label], i) => (
