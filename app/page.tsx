@@ -566,36 +566,42 @@ export default function Home() {
           value={tank.capacity}
           onChange={(v) => updateTank(i, "capacity", v)}
           unit="MT"
+          layout="row"
         />
         <MiniField
           label={copy.tanks.stockNow}
           value={tank.stock}
           onChange={(v) => updateTank(i, "stock", v)}
           unit="MT"
+          layout="row"
         />
         <MiniField
           label={copy.tanks.ffaNow}
           value={tank.ffa}
           onChange={(v) => updateTank(i, "ffa", v)}
           unit="%"
+          layout="row"
         />
         <AllocationField
           label={copy.tanks.allocation}
           value={allocation[i]}
           incomingCPO={incomingCPO}
           onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
+          layout="row"
         />
-        <div className="result-cell">
+        <div className="result-cell result-cell--row">
           <span>{copy.tanks.finalStock}</span>
-          <strong>{n(r.finalStock)} MT</strong>
+          <strong className="whitespace-nowrap">{n(r.finalStock)} MT</strong>
         </div>
-        <div className="result-cell">
+        <div className="result-cell result-cell--row">
           <span>{copy.tanks.finalFfa}</span>
-          <strong className={r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}>
+          <strong
+            className={`whitespace-nowrap ${r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}`}
+          >
             {n(r.finalFFA, 2)}%
           </strong>
         </div>
-        <div className={`status-pill self-end ${state}`}>
+        <div className={`status-pill status-pill--row self-end ${state}`}>
           {state === "safe" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{" "}
           {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
         </div>
@@ -628,7 +634,9 @@ export default function Home() {
     >
       <div className="space-y-3">
         {tanks.map((tank, i) => renderTankCard(tank, i))}
-        {tanks.map((tank, i) => renderTankRow(tank, i))}
+        <div className="tank-row-scroll space-y-3">
+          {tanks.map((tank, i) => renderTankRow(tank, i))}
+        </div>
       </div>
       <div className="mt-4">{allocationBanner}</div>
     </Panel>
@@ -935,7 +943,7 @@ function TankNameInput({
         if (trimmed) onChange(trimmed);
         setDraft(null);
       }}
-      className="input-touch w-full min-w-0 rounded-lg border border-[#dfe5df] bg-white px-2.5 py-2 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
+      className="input-touch w-full min-w-0 rounded-lg border border-[#dfe5df] bg-white px-2.5 py-1.5 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
     />
   );
 }
@@ -1031,28 +1039,43 @@ function MiniField({
   onChange,
   unit,
   emphasis = false,
+  layout = "card",
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   unit: string;
   emphasis?: boolean;
+  layout?: "card" | "row";
 }) {
+  const isRow = layout === "row";
   return (
-    <label className="block min-w-0 w-full">
-      <span className="mb-1 block text-[10px] font-semibold uppercase text-[#7a867f]">{label}</span>
+    <label className={`block w-full ${isRow ? "min-w-[92px]" : "min-w-0"}`}>
+      <span className="mb-1 block text-[10px] font-semibold uppercase leading-tight text-[#7a867f]">
+        {label}
+      </span>
       <div
-        className={`input-touch flex items-center gap-1.5 rounded-lg border px-3 ${
-          emphasis ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5df] bg-white"
-        }`}
+        className={
+          isRow
+            ? `field-box-row ${emphasis ? "field-box-row--emphasis" : ""}`
+            : `input-touch flex items-center gap-1.5 rounded-lg border px-3 ${
+                emphasis ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5df] bg-white"
+              }`
+        }
       >
         <NumericInput
           label={label}
           value={value}
           onChange={onChange}
-          className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
+          className={
+            isRow
+              ? "numeric-input w-full min-w-[2.5rem] flex-1 bg-transparent text-sm font-semibold outline-none"
+              : "numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
+          }
         />
-        <span className="shrink-0 text-[10px] text-[#7a867f]">{unit}</span>
+        <span className={`shrink-0 whitespace-nowrap ${isRow ? "text-[10px]" : "text-[10px]"} text-[#7a867f]`}>
+          {unit}
+        </span>
       </div>
     </label>
   );
@@ -1063,12 +1086,37 @@ function AllocationField({
   value,
   incomingCPO,
   onChange,
+  layout = "card",
 }: {
   label: string;
   value: number;
   incomingCPO: number;
   onChange: (v: number) => void;
+  layout?: "card" | "row";
 }) {
+  const isRow = layout === "row";
+  const mt = n(allocationMt(incomingCPO, value ?? 0));
+
+  if (isRow) {
+    return (
+      <label className="block min-w-[118px] w-full">
+        <span className="mb-1 block text-[10px] font-semibold uppercase leading-tight text-[#7a867f]">
+          {label}
+        </span>
+        <div className="field-box-row field-box-row--emphasis">
+          <NumericInput
+            label={label}
+            value={value}
+            onChange={onChange}
+            className="numeric-input w-full min-w-[1.75rem] max-w-[3rem] flex-1 bg-transparent text-sm font-semibold outline-none"
+          />
+          <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold text-[#7a867f]">%</span>
+          <span className="shrink-0 whitespace-nowrap text-[10px] text-[#708078]">· {mt} MT</span>
+        </div>
+      </label>
+    );
+  }
+
   return (
     <label className="block min-w-0 w-full">
       <span className="mb-1 block text-[10px] font-semibold uppercase text-[#7a867f]">{label}</span>
@@ -1081,9 +1129,7 @@ function AllocationField({
         />
         <span className="shrink-0 text-[10px] font-semibold text-[#7a867f]">%</span>
       </div>
-      <p className="mt-1 text-[10px] font-medium leading-tight text-[#708078] sm:text-[11px]">
-        {n(allocationMt(incomingCPO, value ?? 0))} MT
-      </p>
+      <p className="mt-1 text-[10px] font-medium leading-tight text-[#708078] sm:text-[11px]">{mt} MT</p>
     </label>
   );
 }
