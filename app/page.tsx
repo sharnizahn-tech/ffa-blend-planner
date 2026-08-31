@@ -137,6 +137,30 @@ function statusLabel(
   return copy.tanks.goodFfa;
 }
 
+function TankCylinder({
+  fillPct,
+  state,
+  compact = false,
+}: {
+  fillPct: number;
+  state: TankState;
+  compact?: boolean;
+}) {
+  const clamped = Math.min(100, Math.max(0, fillPct));
+  return (
+    <div
+      className={`tank-cylinder tank-cylinder--${state}${compact ? " tank-cylinder--compact" : ""}`}
+      aria-hidden
+    >
+      <div className="tank-cylinder__cap" />
+      <div className="tank-cylinder__shell">
+        <div className="tank-cylinder__fill" style={{ height: `${clamped}%` }} />
+        <span className="tank-cylinder__pct">{Math.round(clamped)}%</span>
+      </div>
+    </div>
+  );
+}
+
 function LanguageToggle({ lang, onChange }: { lang: Lang; onChange: (lang: Lang) => void }) {
   return (
     <div className="flex shrink-0 rounded-full border border-white/20 bg-white/10 p-0.5 text-xs font-bold">
@@ -677,7 +701,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
+    <section className="min-w-0 max-w-full rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
       <div
         className={`mb-5 flex gap-3 ${stackAction ? "flex-col" : "items-start justify-between"}`}
       >
@@ -1050,9 +1074,7 @@ function TankUnitCard({
           aria-expanded={expanded}
           aria-controls={`tank-body-${index}`}
         >
-          <div className="tank-icon">
-            <Droplets size={18} />
-          </div>
+          <TankCylinder fillPct={result.utilisation} state={state} compact />
           <div className="tank-unit__summary-main">
             <p className="tank-unit__summary-name">{tank.name}</p>
             <p className="tank-unit__summary-stats">
@@ -1074,9 +1096,7 @@ function TankUnitCard({
       <div id={`tank-body-${index}`} className="tank-unit__body">
         <section className="tank-unit__identity">
           <div className="tank-unit__identity-head">
-            <div className="tank-icon">
-              <Droplets size={18} />
-            </div>
+            <TankCylinder fillPct={result.utilisation} state={state} />
             <div className="tank-unit__name">
               <TankNameInput
                 value={tank.name}
@@ -1090,12 +1110,6 @@ function TankUnitCard({
                   {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
                   {status}
                 </span>
-              </div>
-              <div className="tank-fill-meter" aria-hidden>
-                <div
-                  className="tank-fill-meter__bar"
-                  style={{ width: `${Math.min(100, Math.max(0, result.utilisation))}%` }}
-                />
               </div>
             </div>
           </div>
