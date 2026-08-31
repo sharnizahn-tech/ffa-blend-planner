@@ -540,19 +540,19 @@ export default function Home() {
         <div className="tank-strip__delta">
           <p className="tank-strip__delta-heading">{copy.tanks.beforeAfter}</p>
           <div className="tank-strip__delta-row">
-            <span className="tank-strip__delta-label">{copy.tanks.stock}</span>
-            <p className="tank-strip__delta-value">
+            <span>{copy.tanks.stock}</span>
+            <span className="tank-strip__delta-value">
               {n(tank.stock, 0)} MT → {n(r.finalStock, 0)} MT
-            </p>
+            </span>
           </div>
           <div className="tank-strip__delta-row">
-            <span className="tank-strip__delta-label">{copy.tanks.ffa}</span>
-            <p className="tank-strip__delta-value">
+            <span>{copy.tanks.ffa}</span>
+            <span className="tank-strip__delta-value">
               {n(tank.ffa, 2)}% →{" "}
               <span className={r.finalFFA > target ? "text-[#a84618]" : ffaImproved ? "text-[#187449]" : ""}>
                 {n(r.finalFFA, 2)}%
               </span>
-            </p>
+            </span>
           </div>
         </div>
       </article>
@@ -566,7 +566,6 @@ export default function Home() {
       icon={<Droplets size={19} />}
       action={tankActions}
       stackAction
-      className="panel-card--tanks"
     >
       <div className="tank-list-scroll">
         <div className="space-y-3 pr-1">
@@ -763,7 +762,6 @@ function Panel({
   icon,
   action,
   stackAction,
-  className,
   children,
 }: {
   title: string;
@@ -771,11 +769,10 @@ function Panel({
   icon: React.ReactNode;
   action?: React.ReactNode;
   stackAction?: boolean;
-  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className={`panel-card p-4 sm:p-5 ${className ?? ""}`}>
+    <section className="panel-card p-4 sm:p-5">
       <div
         className={`mb-5 flex gap-3 ${stackAction ? "flex-col" : "items-start justify-between"}`}
       >
@@ -986,7 +983,7 @@ function MiniField({
 }) {
   const isRow = layout === "row";
   return (
-    <label className="block w-full min-w-[92px]">
+    <label className={`block w-full ${isRow ? "min-w-[92px]" : "min-w-0"}`}>
       <span className="mb-1 block text-[10px] font-semibold uppercase leading-tight text-[#7a867f]">
         {label}
       </span>
@@ -994,7 +991,7 @@ function MiniField({
         className={
           isRow
             ? `field-box-row ${emphasis ? "field-box-row--emphasis" : ""}`
-            : `input-touch flex min-w-0 items-center gap-1.5 overflow-visible rounded-lg border px-2.5 ${
+            : `input-touch flex items-center gap-1.5 rounded-lg border px-3 ${
                 emphasis ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5df] bg-white"
               }`
         }
@@ -1005,8 +1002,8 @@ function MiniField({
           onChange={onChange}
           className={
             isRow
-              ? "numeric-input w-full min-w-[2.75rem] flex-1 bg-transparent text-sm font-semibold outline-none"
-              : "numeric-input w-full min-w-[3.25rem] flex-1 bg-transparent py-2 text-sm font-semibold outline-none"
+              ? "numeric-input w-full min-w-[2.5rem] flex-1 bg-transparent text-sm font-semibold outline-none"
+              : "numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
           }
         />
         <span className={`shrink-0 whitespace-nowrap ${isRow ? "text-[10px]" : "text-[10px]"} text-[#7a867f]`}>
@@ -1056,12 +1053,12 @@ function AllocationField({
   return (
     <label className="block w-full">
       <span className="mb-1 block text-[10px] font-semibold uppercase text-[#7a867f]">{label}</span>
-      <div className="input-touch flex w-full min-w-0 items-center gap-2 overflow-visible rounded-lg border border-[#88a84e] bg-[#f6fae9] px-3">
+      <div className="input-touch flex w-full items-center gap-2 rounded-lg border border-[#88a84e] bg-[#f6fae9] px-3">
         <NumericInput
           label={label}
           value={value}
           onChange={onChange}
-          className="numeric-input w-full min-w-[3.5rem] flex-1 bg-transparent py-2 text-center text-base font-semibold outline-none"
+          className="numeric-input min-w-[3rem] flex-1 bg-transparent py-2 text-center text-base font-semibold outline-none"
         />
         <span className="shrink-0 text-xs font-semibold text-[#7a867f]">%</span>
       </div>

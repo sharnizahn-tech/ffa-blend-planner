@@ -71,8 +71,6 @@ input[type="number"]::-webkit-outer-spin-button {
 .numeric-input {
   -moz-appearance: textfield;
   appearance: textfield;
-  min-width: 0;
-  overflow: visible;
 }
 
 .numeric-input::-webkit-inner-spin-button,
@@ -131,10 +129,6 @@ input[type="number"]::-webkit-outer-spin-button {
   border-radius: 16px;
   background: var(--surface);
   box-shadow: 0 1px 3px rgb(23 35 29 / 5%);
-}
-
-.panel-card--tanks {
-  overflow: visible;
 }
 
 /* 3D tank cylinder */
@@ -264,21 +258,18 @@ input[type="number"]::-webkit-outer-spin-button {
   grid-area: readings;
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .tank-strip__allocate {
   grid-area: allocate;
   min-width: 0;
-  overflow: visible;
 }
 
 .tank-strip__delta {
   grid-area: delta;
   display: grid;
   gap: 8px;
-  min-width: 0;
-  overflow: visible;
   border-radius: 12px;
   background: rgb(255 255 255 / 72%);
   padding: 10px 12px;
@@ -294,11 +285,7 @@ input[type="number"]::-webkit-outer-spin-button {
   color: #7a867f;
 }
 
-.tank-strip__delta-row {
-  min-width: 0;
-}
-
-.tank-strip__delta-label {
+.tank-strip__delta-row span {
   display: block;
   margin-bottom: 2px;
   font-size: 10px;
@@ -310,23 +297,8 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .tank-strip__delta-value {
   display: block;
-  margin: 0;
   font-size: 0.8125rem;
-  font-weight: 700;
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  text-align: center;
-  scrollbar-width: none;
-}
-
-.tank-strip__delta-value::-webkit-scrollbar {
-  display: none;
-}
-
-.tank-strip__delta-value span {
-  display: inline;
+  line-height: 1.35;
   white-space: nowrap;
 }
 
@@ -381,11 +353,10 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .field-box-row {
   display: flex;
-  min-height: 2.25rem;
+  height: 2.25rem;
   min-width: 0;
   align-items: center;
   gap: 0.25rem;
-  overflow: visible;
   border: 1px solid #dfe5df;
   border-radius: 0.5rem;
   background: #fff;
@@ -415,12 +386,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .tank-list-scroll {
   overflow-x: auto;
-  overflow-y: visible;
   padding-bottom: 0.25rem;
-}
-
-.tank-strip {
-  overflow: visible;
 }
 
 /* Tablet+ horizontal tank strip */
@@ -431,10 +397,9 @@ input[type="number"]::-webkit-outer-spin-button {
     grid-template-columns:
       52px
       minmax(130px, 1.1fr)
-      minmax(120px, 1fr)
-      minmax(170px, 1.6fr)
-      minmax(120px, 1fr)
-      minmax(190px, 1.25fr)
+      minmax(210px, 1.6fr)
+      minmax(108px, 0.95fr)
+      minmax(150px, 1.15fr)
       40px;
     grid-template-areas: "visual identity readings allocate delta actions";
   }
@@ -446,7 +411,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 @media (min-width: 1024px) {
   .tank-strip {
-    min-width: 920px;
+    min-width: 860px;
   }
 }
 
