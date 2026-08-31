@@ -407,23 +407,28 @@ export default function Home() {
       subtitle={copy.forecast.subtitle}
       icon={<Gauge size={19} />}
     >
-      <div className="overflow-x-auto pb-1">
-        <div className="grid min-w-[920px] grid-cols-7 gap-3">
-          <Field label={copy.forecast.capacity} value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
-          <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hrs" />
-          <Field label={copy.forecast.utilisation} value={utilisation} onChange={setUtilisation} unit="%" />
-          <Field label={copy.forecast.expectedOer} value={oer} onChange={setOer} unit="%" />
-          <ReadonlyField label={copy.forecast.expectedCpo} value={`${n(incomingCPO)} MT`} />
-          <Field
-            label={copy.forecast.incomingFfa}
-            value={incomingFFA}
-            onChange={setIncomingFFA}
-            unit="%"
-            accent
-          />
-          <Field label={copy.forecast.ffaLimit} value={target} onChange={setTarget} unit="%" />
-        </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <Field label={copy.forecast.capacity} value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
+        <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hrs" />
+        <Field label={copy.forecast.utilisation} value={utilisation} onChange={setUtilisation} unit="%" />
+        <ReadonlyField label={copy.forecast.expectedCpo} value={`${n(incomingCPO)} MT`} />
+        <Field
+          label={copy.forecast.incomingFfa}
+          value={incomingFFA}
+          onChange={setIncomingFFA}
+          unit="%"
+          accent
+        />
+        <Field label={copy.forecast.ffaLimit} value={target} onChange={setTarget} unit="%" />
       </div>
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-[#587068]">
+          {copy.forecast.expectedOer}: {n(oer, 1)}%
+        </summary>
+        <div className="mt-2 max-w-xs">
+          <Field label={copy.forecast.expectedOer} value={oer} onChange={setOer} unit="%" />
+        </div>
+      </details>
       <p className="mt-3 text-xs leading-relaxed text-[#758078]">{copy.forecast.ffaLimitHint}</p>
     </Panel>
   );
@@ -538,21 +543,23 @@ export default function Home() {
         </div>
 
         <div className="tank-strip__delta">
-          <p className="tank-strip__delta-heading">{copy.tanks.beforeAfter}</p>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#7a867f]">
+            {copy.tanks.beforeAfter}
+          </p>
           <div className="tank-strip__delta-row">
             <span>{copy.tanks.stock}</span>
-            <span className="tank-strip__delta-value">
+            <strong>
               {n(tank.stock, 0)} MT → {n(r.finalStock, 0)} MT
-            </span>
+            </strong>
           </div>
           <div className="tank-strip__delta-row">
             <span>{copy.tanks.ffa}</span>
-            <span className="tank-strip__delta-value">
+            <strong>
               {n(tank.ffa, 2)}% →{" "}
               <span className={r.finalFFA > target ? "text-[#a84618]" : ffaImproved ? "text-[#187449]" : ""}>
                 {n(r.finalFFA, 2)}%
               </span>
-            </span>
+            </strong>
           </div>
         </div>
       </article>
@@ -1051,18 +1058,18 @@ function AllocationField({
   }
 
   return (
-    <label className="block w-full">
+    <label className="block min-w-0 w-full">
       <span className="mb-1 block text-[10px] font-semibold uppercase text-[#7a867f]">{label}</span>
-      <div className="input-touch flex w-full items-center gap-2 rounded-lg border border-[#88a84e] bg-[#f6fae9] px-3">
+      <div className="input-touch flex items-center gap-1.5 rounded-lg border border-[#88a84e] bg-[#f6fae9] px-3">
         <NumericInput
           label={label}
           value={value}
           onChange={onChange}
-          className="numeric-input min-w-[3rem] flex-1 bg-transparent py-2 text-center text-base font-semibold outline-none"
+          className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
         />
-        <span className="shrink-0 text-xs font-semibold text-[#7a867f]">%</span>
+        <span className="shrink-0 text-[10px] font-semibold text-[#7a867f]">%</span>
       </div>
-      <p className="mt-1 text-center text-[11px] font-medium leading-tight text-[#708078]">{mt} MT</p>
+      <p className="mt-1 text-[10px] font-medium leading-tight text-[#708078] sm:text-[11px]">{mt} MT</p>
     </label>
   );
 }
