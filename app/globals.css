@@ -536,6 +536,15 @@ input[type="number"]::-webkit-outer-spin-button {
     border-bottom: 1px solid #e8ede8;
   }
 
+  /* One cylinder per tank: compact in collapsed summary, full in expanded body */
+  .tank-unit.is-expanded .tank-unit__summary .tank-cylinder {
+    display: none;
+  }
+
+  .tank-unit:not(.is-expanded) .tank-unit__identity-head > .tank-cylinder {
+    display: none;
+  }
+
   .tank-unit__remove-mobile {
     grid-column: 1 / -1;
   }
