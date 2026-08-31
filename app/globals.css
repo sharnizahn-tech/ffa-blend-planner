@@ -749,3 +749,17 @@ input[type="number"]::-webkit-outer-spin-button {
     display: block;
   }
 }
+
+.plan-pill {
+  border-radius: 12px;
+  background: #f2f5f0;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.plan-pill strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 1.25rem;
+  color: #173f30;
+}

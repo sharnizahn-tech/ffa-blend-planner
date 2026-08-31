@@ -17,8 +17,10 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  Truck,
 } from "lucide-react";
 import type { AdviseRequest } from "@/lib/advise";
+import { findTopDespatchPlans, type DespatchPlan } from "@/lib/despatch";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
 import { FormattedOpinion } from "@/lib/format-opinion";
 
@@ -76,36 +78,51 @@ function calculate(
   });
 }
 
-function findBestPlan(
+type BlendPlan = { allocation: number[]; results: Result[]; score: number };
+
+function sameAllocation(a: number[], b: number[]) {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function scorePlan(
+  tanks: Tank[],
+  allocation: number[],
+  incomingCPO: number,
+  incomingFFA: number,
+  target: number,
+): BlendPlan | null {
+  const results = calculate(tanks, allocation, incomingCPO, incomingFFA);
+  if (results.some((r) => r.overflow)) return null;
+  const excess = results.reduce((s, r) => s + Math.max(0, r.finalFFA - target) * r.finalStock, 0);
+  const contamination = results.reduce(
+    (s, r) => s + (r.ffa <= target && r.finalFFA > target ? r.stock : 0),
+    0,
+  );
+  const highTankFeed = results.reduce((s, r) => s + (r.ffa > target ? r.incoming : 0), 0);
+  const ffaMass = results.reduce((s, r) => s + r.finalFFA * r.finalStock, 0);
+  const score =
+    excess * 100 +
+    contamination * 20 +
+    highTankFeed * 2 +
+    allocation.filter((x) => x > 0).length * 3 +
+    ffaMass * 0.05;
+  return { allocation: [...allocation], results, score };
+}
+
+function findTopPlans(
   tanks: Tank[],
   incomingCPO: number,
   incomingFFA: number,
   target: number,
-): { allocation: number[]; results: Result[]; score: number } | null {
-  let best: { allocation: number[]; results: Result[]; score: number } | null = null;
+  limit = 3,
+): BlendPlan[] {
+  const top: BlendPlan[] = [];
   const assess = (allocation: number[]) => {
-    const results = calculate(tanks, allocation, incomingCPO, incomingFFA);
-    if (results.some((r) => r.overflow)) return;
-    const excess = results.reduce(
-      (s, r) => s + Math.max(0, r.finalFFA - target) * r.finalStock,
-      0,
-    );
-    const contamination = results.reduce(
-      (s, r) => s + (r.ffa <= target && r.finalFFA > target ? r.stock : 0),
-      0,
-    );
-    const highTankFeed = results.reduce(
-      (s, r) => s + (r.ffa > target ? r.incoming : 0),
-      0,
-    );
-    const ffaMass = results.reduce((s, r) => s + r.finalFFA * r.finalStock, 0);
-    const score =
-      excess * 100 +
-      contamination * 20 +
-      highTankFeed * 2 +
-      allocation.filter((x) => x > 0).length * 3 +
-      ffaMass * 0.05;
-    if (!best || score < best.score) best = { allocation, results, score };
+    const plan = scorePlan(tanks, allocation, incomingCPO, incomingFFA, target);
+    if (!plan || top.some((p) => sameAllocation(p.allocation, plan.allocation))) return;
+    top.push(plan);
+    top.sort((a, b) => a.score - b.score);
+    if (top.length > limit) top.length = limit;
   };
   const build = (index: number, remaining: number, values: number[]) => {
     if (index === tanks.length - 1) {
@@ -116,7 +133,26 @@ function findBestPlan(
       build(index + 1, remaining - value, [...values, value]);
   };
   build(0, 100, []);
-  return best;
+  return top;
+}
+
+function planToAdvisePayload(plan: BlendPlan, rank: number, target: number) {
+  return {
+    rank,
+    allocationPct: plan.allocation,
+    score: plan.score,
+    meetsTarget: plan.results.every((r) => r.finalFFA <= target),
+    maxFinalFfaPct: Math.max(...plan.results.map((r) => r.finalFFA)),
+    tanks: plan.results.map((r) => ({
+      name: r.name,
+      allocationPct: r.allocation,
+      incomingMt: r.incoming,
+      finalStockMt: r.finalStock,
+      finalFfaPct: r.finalFFA,
+      utilisationPct: r.utilisation,
+      overflow: r.overflow,
+    })),
+  };
 }
 
 function tankState(result: Result, target: number): TankState {
@@ -200,6 +236,7 @@ export default function Home() {
   const [aiCooldown, setAiCooldown] = useState(0);
   const [aiQuestion, setAiQuestion] = useState("");
   const [lang, setLang] = useState<Lang>("en");
+  const [tankerLoadMt, setTankerLoadMt] = useState(28);
 
   const copy = getCopy(lang);
   const highFfaTankNames = tanks
@@ -223,22 +260,36 @@ export default function Home() {
     () => calculate(tanks, allocation, incomingCPO, incomingFFA),
     [tanks, allocation, incomingCPO, incomingFFA],
   );
-  const best = useMemo(
-    () => findBestPlan(tanks, incomingCPO, incomingFFA, target),
+  const topPlans = useMemo(
+    () => findTopPlans(tanks, incomingCPO, incomingFFA, target),
     [tanks, incomingCPO, incomingFFA, target],
   );
+  const best = topPlans[0] ?? null;
   const allocationTotal = allocation.reduce((a, b) => a + b, 0);
   const currentStock = tanks.reduce((s, t) => s + t.stock, 0);
   const highFFAStock = tanks.filter((t) => t.ffa > target).reduce((s, t) => s + t.stock, 0);
   const valid = allocationTotal === 100 && !results.some((r) => r.overflow);
   const bestMeetsTarget = !!best && best.results.every((r) => r.finalFFA <= target);
   const hasOverflow = results.some((r) => r.overflow);
+  const despatchTanks = useMemo(
+    () =>
+      results.map((r) => ({
+        name: r.name,
+        stockMt: r.finalStock,
+        ffaPct: r.finalFFA,
+      })),
+    [results],
+  );
+  const topDespatchPlans = useMemo(
+    () => findTopDespatchPlans(despatchTanks, tankerLoadMt, target),
+    [despatchTanks, tankerLoadMt, target],
+  );
 
   useEffect(() => {
     setAiOpinion(null);
     setAiSource(null);
     setAiError(null);
-  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, best]);
+  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, topPlans]);
 
   useEffect(() => {
     if (aiCooldown <= 0) return;
@@ -281,22 +332,8 @@ export default function Home() {
           utilisationPct: r.utilisation,
           overflow: r.overflow,
         })),
-        recommendedPlan: best
-          ? {
-              allocationPct: best.allocation,
-              score: best.score,
-              meetsTarget: best.results.every((r) => r.finalFFA <= target),
-              tanks: best.results.map((r) => ({
-                name: r.name,
-                allocationPct: r.allocation,
-                incomingMt: r.incoming,
-                finalStockMt: r.finalStock,
-                finalFfaPct: r.finalFFA,
-                utilisationPct: r.utilisation,
-                overflow: r.overflow,
-              })),
-            }
-          : null,
+        recommendedPlan: best ? planToAdvisePayload(best, 1, target) : null,
+        alternativePlans: topPlans.slice(1).map((plan, i) => planToAdvisePayload(plan, i + 2, target)),
         flags: {
           allocationTotalPct: allocationTotal,
           allocationValid: allocationTotal === 100,
@@ -348,7 +385,8 @@ export default function Home() {
           : t,
       ),
     );
-  const useSuggested = () => best && setAllocation(best.allocation);
+  const applyPlan = (plan: BlendPlan) => setAllocation(plan.allocation);
+  const useSuggested = () => best && applyPlan(best);
   const addTank = () => {
     setTanks((p) => [...p, { name: suggestTankName(p), capacity: 2000, stock: 0, ffa: 0 }]);
     setAllocation((p) => [...p, 0]);
@@ -508,15 +546,16 @@ export default function Home() {
     <>
       <SmartRecommendation
         copy={copy}
-        best={best}
+        topPlans={topPlans}
+        target={target}
         tanks={tanks}
         valid={valid}
         bestMeetsTarget={bestMeetsTarget}
         highFFAStock={highFFAStock}
         highFfaTankNames={highFfaTankNames}
         incomingCPO={incomingCPO}
-        onApply={() => {
-          useSuggested();
+        onApplyPlan={(plan) => {
+          applyPlan(plan);
           setMobileTab("tanks");
         }}
         aiOpinion={aiOpinion}
@@ -527,6 +566,12 @@ export default function Home() {
         aiQuestion={aiQuestion}
         onAiQuestionChange={setAiQuestion}
         onGetAiOpinion={fetchAiOpinion}
+      />
+      <TankerDespatchPlanner
+        copy={copy}
+        tankerLoadMt={tankerLoadMt}
+        onTankerLoadChange={setTankerLoadMt}
+        topPlans={topDespatchPlans}
       />
       <DecisionSafeguards
         copy={copy}
@@ -1216,16 +1261,110 @@ function AlertBanner({ title, text }: { title: string; text: string }) {
   );
 }
 
+function PlanOption({
+  rank,
+  plan,
+  tanks,
+  target,
+  incomingCPO,
+  copy,
+  highlighted,
+  compact = false,
+  onApply,
+}: {
+  rank: number;
+  plan: BlendPlan;
+  tanks: Tank[];
+  target: number;
+  incomingCPO: number;
+  copy: Copy;
+  highlighted: boolean;
+  compact?: boolean;
+  onApply: () => void;
+}) {
+  const meetsTarget = plan.results.every((r) => r.finalFFA <= target);
+  const maxFfa = Math.max(...plan.results.map((r) => r.finalFFA));
+
+  if (compact) {
+    return (
+      <div className="rounded-xl border border-[#dfe5dc] bg-[#f9fbf8] p-2.5">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold text-[#173f30]">{copy.plan.planRank(rank)}</span>
+          <button
+            type="button"
+            onClick={onApply}
+            className="rounded-lg bg-[#173f30] px-2 py-1 text-[10px] font-bold text-white"
+          >
+            {copy.plan.useThisPlan}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {plan.allocation.map((x, i) => (
+            <div key={i} className="plan-pill py-2">
+              <span className="text-[10px] text-[#708078]">{tanks[i].name}</span>
+              <strong>{x}%</strong>
+              <span className="text-[10px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[10px] text-[#708078]">
+          {meetsTarget ? copy.plan.withinLimit : copy.plan.maxFinalFfa(maxFfa)}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        highlighted ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold text-[#173f30]">{copy.plan.planRank(rank)}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            meetsTarget ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+          }`}
+        >
+          {meetsTarget ? copy.plan.withinLimit : copy.plan.aboveLimitShort}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 min-[400px]:grid-cols-3">
+        {plan.allocation.map((x, i) => (
+          <div key={i} className="rounded-lg bg-white/80 p-2 text-center">
+            <p className="truncate text-[11px] text-[#708078]">{tanks[i].name}</p>
+            <p className="text-lg font-extrabold text-[#173f30]">{x}%</p>
+            <p className="text-[10px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-[#708078]">{copy.plan.maxFinalFfa(maxFfa)}</p>
+      <button
+        type="button"
+        onClick={onApply}
+        className={`btn-touch mt-2 w-full text-sm ${
+          highlighted ? "bg-[#173f30] text-white" : "bg-[#d7f08a] text-[#173f30]"
+        }`}
+      >
+        <RefreshCw size={14} />
+        {copy.plan.useThisPlan}
+      </button>
+    </div>
+  );
+}
+
 function SmartRecommendation({
   copy,
-  best,
+  topPlans,
+  target,
   tanks,
   valid,
   bestMeetsTarget,
   highFFAStock,
   highFfaTankNames,
   incomingCPO,
-  onApply,
+  onApplyPlan,
   aiOpinion,
   aiSource,
   aiLoading,
@@ -1236,14 +1375,15 @@ function SmartRecommendation({
   onGetAiOpinion,
 }: {
   copy: Copy;
-  best: { allocation: number[]; results: Result[]; score: number } | null;
+  topPlans: BlendPlan[];
+  target: number;
   tanks: Tank[];
   valid: boolean;
   bestMeetsTarget: boolean;
   highFFAStock: number;
   highFfaTankNames: string;
   incomingCPO: number;
-  onApply: () => void;
+  onApplyPlan: (plan: BlendPlan) => void;
   aiOpinion: string | null;
   aiSource: "openai" | "offline" | null;
   aiLoading: boolean;
@@ -1259,6 +1399,7 @@ function SmartRecommendation({
     : aiCooldown > 0
       ? copy.ai.wait(aiCooldown)
       : copy.ai.ask;
+  const best = topPlans[0];
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
       <div className="bg-[#173f30] p-4 text-white sm:p-5">
@@ -1286,13 +1427,36 @@ function SmartRecommendation({
             <p className="section-label">{copy.plan.recommendedAllocation}</p>
             <div className="mt-3 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:grid-cols-3">
               {best.allocation.map((x, i) => (
-                <div key={i} className="rounded-xl bg-[#f2f5f0] p-3 text-center">
+                <div key={i} className="plan-pill">
                   <p className="text-xs text-[#708078]">{tanks[i].name}</p>
                   <p className="mt-1 text-xl font-extrabold text-[#173f30]">{x}%</p>
                   <p className="text-[11px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
                 </div>
               ))}
             </div>
+
+            {topPlans.length > 1 && (
+              <div className="mt-4 hidden lg:block">
+                <p className="section-label">{copy.plan.topPlans}</p>
+                <div className="mt-2 space-y-2">
+                  {topPlans.slice(1).map((plan, i) => (
+                    <PlanOption
+                      key={plan.allocation.join("-")}
+                      rank={i + 2}
+                      plan={plan}
+                      tanks={tanks}
+                      target={target}
+                      incomingCPO={incomingCPO}
+                      copy={copy}
+                      highlighted={false}
+                      compact
+                      onApply={() => onApplyPlan(plan)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 space-y-3">
               <Advice
                 icon={<ShieldCheck size={17} />}
@@ -1319,12 +1483,29 @@ function SmartRecommendation({
             </div>
             <button
               type="button"
-              onClick={onApply}
+              onClick={() => onApplyPlan(best)}
               className="btn-touch mt-5 hidden w-full bg-[#d7f08a] text-[#173f30] md:flex"
             >
               <RefreshCw size={16} />
               {copy.allocation.applyRecommended}
             </button>
+
+            <div className="mt-5 space-y-3 lg:hidden">
+              <p className="section-label">{copy.plan.topPlans}</p>
+              {topPlans.map((plan, i) => (
+                <PlanOption
+                  key={`mobile-${plan.allocation.join("-")}`}
+                  rank={i + 1}
+                  plan={plan}
+                  tanks={tanks}
+                  target={target}
+                  incomingCPO={incomingCPO}
+                  copy={copy}
+                  highlighted={i === 0}
+                  onApply={() => onApplyPlan(plan)}
+                />
+              ))}
+            </div>
 
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
               <p className="section-label">{copy.ai.advisor}</p>
@@ -1406,6 +1587,124 @@ function SmartRecommendation({
         )}
       </div>
     </section>
+  );
+}
+
+function TankerDespatchPlanner({
+  copy,
+  tankerLoadMt,
+  onTankerLoadChange,
+  topPlans,
+}: {
+  copy: Copy;
+  tankerLoadMt: number;
+  onTankerLoadChange: (value: number) => void;
+  topPlans: DespatchPlan[];
+}) {
+  const hasStock = topPlans.length > 0;
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
+      <div className="border-b border-[#e8ede8] bg-[#f8faf7] p-4 sm:p-5">
+        <div className="flex items-center gap-2 font-bold text-[#173f30]">
+          <Truck size={19} className="text-[#245f43]" />
+          {copy.despatch.title}
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-[#58665e]">{copy.despatch.subtitle}</p>
+        <div className="mt-4 max-w-xs">
+          <label className="text-xs font-bold text-[#6c7971]">{copy.despatch.tankerLoad}</label>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={tankerLoadMt || ""}
+              onChange={(e) => onTankerLoadChange(Number(e.target.value) || 0)}
+              className="w-full rounded-xl border border-[#dce3dd] bg-white px-3 py-2.5 text-sm font-semibold text-[#173f30] outline-none ring-[#88a84e] focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <span className="shrink-0 text-sm font-bold text-[#58665e]">MT</span>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-[#758078]">{copy.despatch.tankerLoadHint}</p>
+        </div>
+      </div>
+      <div className="p-4 sm:p-5">
+        {!hasStock ? (
+          <p className="text-sm leading-relaxed text-[#8a3d20]">
+            {tankerLoadMt > 0 ? copy.despatch.noStock : copy.despatch.noPlans}
+          </p>
+        ) : (
+          <>
+            <p className="section-label">{copy.despatch.topPlans}</p>
+            <div className="mt-3 space-y-3">
+              {topPlans.map((plan, i) => (
+                <DespatchOption
+                  key={plan.sources.map((s) => `${s.name}-${s.mt}`).join("|")}
+                  rank={i + 1}
+                  plan={plan}
+                  copy={copy}
+                  highlighted={i === 0}
+                />
+              ))}
+            </div>
+            {topPlans[0]?.shortfallMt > 0 && (
+              <p className="mt-3 text-sm text-[#92441f]">
+                {copy.despatch.shortfall(topPlans[0].shortfallMt)}
+              </p>
+            )}
+            <Advice
+              icon={<AlertTriangle size={17} />}
+              title={copy.plan.beforeTransfer}
+              text={copy.despatch.verifyBeforeLoad}
+              warning
+            />
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DespatchOption({
+  rank,
+  plan,
+  copy,
+  highlighted,
+}: {
+  rank: number;
+  plan: DespatchPlan;
+  copy: Copy;
+  highlighted: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        highlighted ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold text-[#173f30]">{copy.despatch.planRank(rank)}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            plan.meetsLimit ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+          }`}
+        >
+          {plan.meetsLimit ? copy.despatch.withinLimit : copy.despatch.aboveLimitShort}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+        {plan.sources.map((source) => (
+          <div key={source.name} className="plan-pill py-2">
+            <span className="text-[11px] text-[#708078]">{source.name}</span>
+            <strong>{n(source.mt)} MT</strong>
+            <span className="text-[10px] text-[#708078]">{n(source.ffaPct, 2)}% FFA</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#708078]">
+        <span>{copy.despatch.totalLoad(plan.totalMt)}</span>
+        <span>{copy.despatch.loadFfa(plan.loadFfaPct)}</span>
+      </div>
+    </div>
   );
 }
 
