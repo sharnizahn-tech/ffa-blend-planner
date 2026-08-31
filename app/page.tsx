@@ -545,31 +545,21 @@ export default function Home() {
 
     return (
       <div key={`${tank.name}-${i}-row`} className={`tank-row ${state}`}>
-        <div className="flex items-center gap-3">
+        <div className="tank-row__icon">
           <div className="tank-icon">
             <Droplets size={18} />
           </div>
-          <div className="min-w-0 flex-1">
-            <TextField
-              label={copy.tanks.name}
-              value={tank.name}
-              onChange={(v) => updateTank(i, "name", v)}
-              placeholder={copy.tanks.namePlaceholder}
-              compact
-            />
-            <p className="mt-1 text-xs text-[#708078]">{copy.tanks.filledAfter(r.utilisation)}</p>
-          </div>
-          {tanks.length > 1 && (
-            <button
-              type="button"
-              onClick={() => removeTank(i)}
-              aria-label={copy.tanks.remove(tank.name)}
-              title={copy.tanks.remove(tank.name)}
-              className="remove-tank"
-            >
-              <Trash2 size={15} />
-            </button>
-          )}
+        </div>
+        <div className="tank-row__name min-w-0">
+          <TankNameInput
+            value={tank.name}
+            onChange={(v) => updateTank(i, "name", v)}
+            placeholder={copy.tanks.namePlaceholder}
+            ariaLabel={copy.tanks.name}
+          />
+          <p className="mt-1 text-[10px] leading-tight text-[#708078]">
+            {copy.tanks.filledAfter(r.utilisation)}
+          </p>
         </div>
         <MiniField
           label={copy.tanks.capacity}
@@ -605,9 +595,24 @@ export default function Home() {
             {n(r.finalFFA, 2)}%
           </strong>
         </div>
-        <div className={`status-pill ${state}`}>
+        <div className={`status-pill self-end ${state}`}>
           {state === "safe" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{" "}
           {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
+        </div>
+        <div className="tank-row__delete self-end">
+          {tanks.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => removeTank(i)}
+              aria-label={copy.tanks.remove(tank.name)}
+              title={copy.tanks.remove(tank.name)}
+              className="remove-tank"
+            >
+              <Trash2 size={15} />
+            </button>
+          ) : (
+            <span className="block h-11 w-11" aria-hidden />
+          )}
         </div>
       </div>
     );
@@ -898,6 +903,39 @@ function NumericInput({
         setDraft(null);
       }}
       className={className}
+    />
+  );
+}
+
+function TankNameInput({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  ariaLabel: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? value;
+
+  return (
+    <input
+      aria-label={ariaLabel}
+      type="text"
+      value={display}
+      placeholder={placeholder}
+      onFocus={() => setDraft(value)}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft === null) return;
+        const trimmed = draft.trim();
+        if (trimmed) onChange(trimmed);
+        setDraft(null);
+      }}
+      className="input-touch w-full min-w-0 rounded-lg border border-[#dfe5df] bg-white px-2.5 py-2 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
     />
   );
 }
