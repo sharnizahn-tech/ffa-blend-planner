@@ -51,9 +51,6 @@ const n = (v: number, d = 1) =>
 
 const allocationMt = (incomingCpo: number, pct: number) => (incomingCpo * pct) / 100;
 
-const allocationUnit = (incomingCpo: number, pct: number) =>
-  `% (${n(allocationMt(incomingCpo, pct))} MT)`;
-
 function calculate(
   tanks: Tank[],
   allocation: number[],
@@ -515,14 +512,13 @@ export default function Home() {
                 onChange={(v) => updateTank(i, "ffa", v)}
                 unit="%"
               />
-              <MiniField
+              <AllocationField
                 label={copy.tanks.allocation}
                 value={allocation[i]}
+                incomingCPO={incomingCPO}
                 onChange={(v) =>
                   setAllocation((p) => p.map((x, j) => (j === i ? v : x)))
                 }
-                unit={allocationUnit(incomingCPO, allocation[i] ?? 0)}
-                emphasis
               />
             </div>
             <div className="grid grid-cols-2 gap-3 rounded-xl bg-white/70 p-3">
@@ -593,12 +589,11 @@ export default function Home() {
           onChange={(v) => updateTank(i, "ffa", v)}
           unit="%"
         />
-        <MiniField
+        <AllocationField
           label={copy.tanks.allocation}
           value={allocation[i]}
+          incomingCPO={incomingCPO}
           onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
-          unit={allocationUnit(incomingCPO, allocation[i] ?? 0)}
-          emphasis
         />
         <div className="result-cell">
           <span>{copy.tanks.finalStock}</span>
@@ -976,7 +971,7 @@ function Field({
     <label className="block w-full">
       <span className="mb-1.5 block text-[11px] font-bold uppercase text-[#77837c]">{label}</span>
       <div
-        className={`input-touch flex items-center rounded-xl border px-3 ${
+        className={`input-touch flex items-center gap-1.5 rounded-xl border px-3 ${
           accent ? "border-[#e5b18f] bg-[#fff9f5]" : "border-[#dce3dd] bg-[#f9faf8]"
         }`}
       >
@@ -1006,10 +1001,10 @@ function MiniField({
   emphasis?: boolean;
 }) {
   return (
-    <label className="block w-full">
+    <label className="block min-w-0 w-full">
       <span className="mb-1 block text-[10px] font-semibold uppercase text-[#7a867f]">{label}</span>
       <div
-        className={`input-touch flex rounded-lg border px-3 ${
+        className={`input-touch flex items-center gap-1.5 rounded-lg border px-3 ${
           emphasis ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5df] bg-white"
         }`}
       >
@@ -1019,10 +1014,38 @@ function MiniField({
           onChange={onChange}
           className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
         />
-        <span className="shrink-0 self-center text-[9px] leading-tight text-[#7a867f] sm:text-[10px]">
-          {unit}
-        </span>
+        <span className="shrink-0 text-[10px] text-[#7a867f]">{unit}</span>
       </div>
+    </label>
+  );
+}
+
+function AllocationField({
+  label,
+  value,
+  incomingCPO,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  incomingCPO: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block min-w-0 w-full">
+      <span className="mb-1 block text-[10px] font-semibold uppercase text-[#7a867f]">{label}</span>
+      <div className="input-touch flex items-center gap-1.5 rounded-lg border border-[#88a84e] bg-[#f6fae9] px-3">
+        <NumericInput
+          label={label}
+          value={value}
+          onChange={onChange}
+          className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
+        />
+        <span className="shrink-0 text-[10px] font-semibold text-[#7a867f]">%</span>
+      </div>
+      <p className="mt-1 text-[10px] font-medium leading-tight text-[#708078] sm:text-[11px]">
+        {n(allocationMt(incomingCPO, value ?? 0))} MT
+      </p>
     </label>
   );
 }

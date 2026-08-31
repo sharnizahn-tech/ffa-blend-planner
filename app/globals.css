@@ -192,6 +192,10 @@ input[type="number"]::-webkit-outer-spin-button {
   color: var(--status-critical);
 }
 
+.result-cell {
+  min-width: 0;
+}
+
 .result-cell span {
   display: block;
   margin-bottom: 0.25rem;
@@ -202,6 +206,8 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .result-cell strong {
+  display: block;
+  overflow-wrap: anywhere;
   font-size: 0.9375rem;
 }
 
@@ -217,7 +223,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
   .tank-row {
     display: grid;
-    grid-template-columns: minmax(130px, 1.2fr) repeat(4, minmax(82px, 1fr)) repeat(2, minmax(88px, 1fr)) 108px;
+    grid-template-columns: minmax(130px, 1.2fr) repeat(3, minmax(76px, 1fr)) minmax(88px, 1fr) repeat(2, minmax(84px, 1fr)) minmax(100px, 1fr);
     align-items: end;
     gap: 10px;
     border: 1px solid #dce4dd;
