@@ -215,7 +215,18 @@ input[type="number"]::-webkit-outer-spin-button {
   grid-template-areas:
     "visual identity actions"
     "readings readings readings"
-    "allocate delta delta";
+    "allocate allocate allocate"
+    "delta delta delta";
+}
+
+.tank-strip__allocate .input-touch {
+  min-width: 0;
+  width: 100%;
+}
+
+.tank-strip__allocate .numeric-input {
+  min-width: 3rem;
+  text-align: center;
 }
 
 .tank-strip--warning {
@@ -262,6 +273,16 @@ input[type="number"]::-webkit-outer-spin-button {
   border-radius: 12px;
   background: rgb(255 255 255 / 72%);
   padding: 10px 12px;
+  text-align: center;
+}
+
+.tank-strip__delta-heading {
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7a867f;
 }
 
 .tank-strip__delta-row span {
@@ -274,11 +295,11 @@ input[type="number"]::-webkit-outer-spin-button {
   color: #7a867f;
 }
 
-.tank-strip__delta-row strong {
+.tank-strip__delta-value {
   display: block;
   font-size: 0.8125rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .tank-strip__meta {
