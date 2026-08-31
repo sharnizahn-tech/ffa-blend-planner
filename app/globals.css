@@ -758,6 +758,24 @@ input[type="number"]::-webkit-outer-spin-button {
   text-align: center;
 }
 
+.plan-pill--despatch {
+  min-width: 0;
+  border: 1px solid #e4ebe4;
+}
+
+.despatch-sources {
+  display: grid;
+  margin-top: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .despatch-sources {
+    gap: 1rem;
+  }
+}
+
 .plan-pill strong {
   display: block;
   margin-top: 2px;

@@ -693,17 +693,19 @@ export default function Home() {
         ))}
       </nav>
 
-      {/* Mobile sticky action bar */}
-      <div className="mobile-action-bar md:hidden">
-        <button
-          type="button"
-          onClick={useSuggested}
-          className="btn-touch w-full bg-[#173f30] text-white"
-        >
-          <Sparkles size={16} />
-          {copy.allocation.useBestPlan}
-        </button>
-      </div>
+      {/* Mobile sticky action bar — tanks/overview only so Plan tab buttons stay clickable */}
+      {(mobileTab === "overview" || mobileTab === "tanks") && (
+        <div className="mobile-action-bar md:hidden">
+          <button
+            type="button"
+            onClick={useSuggested}
+            className="btn-touch w-full bg-[#173f30] text-white"
+          >
+            <Sparkles size={16} />
+            {copy.allocation.useBestPlan}
+          </button>
+        </div>
+      )}
     </main>
   );
 }
@@ -1308,7 +1310,7 @@ function PlanOption({
           <button
             type="button"
             onClick={onApply}
-            className="rounded-lg bg-[#173f30] px-2 py-1 text-[10px] font-bold text-white"
+            className="btn-touch relative z-10 shrink-0 rounded-lg bg-[#173f30] px-3 py-2 text-xs font-bold text-white"
           >
             {copy.plan.useThisPlan}
           </button>
@@ -1358,7 +1360,7 @@ function PlanOption({
       <button
         type="button"
         onClick={onApply}
-        className={`btn-touch mt-2 w-full text-sm ${
+        className={`btn-touch relative z-10 mt-2 w-full scroll-mb-28 text-sm ${
           highlighted ? "bg-[#173f30] text-white" : "bg-[#d7f08a] text-[#173f30]"
         }`}
       >
@@ -1505,7 +1507,7 @@ function SmartRecommendation({
               {copy.allocation.applyRecommended}
             </button>
 
-            <div className="mt-5 space-y-3 lg:hidden">
+            <div className="mt-5 space-y-3 pb-2 lg:hidden">
               <p className="section-label">{copy.plan.topPlans}</p>
               {topPlans.map((plan, i) => (
                 <PlanOption
@@ -1706,9 +1708,9 @@ function DespatchOption({
           {plan.meetsLimit ? copy.despatch.withinLimit : copy.despatch.aboveLimitShort}
         </span>
       </div>
-      <div className="mt-2 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+      <div className="despatch-sources">
         {plan.sources.map((source) => (
-          <div key={source.name} className="plan-pill py-2">
+          <div key={source.name} className="plan-pill plan-pill--despatch py-2">
             <span className="text-[11px] text-[#708078]">{source.name}</span>
             <strong>{n(source.mt)} MT</strong>
             <span className="text-[10px] text-[#708078]">{n(source.ffaPct, 2)}% FFA</span>
