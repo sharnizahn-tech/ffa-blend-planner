@@ -409,220 +409,42 @@ export default function Home() {
 
   const allocationBanner = (
     <div
-      className={`flex flex-col gap-2 rounded-xl px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between ${
-        allocationTotal === 100
-          ? "bg-[#edf5e9] text-[#28553a]"
-          : "bg-[#fff0e7] text-[#92441f]"
-      }`}
+      className={`allocation-status rounded-xl px-4 py-3 ${
+        allocationTotal === 100 ? "" : "allocation-status--warn"
+      } ${allocationTotal === 100 ? "bg-[#edf5e9] text-[#28553a]" : "bg-[#fff0e7] text-[#92441f]"}`}
     >
-      <span className="flex items-center gap-2">
-        {allocationTotal === 100 ? (
-          <CheckCircle2 size={17} />
-        ) : (
-          <AlertTriangle size={17} />
-        )}
-        {copy.allocation.mustEqual100}
-      </span>
-      <strong className="text-base">{allocationTotal}%</strong>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <span className="flex min-w-0 items-center gap-2 text-sm">
+          {allocationTotal === 100 ? (
+            <CheckCircle2 size={17} className="shrink-0" />
+          ) : (
+            <AlertTriangle size={17} className="shrink-0" />
+          )}
+          {copy.allocation.mustEqual100}
+        </span>
+        <strong className="shrink-0 text-base">{allocationTotal}%</strong>
+      </div>
+      <div className="allocation-status__track mt-3">
+        <div
+          className="allocation-status__fill"
+          style={{ width: `${Math.min(100, Math.max(0, allocationTotal))}%` }}
+        />
+      </div>
     </div>
   );
 
   const tankActions = (
-    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-      <button type="button" onClick={addTank} className="btn-touch w-full border border-[#b9c8bd] bg-white text-[#173f30] sm:w-auto">
+    <div className="tank-panel-actions">
+      <button type="button" onClick={addTank} className="btn-touch border border-[#b9c8bd] bg-white text-[#173f30]">
         <Plus size={16} />
         {copy.allocation.addBst}
       </button>
-      <button type="button" onClick={useSuggested} className="btn-touch w-full bg-[#173f30] text-white sm:w-auto">
+      <button type="button" onClick={useSuggested} className="btn-touch bg-[#173f30] text-white">
         <Sparkles size={16} />
         {copy.allocation.useBestPlan}
       </button>
     </div>
   );
-
-  const renderTankCard = (tank: Tank, i: number) => {
-    const r = results[i];
-    const state = tankState(r, target);
-    const expanded = expandedTanks.has(i);
-
-    return (
-      <article key={`${tank.name}-${i}`} className={`tank-card ${state}`}>
-        <div className="flex items-center gap-2 pr-2">
-          <button
-            type="button"
-            className="tank-card__toggle min-w-0 flex-1"
-            onClick={() => toggleTank(i)}
-            aria-expanded={expanded}
-            aria-controls={`tank-body-${i}`}
-          >
-            <div className="tank-icon">
-              <Droplets size={18} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">{tank.name}</p>
-              <p className="text-xs text-[#708078]">{copy.tanks.filledAfter(r.utilisation)}</p>
-            </div>
-            <span className={`status-pill shrink-0 ${state}`}>
-              {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-              <span className="hidden min-[400px]:inline">
-                {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
-              </span>
-            </span>
-            <ChevronDown
-              size={18}
-              className={`shrink-0 text-[#708078] transition-transform ${expanded ? "rotate-180" : ""}`}
-            />
-          </button>
-          {tanks.length > 1 && (
-            <button
-              type="button"
-              onClick={() => removeTank(i)}
-              aria-label={copy.tanks.remove(tank.name)}
-              title={copy.tanks.remove(tank.name)}
-              className="remove-tank"
-            >
-              <Trash2 size={16} />
-            </button>
-          )}
-        </div>
-        {expanded && (
-          <div id={`tank-body-${i}`} className="tank-card__body space-y-3">
-            <TextField
-              label={copy.tanks.name}
-              value={tank.name}
-              onChange={(v) => updateTank(i, "name", v)}
-              placeholder={copy.tanks.namePlaceholder}
-            />
-            <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
-              <MiniField
-                label={copy.tanks.capacity}
-                value={tank.capacity}
-                onChange={(v) => updateTank(i, "capacity", v)}
-                unit="MT"
-              />
-              <MiniField
-                label={copy.tanks.stockNow}
-                value={tank.stock}
-                onChange={(v) => updateTank(i, "stock", v)}
-                unit="MT"
-              />
-              <MiniField
-                label={copy.tanks.ffaNow}
-                value={tank.ffa}
-                onChange={(v) => updateTank(i, "ffa", v)}
-                unit="%"
-              />
-              <AllocationField
-                label={copy.tanks.allocation}
-                value={allocation[i]}
-                incomingCPO={incomingCPO}
-                onChange={(v) =>
-                  setAllocation((p) => p.map((x, j) => (j === i ? v : x)))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 rounded-xl bg-white/70 p-3">
-              <div className="result-cell">
-                <span>{copy.tanks.finalStock}</span>
-                <strong>{n(r.finalStock)} MT</strong>
-              </div>
-              <div className="result-cell">
-                <span>{copy.tanks.finalFfa}</span>
-                <strong className={r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}>
-                  {n(r.finalFFA, 2)}%
-                </strong>
-              </div>
-            </div>
-          </div>
-        )}
-      </article>
-    );
-  };
-
-  const renderTankRow = (tank: Tank, i: number) => {
-    const r = results[i];
-    const state = tankState(r, target);
-
-    return (
-      <div key={`${tank.name}-${i}-row`} className={`tank-row ${state}`}>
-        <div className="tank-row__icon">
-          <div className="tank-icon">
-            <Droplets size={18} />
-          </div>
-        </div>
-        <div className="tank-row__name min-w-0">
-          <TankNameInput
-            value={tank.name}
-            onChange={(v) => updateTank(i, "name", v)}
-            placeholder={copy.tanks.namePlaceholder}
-            ariaLabel={copy.tanks.name}
-          />
-          <p className="mt-1 text-[10px] leading-tight text-[#708078]">
-            {copy.tanks.filledAfter(r.utilisation)}
-          </p>
-        </div>
-        <MiniField
-          label={copy.tanks.capacity}
-          value={tank.capacity}
-          onChange={(v) => updateTank(i, "capacity", v)}
-          unit="MT"
-          layout="row"
-        />
-        <MiniField
-          label={copy.tanks.stockNow}
-          value={tank.stock}
-          onChange={(v) => updateTank(i, "stock", v)}
-          unit="MT"
-          layout="row"
-        />
-        <MiniField
-          label={copy.tanks.ffaNow}
-          value={tank.ffa}
-          onChange={(v) => updateTank(i, "ffa", v)}
-          unit="%"
-          layout="row"
-        />
-        <AllocationField
-          label={copy.tanks.allocation}
-          value={allocation[i]}
-          incomingCPO={incomingCPO}
-          onChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
-          layout="row"
-        />
-        <div className="result-cell result-cell--row">
-          <span>{copy.tanks.finalStock}</span>
-          <strong className="whitespace-nowrap">{n(r.finalStock)} MT</strong>
-        </div>
-        <div className="result-cell result-cell--row">
-          <span>{copy.tanks.finalFfa}</span>
-          <strong
-            className={`whitespace-nowrap ${r.finalFFA > target ? "text-[#a84618]" : "text-[#187449]"}`}
-          >
-            {n(r.finalFFA, 2)}%
-          </strong>
-        </div>
-        <div className={`status-pill status-pill--row self-end ${state}`}>
-          {state === "safe" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{" "}
-          {statusLabel(state, r.overflow, r.finalFFA, target, copy)}
-        </div>
-        <div className="tank-row__delete self-end">
-          {tanks.length > 1 ? (
-            <button
-              type="button"
-              onClick={() => removeTank(i)}
-              aria-label={copy.tanks.remove(tank.name)}
-              title={copy.tanks.remove(tank.name)}
-              className="remove-tank"
-            >
-              <Trash2 size={15} />
-            </button>
-          ) : (
-            <span className="block h-11 w-11" aria-hidden />
-          )}
-        </div>
-      </div>
-    );
-  };
 
   const tanksPanel = (
     <Panel
@@ -632,10 +454,26 @@ export default function Home() {
       action={tankActions}
       stackAction
     >
-      <div className="space-y-3">
-        {tanks.map((tank, i) => renderTankCard(tank, i))}
-        <div className="tank-row-scroll space-y-3">
-          {tanks.map((tank, i) => renderTankRow(tank, i))}
+      <div className="tank-panel min-w-0 max-w-full">
+        <div className="tank-list">
+          {tanks.map((tank, i) => (
+            <TankUnitCard
+              key={`${tank.name}-${i}`}
+              tank={tank}
+              result={results[i]}
+              index={i}
+              allocationPct={allocation[i]}
+              incomingCPO={incomingCPO}
+              target={target}
+              copy={copy}
+              canRemove={tanks.length > 1}
+              expanded={expandedTanks.has(i)}
+              onToggle={() => toggleTank(i)}
+              onUpdate={(key, value) => updateTank(i, key, value)}
+              onAllocationChange={(v) => setAllocation((p) => p.map((x, j) => (j === i ? v : x)))}
+              onRemove={() => removeTank(i)}
+            />
+          ))}
         </div>
       </div>
       <div className="mt-4">{allocationBanner}</div>
@@ -683,7 +521,7 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#f4f6f2] text-[#17231d]">
+    <main className="min-h-screen min-w-0 overflow-x-hidden bg-[#f4f6f2] text-[#17231d]">
       <header className="sticky top-0 z-30 border-b border-[#dfe5dc] bg-[#123c2c] text-white">
         <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3 sm:px-7 sm:py-4">
           <div className="flex items-center justify-between gap-3">
@@ -781,17 +619,6 @@ export default function Home() {
           <Sparkles size={16} />
           {copy.allocation.useBestPlan}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            useSuggested();
-            setMobileTab("tanks");
-          }}
-          className="btn-touch w-full bg-[#d7f08a] text-[#173f30]"
-        >
-          <RefreshCw size={16} />
-          {copy.allocation.applyRecommended}
-        </button>
       </div>
     </main>
   );
@@ -850,7 +677,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
+    <section className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
       <div
         className={`mb-5 flex gap-3 ${stackAction ? "flex-col" : "items-start justify-between"}`}
       >
@@ -943,7 +770,7 @@ function TankNameInput({
         if (trimmed) onChange(trimmed);
         setDraft(null);
       }}
-      className="input-touch w-full min-w-0 rounded-lg border border-[#dfe5df] bg-white px-2.5 py-1.5 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
+      className="input-touch w-full min-w-0 max-w-full rounded-lg border border-[#dfe5df] bg-white px-3 py-2.5 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
     />
   );
 }
@@ -1039,43 +866,24 @@ function MiniField({
   onChange,
   unit,
   emphasis = false,
-  layout = "card",
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   unit: string;
   emphasis?: boolean;
-  layout?: "card" | "row";
 }) {
-  const isRow = layout === "row";
   return (
-    <label className={`block w-full ${isRow ? "min-w-[92px]" : "min-w-0"}`}>
-      <span className="mb-1 block text-[10px] font-semibold uppercase leading-tight text-[#7a867f]">
-        {label}
-      </span>
-      <div
-        className={
-          isRow
-            ? `field-box-row ${emphasis ? "field-box-row--emphasis" : ""}`
-            : `input-touch flex items-center gap-1.5 rounded-lg border px-3 ${
-                emphasis ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5df] bg-white"
-              }`
-        }
-      >
+    <label className="block min-w-0 max-w-full">
+      <span className="field-label">{label}</span>
+      <div className={`field-shell ${emphasis ? "field-shell--emphasis" : ""}`}>
         <NumericInput
           label={label}
           value={value}
           onChange={onChange}
-          className={
-            isRow
-              ? "numeric-input w-full min-w-[2.5rem] flex-1 bg-transparent text-sm font-semibold outline-none"
-              : "numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
-          }
+          className="numeric-input"
         />
-        <span className={`shrink-0 whitespace-nowrap ${isRow ? "text-[10px]" : "text-[10px]"} text-[#7a867f]`}>
-          {unit}
-        </span>
+        <span className="shrink-0 text-sm text-[#7a867f]">{unit}</span>
       </div>
     </label>
   );
@@ -1086,51 +894,269 @@ function AllocationField({
   value,
   incomingCPO,
   onChange,
-  layout = "card",
+  incomingLabel,
+  showSlider = false,
 }: {
   label: string;
   value: number;
   incomingCPO: number;
   onChange: (v: number) => void;
-  layout?: "card" | "row";
+  incomingLabel: string;
+  showSlider?: boolean;
 }) {
-  const isRow = layout === "row";
   const mt = n(allocationMt(incomingCPO, value ?? 0));
 
-  if (isRow) {
-    return (
-      <label className="block min-w-[118px] w-full">
-        <span className="mb-1 block text-[10px] font-semibold uppercase leading-tight text-[#7a867f]">
-          {label}
-        </span>
-        <div className="field-box-row field-box-row--emphasis">
-          <NumericInput
-            label={label}
-            value={value}
-            onChange={onChange}
-            className="numeric-input w-full min-w-[1.75rem] max-w-[3rem] flex-1 bg-transparent text-sm font-semibold outline-none"
-          />
-          <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold text-[#7a867f]">%</span>
-          <span className="shrink-0 whitespace-nowrap text-[10px] text-[#708078]">· {mt} MT</span>
+  return (
+    <div className="min-w-0 max-w-full space-y-3">
+      <label className="block min-w-0 max-w-full">
+        <span className="field-label">{label}</span>
+        <div className="field-shell field-shell--emphasis">
+          <NumericInput label={label} value={value} onChange={onChange} className="numeric-input" />
+          <span className="shrink-0 text-sm font-semibold text-[#7a867f]">%</span>
         </div>
+        <p className="mt-1.5 text-sm font-medium text-[#58665e]">
+          {incomingLabel}: {mt} MT
+        </p>
       </label>
-    );
-  }
+      {showSlider && (
+        <label className="block min-w-0 max-w-full">
+          <span className="sr-only">{label}</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+            aria-label={label}
+            className="allocation-slider"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function ReadonlyStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 max-w-full">
+      <span className="field-label">{label}</span>
+      <p className="text-sm font-bold leading-snug text-[#17231d]">{value}</p>
+    </div>
+  );
+}
+
+function BeforeAfterPanel({
+  copy,
+  tank,
+  result,
+  target,
+}: {
+  copy: Copy;
+  tank: Tank;
+  result: Result;
+  target: number;
+}) {
+  const ffaImproved = result.finalFFA < tank.ffa;
+  const afterFfaClass =
+    result.finalFFA > target ? "text-[#a84618]" : ffaImproved ? "text-[#187449]" : "";
 
   return (
-    <label className="block min-w-0 w-full">
-      <span className="mb-1 block text-[10px] font-semibold uppercase text-[#7a867f]">{label}</span>
-      <div className="input-touch flex items-center gap-1.5 rounded-lg border border-[#88a84e] bg-[#f6fae9] px-3">
-        <NumericInput
-          label={label}
-          value={value}
-          onChange={onChange}
-          className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-semibold outline-none"
-        />
-        <span className="shrink-0 text-[10px] font-semibold text-[#7a867f]">%</span>
+    <div className="tank-compare min-w-0 max-w-full">
+      <p className="field-label">{copy.tanks.beforeAfter}</p>
+      <div className="tank-compare__grid">
+        <div className="tank-compare__block">
+          <span className="tank-compare__heading">{copy.tanks.before}</span>
+          <p>
+            {copy.tanks.stock}: <strong>{n(tank.stock, 0)} MT</strong>
+          </p>
+          <p>
+            {copy.tanks.ffa}: <strong>{n(tank.ffa, 2)}%</strong>
+          </p>
+        </div>
+        <div className="tank-compare__arrow" aria-hidden>
+          →
+        </div>
+        <div className="tank-compare__block">
+          <span className="tank-compare__heading">{copy.tanks.after}</span>
+          <p>
+            {copy.tanks.stock}: <strong>{n(result.finalStock)} MT</strong>
+          </p>
+          <p>
+            {copy.tanks.ffa}:{" "}
+            <strong className={afterFfaClass}>{n(result.finalFFA, 2)}%</strong>
+          </p>
+        </div>
       </div>
-      <p className="mt-1 text-[10px] font-medium leading-tight text-[#708078] sm:text-[11px]">{mt} MT</p>
-    </label>
+    </div>
+  );
+}
+
+function TankUnitCard({
+  tank,
+  result,
+  index,
+  allocationPct,
+  incomingCPO,
+  target,
+  copy,
+  canRemove,
+  expanded,
+  onToggle,
+  onUpdate,
+  onAllocationChange,
+  onRemove,
+}: {
+  tank: Tank;
+  result: Result;
+  index: number;
+  allocationPct: number;
+  incomingCPO: number;
+  target: number;
+  copy: Copy;
+  canRemove: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onUpdate: (key: keyof Tank, value: string | number) => void;
+  onAllocationChange: (value: number) => void;
+  onRemove: () => void;
+}) {
+  const state = tankState(result, target);
+  const remainingCapacity = Math.max(0, tank.capacity - result.finalStock);
+  const status = statusLabel(state, result.overflow, result.finalFFA, target, copy);
+
+  return (
+    <article
+      className={`tank-unit ${state}${expanded ? " is-expanded" : ""}`}
+      id={`tank-unit-${index}`}
+    >
+      {canRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={copy.tanks.remove(tank.name)}
+          title={copy.tanks.remove(tank.name)}
+          className="tank-unit__delete remove-tank"
+        >
+          <Trash2 size={15} />
+        </button>
+      )}
+
+      <div className="tank-unit__summary">
+        <button
+          type="button"
+          className="tank-unit__summary-btn"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={`tank-body-${index}`}
+        >
+          <div className="tank-icon">
+            <Droplets size={18} />
+          </div>
+          <div className="tank-unit__summary-main">
+            <p className="tank-unit__summary-name">{tank.name}</p>
+            <p className="tank-unit__summary-stats">
+              {copy.tanks.stock}: {n(tank.stock, 0)} MT · {copy.tanks.ffa}: {n(tank.ffa, 2)}% ·{" "}
+              {copy.tanks.filledAfter(result.utilisation)}
+            </p>
+          </div>
+          <span className={`status-pill shrink-0 ${state}`}>
+            {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+            {status}
+          </span>
+          <ChevronDown
+            size={18}
+            className={`shrink-0 text-[#708078] transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+      </div>
+
+      <div id={`tank-body-${index}`} className="tank-unit__body">
+        <section className="tank-unit__identity">
+          <div className="tank-unit__identity-head">
+            <div className="tank-icon">
+              <Droplets size={18} />
+            </div>
+            <div className="tank-unit__name">
+              <TankNameInput
+                value={tank.name}
+                onChange={(v) => onUpdate("name", v)}
+                placeholder={copy.tanks.namePlaceholder}
+                ariaLabel={copy.tanks.name}
+              />
+              <p className="tank-unit__meta">{copy.tanks.filledAfter(result.utilisation)}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={`status-pill ${state}`}>
+                  {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                  {status}
+                </span>
+              </div>
+              <div className="tank-fill-meter" aria-hidden>
+                <div
+                  className="tank-fill-meter__bar"
+                  style={{ width: `${Math.min(100, Math.max(0, result.utilisation))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="tank-unit__readings">
+          <div className="tank-unit__readings-grid tank-unit__readings-grid--wide">
+            <MiniField
+              label={copy.tanks.capacity}
+              value={tank.capacity}
+              onChange={(v) => onUpdate("capacity", v)}
+              unit="MT"
+            />
+            <MiniField
+              label={copy.tanks.stockNow}
+              value={tank.stock}
+              onChange={(v) => onUpdate("stock", v)}
+              unit="MT"
+            />
+            <MiniField
+              label={copy.tanks.ffaNow}
+              value={tank.ffa}
+              onChange={(v) => onUpdate("ffa", v)}
+              unit="%"
+            />
+          </div>
+        </section>
+
+        <section className="tank-unit__allocate">
+          <AllocationField
+            label={copy.tanks.allocation}
+            value={allocationPct}
+            incomingCPO={incomingCPO}
+            incomingLabel={copy.tanks.incomingQty}
+            onChange={onAllocationChange}
+            showSlider
+          />
+          <div className="tank-unit__allocate-results mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+            <ReadonlyStat label={copy.tanks.finalStock} value={`${n(result.finalStock)} MT`} />
+            <ReadonlyStat label={copy.tanks.finalFfa} value={`${n(result.finalFFA, 2)}%`} />
+            <ReadonlyStat
+              label={copy.tanks.remainingCapacity}
+              value={`${n(remainingCapacity)} MT`}
+            />
+          </div>
+        </section>
+
+        <section className="tank-unit__compare">
+          <BeforeAfterPanel copy={copy} tank={tank} result={result} target={target} />
+        </section>
+
+        {canRemove && (
+          <div className="tank-unit__remove-mobile md:hidden">
+            <button type="button" onClick={onRemove} className="remove-tank remove-tank--wide">
+              <Trash2 size={16} />
+              {copy.tanks.remove(tank.name)}
+            </button>
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
