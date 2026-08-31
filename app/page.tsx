@@ -1060,9 +1060,9 @@ function TankUnitCard({
           onClick={onRemove}
           aria-label={copy.tanks.remove(tank.name)}
           title={copy.tanks.remove(tank.name)}
-          className="tank-unit__delete remove-tank"
+          className="tank-unit__delete remove-tank remove-tank--compact"
         >
-          <Trash2 size={15} />
+          <Trash2 size={14} />
         </button>
       )}
 
