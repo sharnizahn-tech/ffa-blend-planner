@@ -1668,12 +1668,14 @@ function TankerDespatchPlanner({
                 {copy.despatch.shortfall(topPlans[0].shortfallMt)}
               </p>
             )}
-            <Advice
-              icon={<AlertTriangle size={17} />}
-              title={copy.plan.beforeTransfer}
-              text={copy.despatch.verifyBeforeLoad}
-              warning
-            />
+            <div className="mt-5 border-t border-[#e8ede8] pt-5">
+              <Advice
+                icon={<AlertTriangle size={17} />}
+                title={copy.plan.beforeTransfer}
+                text={copy.despatch.verifyBeforeLoad}
+                warning
+              />
+            </div>
           </>
         )}
       </div>
