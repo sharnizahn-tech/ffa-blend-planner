@@ -19,6 +19,22 @@ const blendPlanSchema = z.object({
   maxFinalFfaPct: z.number().optional(),
 });
 
+const despatchPlanSchema = z.object({
+  rank: z.number().optional(),
+  totalMt: z.number(),
+  loadFfaPct: z.number(),
+  meetsTarget: z.boolean(),
+  shortfallMt: z.number(),
+  score: z.number(),
+  sources: z.array(
+    z.object({
+      name: z.string(),
+      mt: z.number(),
+      ffaPct: z.number(),
+    }),
+  ),
+});
+
 export const adviseRequestSchema = z.object({
   production: z.object({
     millCapacityMtHr: z.number(),
@@ -52,6 +68,13 @@ export const adviseRequestSchema = z.object({
   ),
   recommendedPlan: blendPlanSchema.nullable(),
   alternativePlans: z.array(blendPlanSchema).optional(),
+  despatch: z
+    .object({
+      tankerLoadMt: z.number(),
+      recommendedPlan: despatchPlanSchema.nullable(),
+      alternativePlans: z.array(despatchPlanSchema).optional(),
+    })
+    .optional(),
   flags: z.object({
     allocationTotalPct: z.number(),
     allocationValid: z.boolean(),
@@ -74,7 +97,15 @@ function section(lang: "en" | "bm", headingEn: string, headingBm: string, en: st
 }
 
 export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = "en"): string {
-  const { production: p, flags, recommendedPlan, alternativePlans, currentPlan, tanks } = payload;
+  const {
+    production: p,
+    flags,
+    recommendedPlan,
+    alternativePlans,
+    despatch,
+    currentPlan,
+    tanks,
+  } = payload;
   const highTanks = tanks.filter((t) => t.ffaPct > p.targetFfaPct).map((t) => t.name);
   const tankList = highTanks.length ? ` (${highTanks.join(", ")})` : "";
   const sections: string[] = [];
@@ -192,6 +223,64 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
     );
   }
 
+  if (despatch) {
+    const formatDespatch = (
+      plan: NonNullable<NonNullable<AdviseRequest["despatch"]>["recommendedPlan"]>,
+      label: string,
+    ) => {
+      const parts = plan.sources.map((s) => `${s.name}: ${n(s.mt)} MT (${n(s.ffaPct, 2)}% FFA)`);
+      const status = plan.meetsTarget
+        ? lang === "bm"
+          ? "dalam had FFA baik"
+          : "within the good FFA limit"
+        : lang === "bm"
+          ? `FFA muatan ${n(plan.loadFfaPct, 2)}%`
+          : `load FFA ${n(plan.loadFfaPct, 2)}%`;
+      const shortfall =
+        plan.shortfallMt > 0
+          ? lang === "bm"
+            ? ` Kurang ${n(plan.shortfallMt)} MT.`
+            : ` Short ${n(plan.shortfallMt)} MT.`
+          : "";
+      return lang === "bm"
+        ? `${label} (${status}, ${n(plan.totalMt)} MT): ${parts.join("; ")}.${shortfall}`
+        : `${label} (${status}, ${n(plan.totalMt)} MT): ${parts.join("; ")}.${shortfall}`;
+    };
+
+    if (despatch.recommendedPlan) {
+      const ranked = [
+        despatch.recommendedPlan,
+        ...(despatch.alternativePlans ?? []),
+      ] as NonNullable<NonNullable<AdviseRequest["despatch"]>["recommendedPlan"]>[];
+
+      sections.push(
+        section(
+          lang,
+          "Tanker despatch",
+          "Despatch tanker",
+          `Tanker load target is ${n(despatch.tankerLoadMt)} MT from post-blend stock. ${ranked
+            .map((plan, i) => formatDespatch(plan, i === 0 ? "Best despatch" : `Despatch ${i + 1}`))
+            .join(" ")}`,
+          `Sasaran muatan tanker ialah ${n(despatch.tankerLoadMt)} MT daripada stok selepas campuran. ${ranked
+            .map((plan, i) =>
+              formatDespatch(plan, i === 0 ? "Despatch terbaik" : `Despatch ${i + 1}`),
+            )
+            .join(" ")}`,
+        ),
+      );
+    } else {
+      sections.push(
+        section(
+          lang,
+          "Tanker despatch",
+          "Despatch tanker",
+          `No tanker despatch plan for ${n(despatch.tankerLoadMt)} MT — check post-blend stock after allocation.`,
+          `Tiada pelan despatch tanker untuk ${n(despatch.tankerLoadMt)} MT — semak stok selepas campuran selepas peruntukan.`,
+        ),
+      );
+    }
+  }
+
   sections.push(
     section(
       lang,
@@ -213,7 +302,7 @@ export function buildSystemPrompt(lang: "en" | "bm", userQuestion?: string) {
 
   const questionRule = userQuestion
     ? `The engineer asked: "${userQuestion}". Answer this question first using only the provided data, then give brief supporting context from the plan.`
-    : "Give a structured opinion covering summary, key risks, recommended action, and before-transfer checks.";
+    : "Give a structured opinion covering summary, key risks, recommended allocation, tanker despatch (if provided), and before-transfer checks.";
 
   return `You are a senior palm oil mill CPO blending advisor supporting engineers at a Malaysian mill.
 
@@ -221,6 +310,8 @@ Rules:
 - Use ONLY the numbers and flags provided in the user message. Never invent tank readings, percentages, or MT values.
 - The recommendedPlan is rank 1; alternativePlans (if present) are ranks 2–3 from the same engine. Treat recommendedPlan as the mathematical best unless flags show it is infeasible.
 - When alternativePlans are provided, briefly compare how plans 2 and 3 differ and when an engineer might choose them over plan 1.
+- despatch (if present) covers tanker loading from post-blend stock. recommendedPlan is the best despatch option; alternativePlans are ranks 2–3. Mention which tanks to load, blended load FFA, and shortfall if the tanker cannot be fully filled.
+- When despatch data is provided, include tanker loading advice alongside blend allocation advice when relevant to the engineer's question.
 - targetFfaPct is the GOOD FFA LIMIT (maximum for good quality), not a target to hit. FFA lower than this limit is better; 4.8% means at or below 4.8% is good, and lower values are preferable.
 - Explain WHY the recommended allocation is best, which tanks are risky, and what operational actions the engineer should take before transfer.
 - Compare currentPlan vs recommendedPlan when they differ.

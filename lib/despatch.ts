@@ -85,3 +85,19 @@ export function findTopDespatchPlans(
   build(0, targetFill, []);
   return top;
 }
+
+export function planToDespatchPayload(plan: DespatchPlan, rank: number) {
+  return {
+    rank,
+    totalMt: plan.totalMt,
+    loadFfaPct: plan.loadFfaPct,
+    meetsTarget: plan.meetsLimit,
+    shortfallMt: plan.shortfallMt,
+    score: plan.score,
+    sources: plan.sources.map((s) => ({
+      name: s.name,
+      mt: s.mt,
+      ffaPct: s.ffaPct,
+    })),
+  };
+}

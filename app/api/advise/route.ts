@@ -176,6 +176,7 @@ export async function POST(request: Request) {
           currentPlan: payload.currentPlan,
           recommendedPlan: payload.recommendedPlan,
           alternativePlans: payload.alternativePlans ?? [],
+          despatch: payload.despatch ?? null,
           flags: payload.flags,
         },
         engineerQuestion: payload.userQuestion ?? null,

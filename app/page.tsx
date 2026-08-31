@@ -20,7 +20,7 @@ import {
   Truck,
 } from "lucide-react";
 import type { AdviseRequest } from "@/lib/advise";
-import { findTopDespatchPlans, type DespatchPlan } from "@/lib/despatch";
+import { findTopDespatchPlans, planToDespatchPayload, type DespatchPlan } from "@/lib/despatch";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
 import { FormattedOpinion } from "@/lib/format-opinion";
 
@@ -34,7 +34,7 @@ type Result = Tank & {
   overflow: boolean;
 };
 type TankState = "safe" | "warning" | "critical";
-type MobileTab = "overview" | "tanks" | "plan";
+type MobileTab = "overview" | "tanks" | "plan" | "despatch";
 
 const initialTanks: Tank[] = [
   { name: "BST 1", capacity: 2000, stock: 465, ffa: 4.54 },
@@ -289,7 +289,7 @@ export default function Home() {
     setAiOpinion(null);
     setAiSource(null);
     setAiError(null);
-  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, topPlans]);
+  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, topPlans, tankerLoadMt, topDespatchPlans]);
 
   useEffect(() => {
     if (aiCooldown <= 0) return;
@@ -334,6 +334,15 @@ export default function Home() {
         })),
         recommendedPlan: best ? planToAdvisePayload(best, 1, target) : null,
         alternativePlans: topPlans.slice(1).map((plan, i) => planToAdvisePayload(plan, i + 2, target)),
+        despatch: {
+          tankerLoadMt: tankerLoadMt,
+          recommendedPlan: topDespatchPlans[0]
+            ? planToDespatchPayload(topDespatchPlans[0], 1)
+            : null,
+          alternativePlans: topDespatchPlans
+            .slice(1)
+            .map((plan, i) => planToDespatchPayload(plan, i + 2)),
+        },
         flags: {
           allocationTotalPct: allocationTotal,
           allocationValid: allocationTotal === 100,
@@ -567,12 +576,6 @@ export default function Home() {
         onAiQuestionChange={setAiQuestion}
         onGetAiOpinion={fetchAiOpinion}
       />
-      <TankerDespatchPlanner
-        copy={copy}
-        tankerLoadMt={tankerLoadMt}
-        onTankerLoadChange={setTankerLoadMt}
-        topPlans={topDespatchPlans}
-      />
       <DecisionSafeguards
         copy={copy}
         results={results}
@@ -583,10 +586,20 @@ export default function Home() {
     </>
   );
 
+  const despatchPanel = (
+    <TankerDespatchPlanner
+      copy={copy}
+      tankerLoadMt={tankerLoadMt}
+      onTankerLoadChange={setTankerLoadMt}
+      topPlans={topDespatchPlans}
+    />
+  );
+
   const navItems: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: copy.nav.overview, icon: <LayoutDashboard size={20} /> },
     { id: "tanks", label: copy.nav.tanks, icon: <Droplets size={20} /> },
     { id: "plan", label: copy.nav.plan, icon: <Sparkles size={20} /> },
+    { id: "despatch", label: copy.nav.despatch, icon: <Truck size={20} /> },
   ];
 
   return (
@@ -644,6 +657,7 @@ export default function Home() {
           )}
           {mobileTab === "tanks" && tanksPanel}
           {mobileTab === "plan" && planPanel}
+          {mobileTab === "despatch" && despatchPanel}
         </div>
 
         {/* Desktop layout */}
@@ -653,6 +667,7 @@ export default function Home() {
             <div className="space-y-5">
               {forecastPanel}
               {tanksPanel}
+              {despatchPanel}
             </div>
             <aside className="space-y-5">{planPanel}</aside>
           </div>
@@ -1604,7 +1619,7 @@ function TankerDespatchPlanner({
   const hasStock = topPlans.length > 0;
 
   return (
-    <section className="mt-4 overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
       <div className="border-b border-[#e8ede8] bg-[#f8faf7] p-4 sm:p-5">
         <div className="flex items-center gap-2 font-bold text-[#173f30]">
           <Truck size={19} className="text-[#245f43]" />

@@ -10,7 +10,7 @@ export const translations = {
     ready: "Ready",
     footer:
       "Decision-support tool only · Final transfer requires authorised engineer verification",
-    nav: { overview: "Overview", tanks: "Tanks", plan: "Plan" },
+    nav: { overview: "Overview", tanks: "Tanks", plan: "Plan", despatch: "Despatch" },
     metrics: {
       currentStock: "Current stock",
       highFfaStock: "High-FFA stock",
@@ -124,7 +124,7 @@ export const translations = {
       description:
         "Ask about your calculated plan in plain language — numbers always come from the engine.",
       questionPlaceholder:
-        "Type a question, e.g. Can we send more CPO to BST 3? Why avoid BST 2?",
+        "Type a question, e.g. Can we send more CPO to BST 3? Which tanks for a 28 MT tanker load?",
       ask: "Ask AI",
       generating: "Generating…",
       wait: (s: number) => `Wait ${s}s`,
@@ -148,7 +148,7 @@ export const translations = {
     ready: "Sedia",
     footer:
       "Alat sokongan keputusan sahaja · Pemindahan akhir memerlukan pengesahan jurutera berwibawa",
-    nav: { overview: "Ringkasan", tanks: "Tangki", plan: "Pelan" },
+    nav: { overview: "Ringkasan", tanks: "Tangki", plan: "Pelan", despatch: "Despatch" },
     metrics: {
       currentStock: "Stok semasa",
       highFfaStock: "Stok FFA tinggi",
@@ -262,7 +262,7 @@ export const translations = {
       description:
         "Tanya tentang pelan yang dikira — nombor sentiasa daripada enjin pengiraan.",
       questionPlaceholder:
-        "Taip soalan, cth. Bolehkah hantar lebih CPO ke BST 3? Kenapa elak BST 2?",
+        "Taip soalan, cth. Bolehkah hantar lebih CPO ke BST 3? Tangki mana untuk muatan tanker 28 MT?",
       ask: "Tanya AI",
       generating: "Menjana…",
       wait: (s: number) => `Tunggu ${s}s`,
