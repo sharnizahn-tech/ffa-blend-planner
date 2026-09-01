@@ -178,13 +178,24 @@ export async function POST(request: Request) {
           alternativePlans: payload.alternativePlans ?? [],
           despatch: payload.despatch ?? null,
           flags: payload.flags,
+          penalty: payload.penalty ?? null,
+          prediction: payload.prediction ?? null,
+          productionSuggestion: payload.productionSuggestion ?? null,
+          lossOptimizer: payload.lossOptimizer ?? [],
+          batchBlend: payload.batchBlend ?? null,
         },
+        conversationHistory: payload.conversationHistory ?? [],
         engineerQuestion: payload.userQuestion ?? null,
       },
       null,
       2,
     );
-    const systemPrompt = buildSystemPrompt(lang, payload.userQuestion);
+    const systemPrompt = buildSystemPrompt(
+      lang,
+      payload.userQuestion,
+      payload.deepAnalysis,
+      !!payload.conversationHistory?.length,
+    );
     const result = await requestOpenAiOpinion(apiKey, baseUrl, models, systemPrompt, userContent);
 
     if ("opinion" in result) {

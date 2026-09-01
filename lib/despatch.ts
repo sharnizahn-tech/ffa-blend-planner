@@ -20,10 +20,17 @@ function sameSources(a: DespatchSource[], b: DespatchSource[]) {
   return a.every((s, i) => s.name === b[i].name && s.mt === b[i].mt);
 }
 
+/** Weight applied to the number of source tanks a plan draws from. Higher =
+ *  more strongly prefers simpler loads (fewer tanks) when the FFA outcome is
+ *  similar — easier for the loading crew to execute. */
+const TANK_COUNT_WEIGHT_DEFAULT = 5;
+const TANK_COUNT_WEIGHT_PREFER_FEWER = 30;
+
 function buildDespatchPlan(
   sources: DespatchSource[],
   loadMt: number,
   target: number,
+  tankCountWeight: number,
 ): DespatchPlan {
   const active = sources.filter((s) => s.mt > 0);
   const totalMt = active.reduce((s, x) => s + x.mt, 0);
@@ -31,7 +38,8 @@ function buildDespatchPlan(
     totalMt > 0 ? active.reduce((s, x) => s + x.mt * x.ffaPct, 0) / totalMt : 0;
   const shortfallMt = Math.max(0, loadMt - totalMt);
   const excess = Math.max(0, loadFfaPct - target) * totalMt;
-  const score = excess * 100 + shortfallMt * 50 + active.length * 5 + loadFfaPct * 0.1;
+  const score =
+    excess * 100 + shortfallMt * 50 + active.length * tankCountWeight + loadFfaPct * 0.1;
   return {
     sources: active,
     totalMt,
@@ -47,9 +55,13 @@ export function findTopDespatchPlans(
   loadMt: number,
   target: number,
   limit = 3,
+  preferFewerTanks = true,
 ): DespatchPlan[] {
   if (loadMt <= 0 || tanks.length === 0) return [];
 
+  const tankCountWeight = preferFewerTanks
+    ? TANK_COUNT_WEIGHT_PREFER_FEWER
+    : TANK_COUNT_WEIGHT_DEFAULT;
   const top: DespatchPlan[] = [];
   const totalAvailable = tanks.reduce((s, t) => s + Math.max(0, t.stockMt), 0);
   if (totalAvailable <= 0) return [];
@@ -62,7 +74,7 @@ export function findTopDespatchPlans(
       mt: amounts[i] ?? 0,
       ffaPct: t.ffaPct,
     }));
-    const plan = buildDespatchPlan(sources, loadMt, target);
+    const plan = buildDespatchPlan(sources, loadMt, target, tankCountWeight);
     if (plan.totalMt <= 0) return;
     if (top.some((p) => sameSources(p.sources, plan.sources))) return;
     top.push(plan);

@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRightLeft,
   Beaker,
   Bot,
   CheckCircle2,
   ChevronDown,
+  Coins,
   Droplets,
   Gauge,
   Info,
@@ -14,15 +16,62 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Scale,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Trash2,
+  TrendingUp,
   Truck,
+  User,
+  Wand2,
+  X,
 } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { AdviseRequest } from "@/lib/advise";
 import { findTopDespatchPlans, planToDespatchPayload, type DespatchPlan } from "@/lib/despatch";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
 import { FormattedOpinion } from "@/lib/format-opinion";
+import {
+  calcPenaltyExposure,
+  calcTotalExposure,
+  createEmptyBuyerProfile,
+  loadActiveProfileId,
+  loadBuyerProfiles,
+  newPenaltyBandId,
+  saveActiveProfileId,
+  saveBuyerProfiles,
+  type BuyerProfile,
+  type PenaltyBand,
+} from "@/lib/penalty";
+import {
+  DEFAULT_HORIZON_DAYS,
+  DEFAULT_RISE_FACTOR_PER_DAY,
+  daysUntilLimit,
+  loadHorizonDays,
+  loadRiseFactor,
+  projectFfaRise,
+  saveHorizonDays,
+  saveRiseFactor,
+} from "@/lib/prediction";
+import { suggestSafeProduction, type SafeProductionSuggestion } from "@/lib/production";
+import {
+  compareHoldVsDespatch,
+  DEFAULT_MAX_TRANSFER_PER_DAY_MT,
+  loadMaxTransferPerDay,
+  saveMaxTransferPerDay,
+  type HoldVsDespatch,
+} from "@/lib/lossOptimizer";
+import { planBatchBlend, type BatchBlendResult } from "@/lib/batchBlend";
 
 type Tank = { name: string; capacity: number; stock: number; ffa: number };
 type Result = Tank & {
@@ -34,7 +83,7 @@ type Result = Tank & {
   overflow: boolean;
 };
 type TankState = "safe" | "warning" | "critical";
-type MobileTab = "overview" | "tanks" | "plan" | "despatch";
+type MobileTab = "overview" | "tanks" | "plan" | "despatch" | "batch";
 
 const initialTanks: Tank[] = [
   { name: "BST 1", capacity: 2000, stock: 465, ffa: 4.54 },
@@ -136,7 +185,12 @@ function findTopPlans(
   return top;
 }
 
-function planToAdvisePayload(plan: BlendPlan, rank: number, target: number) {
+function planToAdvisePayload(
+  plan: BlendPlan,
+  rank: number,
+  target: number,
+  penaltyBands?: PenaltyBand[] | null,
+) {
   return {
     rank,
     allocationPct: plan.allocation,
@@ -152,6 +206,14 @@ function planToAdvisePayload(plan: BlendPlan, rank: number, target: number) {
       utilisationPct: r.utilisation,
       overflow: r.overflow,
     })),
+    ...(penaltyBands
+      ? {
+          penaltyRm: calcTotalExposure(
+            plan.results.map((r) => ({ ffaPct: r.finalFFA, tonnageMt: r.finalStock })),
+            penaltyBands,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -229,8 +291,9 @@ export default function Home() {
   const [expandedTanks, setExpandedTanks] = useState<Set<number>>(
     () => new Set(initialTanks.map((_, i) => i)),
   );
-  const [aiOpinion, setAiOpinion] = useState<string | null>(null);
-  const [aiSource, setAiSource] = useState<"openai" | "offline" | null>(null);
+  const [aiMessages, setAiMessages] = useState<
+    { role: "user" | "assistant"; content: string; source?: "openai" | "offline"; kind?: "deep" }[]
+  >([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiCooldown, setAiCooldown] = useState(0);
@@ -238,7 +301,49 @@ export default function Home() {
   const [lang, setLang] = useState<Lang>("en");
   const [tankerLoadMt, setTankerLoadMt] = useState(28);
 
+  const [buyerProfiles, setBuyerProfiles] = useState<BuyerProfile[]>(() => [
+    createEmptyBuyerProfile("Buyer 1"),
+  ]);
+  const [activeProfileId, setActiveProfileId] = useState("");
+  const [riseFactorPerDay, setRiseFactorPerDay] = useState(DEFAULT_RISE_FACTOR_PER_DAY);
+  const [horizonDays, setHorizonDays] = useState(DEFAULT_HORIZON_DAYS);
+  const [preferFewerTanks, setPreferFewerTanks] = useState(true);
+  const [showScenarioCompare, setShowScenarioCompare] = useState(false);
+  const [scenarios, setScenarios] = useState([
+    { id: "b", millCapacity: 40, hours: 22, utilisation: 100, oer: 19, incomingFFA: 6.7 },
+    { id: "c", millCapacity: 40, hours: 18, utilisation: 100, oer: 19, incomingFFA: 6.7 },
+  ]);
+  const [maxTransferPerDayMt, setMaxTransferPerDayMtState] = useState(DEFAULT_MAX_TRANSFER_PER_DAY_MT);
+  const [batchSelected, setBatchSelected] = useState<Set<number>>(
+    () => new Set(initialTanks.map((_, i) => i)),
+  );
+
   const copy = getCopy(lang);
+  const activeProfile = buyerProfiles.find((p) => p.id === activeProfileId) ?? buyerProfiles[0] ?? null;
+
+  const updateBuyerProfiles = (updater: (profiles: BuyerProfile[]) => BuyerProfile[]) => {
+    setBuyerProfiles((prev) => {
+      const next = updater(prev);
+      saveBuyerProfiles(next);
+      return next;
+    });
+  };
+  const setActiveProfile = (id: string) => {
+    setActiveProfileId(id);
+    saveActiveProfileId(id);
+  };
+  const changeRiseFactor = (v: number) => {
+    setRiseFactorPerDay(v);
+    saveRiseFactor(v);
+  };
+  const changeHorizonDays = (v: number) => {
+    setHorizonDays(v);
+    saveHorizonDays(v);
+  };
+  const changeMaxTransferPerDay = (v: number) => {
+    setMaxTransferPerDayMtState(v);
+    saveMaxTransferPerDay(v);
+  };
   const highFfaTankNames = tanks
     .filter((t) => t.ffa > target)
     .map((t) => t.name)
@@ -247,6 +352,28 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem("ffa-lang");
     if (saved === "en" || saved === "bm") setLang(saved);
+
+    const storedProfiles = loadBuyerProfiles();
+    const storedActive = loadActiveProfileId();
+    if (storedProfiles && storedProfiles.length) {
+      setBuyerProfiles(storedProfiles);
+      setActiveProfileId(
+        storedActive && storedProfiles.some((p) => p.id === storedActive)
+          ? storedActive
+          : storedProfiles[0].id,
+      );
+    } else {
+      setBuyerProfiles((prev) => {
+        if (prev[0]) setActiveProfileId(prev[0].id);
+        return prev;
+      });
+    }
+    const storedRise = loadRiseFactor();
+    if (storedRise !== null) setRiseFactorPerDay(storedRise);
+    const storedHorizon = loadHorizonDays();
+    if (storedHorizon !== null) setHorizonDays(storedHorizon);
+    const storedTransfer = loadMaxTransferPerDay();
+    if (storedTransfer !== null) setMaxTransferPerDayMtState(storedTransfer);
   }, []);
 
   const setLanguage = (next: Lang) => {
@@ -281,15 +408,123 @@ export default function Home() {
     [results],
   );
   const topDespatchPlans = useMemo(
-    () => findTopDespatchPlans(despatchTanks, tankerLoadMt, target),
-    [despatchTanks, tankerLoadMt, target],
+    () => findTopDespatchPlans(despatchTanks, tankerLoadMt, target, 3, preferFewerTanks),
+    [despatchTanks, tankerLoadMt, target, preferFewerTanks],
+  );
+
+  const penaltyPerTank = useMemo(
+    () =>
+      activeProfile
+        ? results.map((r) => ({
+            name: r.name,
+            ...calcPenaltyExposure(r.finalFFA, r.finalStock, activeProfile.bands),
+          }))
+        : [],
+    [results, activeProfile],
+  );
+  const totalPenaltyExposureRm = useMemo(
+    () =>
+      activeProfile
+        ? calcTotalExposure(
+            results.map((r) => ({ ffaPct: r.finalFFA, tonnageMt: r.finalStock })),
+            activeProfile.bands,
+          )
+        : 0,
+    [results, activeProfile],
+  );
+  const despatchPenaltyRm = useMemo(() => {
+    if (!activeProfile || !topDespatchPlans[0]) return 0;
+    return calcTotalExposure(
+      topDespatchPlans[0].sources.map((s) => ({ ffaPct: s.ffaPct, tonnageMt: s.mt })),
+      activeProfile.bands,
+    );
+  }, [activeProfile, topDespatchPlans]);
+
+  const ffaProjections = useMemo(
+    () =>
+      results.map((r) => ({
+        name: r.name,
+        points: projectFfaRise(r.finalFFA, incomingFFA, riseFactorPerDay, horizonDays),
+        daysToLimit: daysUntilLimit(r.finalFFA, incomingFFA, riseFactorPerDay, target, horizonDays),
+      })),
+    [results, incomingFFA, riseFactorPerDay, horizonDays, target],
+  );
+  const anyProjectedBreach = ffaProjections.some((p) => p.daysToLimit !== null);
+
+  const safeProduction = useMemo<SafeProductionSuggestion>(
+    () => suggestSafeProduction(tanks, target, incomingFFA, millCapacity, hours, utilisation, oer),
+    [tanks, target, incomingFFA, millCapacity, hours, utilisation, oer],
+  );
+
+  const lossOptimizerResults = useMemo<HoldVsDespatch[]>(() => {
+    if (!activeProfile) return [];
+    return tanks
+      .map((tank, i) => {
+        if (tank.ffa <= target) return null;
+        const others = tanks.filter((_, j) => j !== i);
+        return compareHoldVsDespatch(
+          tank,
+          others,
+          target,
+          incomingCPO,
+          incomingFFA,
+          riseFactorPerDay,
+          maxTransferPerDayMt,
+          activeProfile.bands,
+        );
+      })
+      .filter((r): r is HoldVsDespatch => r !== null);
+  }, [tanks, target, incomingCPO, incomingFFA, riseFactorPerDay, maxTransferPerDayMt, activeProfile]);
+
+  const batchBlendTanks = useMemo(
+    () => tanks.filter((_, i) => batchSelected.has(i)),
+    [tanks, batchSelected],
+  );
+  const batchBlendResult = useMemo<BatchBlendResult | null>(() => {
+    if (batchBlendTanks.length < 2) return null;
+    return planBatchBlend(batchBlendTanks, target, maxTransferPerDayMt);
+  }, [batchBlendTanks, target, maxTransferPerDayMt]);
+
+  const scenarioResults = useMemo(
+    () =>
+      scenarios.map((s) => {
+        const ffb = (s.millCapacity * s.hours * s.utilisation) / 100;
+        const cpo = (ffb * s.oer) / 100;
+        const plans = findTopPlans(tanks, cpo, s.incomingFFA, target);
+        const scenarioBest = plans[0] ?? null;
+        return {
+          id: s.id,
+          incomingCpo: cpo,
+          meetsTarget: scenarioBest ? scenarioBest.results.every((r) => r.finalFFA <= target) : false,
+          overflow: scenarioBest ? scenarioBest.results.some((r) => r.overflow) : true,
+          feasible: !!scenarioBest,
+        };
+      }),
+    [scenarios, tanks, target],
   );
 
   useEffect(() => {
-    setAiOpinion(null);
-    setAiSource(null);
+    setAiMessages([]);
     setAiError(null);
-  }, [tanks, allocation, millCapacity, hours, utilisation, oer, incomingFFA, target, incomingCPO, topPlans, tankerLoadMt, topDespatchPlans]);
+  }, [
+    tanks,
+    allocation,
+    millCapacity,
+    hours,
+    utilisation,
+    oer,
+    incomingFFA,
+    target,
+    incomingCPO,
+    topPlans,
+    tankerLoadMt,
+    topDespatchPlans,
+    activeProfileId,
+    riseFactorPerDay,
+    horizonDays,
+    maxTransferPerDayMt,
+    batchSelected,
+  ]);
 
   useEffect(() => {
     if (aiCooldown <= 0) return;
@@ -299,8 +534,14 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [aiCooldown]);
 
-  const fetchAiOpinion = async () => {
+  const fetchAiOpinion = async (opts: { deepAnalysis?: boolean } = {}) => {
     if (aiLoading || aiCooldown > 0) return;
+    const question = aiQuestion.trim();
+    const historyForRequest = aiMessages.map((m) => ({ role: m.role, content: m.content }));
+    if (question) {
+      setAiMessages((prev) => [...prev, { role: "user", content: question }]);
+    }
+    setAiQuestion("");
     setAiLoading(true);
     setAiError(null);
     setAiCooldown(60);
@@ -332,8 +573,10 @@ export default function Home() {
           utilisationPct: r.utilisation,
           overflow: r.overflow,
         })),
-        recommendedPlan: best ? planToAdvisePayload(best, 1, target) : null,
-        alternativePlans: topPlans.slice(1).map((plan, i) => planToAdvisePayload(plan, i + 2, target)),
+        recommendedPlan: best ? planToAdvisePayload(best, 1, target, activeProfile?.bands) : null,
+        alternativePlans: topPlans
+          .slice(1)
+          .map((plan, i) => planToAdvisePayload(plan, i + 2, target, activeProfile?.bands)),
         despatch: {
           tankerLoadMt: tankerLoadMt,
           recommendedPlan: topDespatchPlans[0]
@@ -350,8 +593,50 @@ export default function Home() {
           highFfaStockMt: highFFAStock,
           currentPlanValid: valid,
         },
-        userQuestion: aiQuestion.trim() || undefined,
+        penalty: activeProfile
+          ? {
+              buyerName: activeProfile.name,
+              totalExposureRm: totalPenaltyExposureRm,
+              perTank: penaltyPerTank.map(({ name, rmPerMt, totalRm }) => ({ name, rmPerMt, totalRm })),
+            }
+          : null,
+        prediction: {
+          riseFactorPerDay,
+          horizonDays,
+          tanks: ffaProjections.map((p) => ({ name: p.name, daysUntilLimit: p.daysToLimit })),
+        },
+        productionSuggestion: {
+          maxSafeIncomingCpoMt: safeProduction.maxSafeIncomingCpoMt,
+          binding: safeProduction.binding,
+          suggestedHoursAtCurrentUtilisation: safeProduction.suggestedHoursAtCurrentUtilisation,
+          suggestedUtilisationPctAtCurrentHours: safeProduction.suggestedUtilisationPctAtCurrentHours,
+        },
+        lossOptimizer: lossOptimizerResults.map((r) => ({
+          tankName: r.tankName,
+          despatchNowPenaltyRm: r.despatchNowPenaltyRm,
+          holdFeasible: r.hold.feasible,
+          holdDays: r.hold.days,
+          holdPenaltyRm: r.holdPenaltyRm,
+          savingsRm: r.savingsRm,
+          recommendation: r.recommendation,
+        })),
+        batchBlend: batchBlendResult
+          ? {
+              feasible: batchBlendResult.feasible,
+              days: batchBlendResult.days,
+              reason: batchBlendResult.reason,
+              steps: batchBlendResult.steps.map((s) => ({
+                day: s.day,
+                fromTank: s.fromTank,
+                toTank: s.toTank,
+                mt: s.mt,
+              })),
+            }
+          : null,
+        conversationHistory: historyForRequest,
+        userQuestion: question || undefined,
         language: lang,
+        deepAnalysis: opts.deepAnalysis,
       };
 
       const response = await fetch("/api/advise", {
@@ -369,8 +654,15 @@ export default function Home() {
         throw new Error(data.error ?? copy.ai.errorGeneric);
       }
 
-      setAiOpinion(data.opinion ?? null);
-      setAiSource(data.source ?? "openai");
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.opinion ?? "",
+          source: data.source ?? "openai",
+          kind: opts.deepAnalysis ? "deep" : undefined,
+        },
+      ]);
     } catch (error) {
       setAiError(error instanceof Error ? error.message : copy.ai.errorGeneric);
     } finally {
@@ -400,20 +692,23 @@ export default function Home() {
     setTanks((p) => [...p, { name: suggestTankName(p), capacity: 2000, stock: 0, ffa: 0 }]);
     setAllocation((p) => [...p, 0]);
     setExpandedTanks((p) => new Set([...p, tanks.length]));
+    setBatchSelected((p) => new Set([...p, tanks.length]));
     setMobileTab("tanks");
   };
   const removeTank = (index: number) => {
     if (tanks.length <= 1) return;
     setTanks((p) => p.filter((_, i) => i !== index));
     setAllocation((p) => p.filter((_, i) => i !== index));
-    setExpandedTanks((p) => {
+    const reindex = (p: Set<number>) => {
       const next = new Set<number>();
       p.forEach((idx) => {
         if (idx < index) next.add(idx);
         else if (idx > index) next.add(idx - 1);
       });
       return next;
-    });
+    };
+    setExpandedTanks(reindex);
+    setBatchSelected(reindex);
   };
   const toggleTank = (index: number) =>
     setExpandedTanks((p) => {
@@ -476,6 +771,23 @@ export default function Home() {
       </div>
       <p className="mt-3 text-xs leading-relaxed text-[#758078]">{copy.forecast.ffaLimitHint}</p>
     </Panel>
+  );
+
+  const productionOptimizerPanel = (
+    <ProductionOptimizer
+      copy={copy}
+      suggestion={safeProduction}
+      showScenarioCompare={showScenarioCompare}
+      onToggleScenarioCompare={() => setShowScenarioCompare((v) => !v)}
+      scenarios={scenarios}
+      scenarioResults={scenarioResults}
+      onScenarioChange={(id, key, value) =>
+        setScenarios((prev) => prev.map((s) => (s.id === id ? { ...s, [key]: value } : s)))
+      }
+      baselineIncomingCpo={incomingCPO}
+      baselineMeetsTarget={bestMeetsTarget}
+      baselineOverflow={hasOverflow}
+    />
   );
 
   const allocationBanner = (
@@ -551,8 +863,33 @@ export default function Home() {
     </Panel>
   );
 
+  const ffaForecastPanel = (
+    <FfaForecastPanel
+      copy={copy}
+      projections={ffaProjections}
+      target={target}
+      riseFactorPerDay={riseFactorPerDay}
+      onRiseFactorChange={changeRiseFactor}
+      horizonDays={horizonDays}
+      onHorizonChange={changeHorizonDays}
+    />
+  );
+
+  const penaltyPanel = (
+    <PenaltyPanel
+      copy={copy}
+      profiles={buyerProfiles}
+      activeProfile={activeProfile}
+      onSelectProfile={setActiveProfile}
+      onUpdateProfiles={updateBuyerProfiles}
+      penaltyPerTank={penaltyPerTank}
+      totalExposureRm={totalPenaltyExposureRm}
+    />
+  );
+
   const planPanel = (
     <>
+      {penaltyPanel}
       <SmartRecommendation
         copy={copy}
         topPlans={topPlans}
@@ -567,14 +904,18 @@ export default function Home() {
           applyPlan(plan);
           setMobileTab("tanks");
         }}
-        aiOpinion={aiOpinion}
-        aiSource={aiSource}
+        aiMessages={aiMessages}
         aiLoading={aiLoading}
         aiError={aiError}
         aiCooldown={aiCooldown}
         aiQuestion={aiQuestion}
         onAiQuestionChange={setAiQuestion}
         onGetAiOpinion={fetchAiOpinion}
+        onClearChat={() => {
+          setAiMessages([]);
+          setAiError(null);
+        }}
+        penaltyBands={activeProfile?.bands}
       />
       <DecisionSafeguards
         copy={copy}
@@ -582,16 +923,49 @@ export default function Home() {
         allocationTotal={allocationTotal}
         highFFAStock={highFFAStock}
         target={target}
+        anyProjectedBreach={anyProjectedBreach}
       />
     </>
   );
 
   const despatchPanel = (
-    <TankerDespatchPlanner
+    <>
+      <TankerDespatchPlanner
+        copy={copy}
+        tankerLoadMt={tankerLoadMt}
+        onTankerLoadChange={setTankerLoadMt}
+        topPlans={topDespatchPlans}
+        preferFewerTanks={preferFewerTanks}
+        onPreferFewerTanksChange={setPreferFewerTanks}
+        penaltyRm={activeProfile ? despatchPenaltyRm : null}
+      />
+      <LossOptimizerPanel
+        copy={copy}
+        results={lossOptimizerResults}
+        hasProfile={!!activeProfile}
+        maxTransferPerDayMt={maxTransferPerDayMt}
+        onMaxTransferChange={changeMaxTransferPerDay}
+      />
+    </>
+  );
+
+  const batchPanel = (
+    <BatchBlendPlanner
       copy={copy}
-      tankerLoadMt={tankerLoadMt}
-      onTankerLoadChange={setTankerLoadMt}
-      topPlans={topDespatchPlans}
+      tanks={tanks}
+      selected={batchSelected}
+      onToggleTank={(i) =>
+        setBatchSelected((p) => {
+          const next = new Set(p);
+          if (next.has(i)) next.delete(i);
+          else next.add(i);
+          return next;
+        })
+      }
+      target={target}
+      maxTransferPerDayMt={maxTransferPerDayMt}
+      onMaxTransferChange={changeMaxTransferPerDay}
+      result={batchBlendResult}
     />
   );
 
@@ -600,6 +974,7 @@ export default function Home() {
     { id: "tanks", label: copy.nav.tanks, icon: <Droplets size={20} /> },
     { id: "plan", label: copy.nav.plan, icon: <Sparkles size={20} /> },
     { id: "despatch", label: copy.nav.despatch, icon: <Truck size={20} /> },
+    { id: "batch", label: copy.nav.batch, icon: <ArrowRightLeft size={20} /> },
   ];
 
   return (
@@ -652,12 +1027,19 @@ export default function Home() {
                 />
               )}
               {forecastPanel}
+              {productionOptimizerPanel}
               {allocationBanner}
             </>
           )}
-          {mobileTab === "tanks" && tanksPanel}
+          {mobileTab === "tanks" && (
+            <>
+              {tanksPanel}
+              {ffaForecastPanel}
+            </>
+          )}
           {mobileTab === "plan" && planPanel}
           {mobileTab === "despatch" && despatchPanel}
+          {mobileTab === "batch" && batchPanel}
         </div>
 
         {/* Desktop layout */}
@@ -666,8 +1048,11 @@ export default function Home() {
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,.75fr)]">
             <div className="space-y-5">
               {forecastPanel}
+              {productionOptimizerPanel}
               {tanksPanel}
+              {ffaForecastPanel}
               {despatchPanel}
+              {batchPanel}
             </div>
             <aside className="space-y-5">{planPanel}</aside>
           </div>
@@ -1288,6 +1673,7 @@ function PlanOption({
   highlighted,
   compact = false,
   onApply,
+  penaltyBands,
 }: {
   rank: number;
   plan: BlendPlan;
@@ -1298,9 +1684,22 @@ function PlanOption({
   highlighted: boolean;
   compact?: boolean;
   onApply: () => void;
+  penaltyBands?: PenaltyBand[] | null;
 }) {
   const meetsTarget = plan.results.every((r) => r.finalFFA <= target);
   const maxFfa = Math.max(...plan.results.map((r) => r.finalFFA));
+  const penaltyRm = penaltyBands
+    ? calcTotalExposure(
+        plan.results.map((r) => ({ ffaPct: r.finalFFA, tonnageMt: r.finalStock })),
+        penaltyBands,
+      )
+    : null;
+  const penaltyLabel =
+    penaltyRm !== null
+      ? penaltyRm > 0
+        ? copy.plan.estimatedPenalty(n(penaltyRm, 0))
+        : copy.plan.noPenalty
+      : null;
 
   if (compact) {
     return (
@@ -1327,6 +1726,11 @@ function PlanOption({
         <p className="mt-1.5 text-[10px] text-[#708078]">
           {meetsTarget ? copy.plan.withinLimit : copy.plan.maxFinalFfa(maxFfa)}
         </p>
+        {penaltyLabel && (
+          <p className={`mt-1 text-[10px] font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#278858]"}`}>
+            {penaltyLabel}
+          </p>
+        )}
       </div>
     );
   }
@@ -1357,6 +1761,11 @@ function PlanOption({
         ))}
       </div>
       <p className="mt-2 text-[11px] text-[#708078]">{copy.plan.maxFinalFfa(maxFfa)}</p>
+      {penaltyLabel && (
+        <p className={`mt-1 text-[11px] font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#278858]"}`}>
+          {penaltyLabel}
+        </p>
+      )}
       <button
         type="button"
         onClick={onApply}
@@ -1382,14 +1791,15 @@ function SmartRecommendation({
   highFfaTankNames,
   incomingCPO,
   onApplyPlan,
-  aiOpinion,
-  aiSource,
+  aiMessages,
   aiLoading,
   aiError,
   aiCooldown,
   aiQuestion,
   onAiQuestionChange,
   onGetAiOpinion,
+  onClearChat,
+  penaltyBands,
 }: {
   copy: Copy;
   topPlans: BlendPlan[];
@@ -1401,21 +1811,16 @@ function SmartRecommendation({
   highFfaTankNames: string;
   incomingCPO: number;
   onApplyPlan: (plan: BlendPlan) => void;
-  aiOpinion: string | null;
-  aiSource: "openai" | "offline" | null;
+  aiMessages: AiMessage[];
   aiLoading: boolean;
   aiError: string | null;
   aiCooldown: number;
   aiQuestion: string;
   onAiQuestionChange: (value: string) => void;
-  onGetAiOpinion: () => void;
+  onGetAiOpinion: (opts?: { deepAnalysis?: boolean }) => void;
+  onClearChat: () => void;
+  penaltyBands?: PenaltyBand[] | null;
 }) {
-  const aiDisabled = aiLoading || aiCooldown > 0;
-  const aiButtonLabel = aiLoading
-    ? copy.ai.generating
-    : aiCooldown > 0
-      ? copy.ai.wait(aiCooldown)
-      : copy.ai.ask;
   const best = topPlans[0];
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
@@ -1468,6 +1873,7 @@ function SmartRecommendation({
                       highlighted={false}
                       compact
                       onApply={() => onApplyPlan(plan)}
+                      penaltyBands={penaltyBands}
                     />
                   ))}
                 </div>
@@ -1520,85 +1926,40 @@ function SmartRecommendation({
                   copy={copy}
                   highlighted={i === 0}
                   onApply={() => onApplyPlan(plan)}
+                  penaltyBands={penaltyBands}
                 />
               ))}
             </div>
 
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
-              <p className="section-label">{copy.ai.advisor}</p>
-              <p className="mt-1 text-sm text-[#58665e]">{copy.ai.description}</p>
-              <textarea
-                value={aiQuestion}
-                onChange={(e) => onAiQuestionChange(e.target.value)}
-                placeholder={copy.ai.questionPlaceholder}
-                rows={3}
-                maxLength={500}
-                className="mt-3 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
+              <AiAdvisorPanel
+                copy={copy}
+                aiMessages={aiMessages}
+                aiLoading={aiLoading}
+                aiError={aiError}
+                aiCooldown={aiCooldown}
+                aiQuestion={aiQuestion}
+                onAiQuestionChange={onAiQuestionChange}
+                onGetAiOpinion={onGetAiOpinion}
+                onClearChat={onClearChat}
               />
-              <button
-                type="button"
-                onClick={onGetAiOpinion}
-                disabled={aiDisabled}
-                className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60 sm:w-auto"
-              >
-                {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                {aiButtonLabel}
-              </button>
-
-              {aiError && (
-                <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
-                  {aiError}
-                </div>
-              )}
-
-              {aiOpinion && (
-                <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#245f43]">
-                    <Bot size={16} />
-                    {aiSource === "offline" ? copy.ai.opinionOffline : copy.ai.opinionLive}
-                  </div>
-                  <FormattedOpinion text={aiOpinion} />
-                </div>
-              )}
             </div>
           </>
         ) : (
           <>
             <p className="text-sm leading-relaxed text-[#8a3d20]">{copy.plan.noFeasiblePlan}</p>
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
-              <p className="section-label">{copy.ai.advisor}</p>
-              <textarea
-                value={aiQuestion}
-                onChange={(e) => onAiQuestionChange(e.target.value)}
-                placeholder={copy.ai.questionPlaceholder}
-                rows={3}
-                maxLength={500}
-                className="mt-2 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
+              <AiAdvisorPanel
+                copy={copy}
+                aiMessages={aiMessages}
+                aiLoading={aiLoading}
+                aiError={aiError}
+                aiCooldown={aiCooldown}
+                aiQuestion={aiQuestion}
+                onAiQuestionChange={onAiQuestionChange}
+                onGetAiOpinion={onGetAiOpinion}
+                onClearChat={onClearChat}
               />
-              <button
-                type="button"
-                onClick={onGetAiOpinion}
-                disabled={aiDisabled}
-                className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
-              >
-                {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-                {aiCooldown > 0 && !aiLoading ? copy.ai.wait(aiCooldown) : aiButtonLabel}
-              </button>
-              {aiError && (
-                <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
-                  {aiError}
-                </div>
-              )}
-              {aiOpinion && (
-                <div className="mt-3 rounded-xl border border-[#dfe6df] bg-[#f8faf7] p-4">
-                  {aiSource === "offline" && (
-                    <div className="mb-2 text-xs font-bold text-[#a85128]">
-                      {copy.ai.offlineUnavailable}
-                    </div>
-                  )}
-                  <FormattedOpinion text={aiOpinion} />
-                </div>
-              )}
             </div>
           </>
         )}
@@ -1607,16 +1968,145 @@ function SmartRecommendation({
   );
 }
 
+type AiMessage = {
+  role: "user" | "assistant";
+  content: string;
+  source?: "openai" | "offline";
+  kind?: "deep";
+};
+
+function AiAdvisorPanel({
+  copy,
+  aiMessages,
+  aiLoading,
+  aiError,
+  aiCooldown,
+  aiQuestion,
+  onAiQuestionChange,
+  onGetAiOpinion,
+  onClearChat,
+}: {
+  copy: Copy;
+  aiMessages: AiMessage[];
+  aiLoading: boolean;
+  aiError: string | null;
+  aiCooldown: number;
+  aiQuestion: string;
+  onAiQuestionChange: (value: string) => void;
+  onGetAiOpinion: (opts?: { deepAnalysis?: boolean }) => void;
+  onClearChat: () => void;
+}) {
+  const aiDisabled = aiLoading || aiCooldown > 0;
+  const askLabel = aiLoading
+    ? copy.ai.generating
+    : aiCooldown > 0
+      ? copy.ai.wait(aiCooldown)
+      : copy.ai.ask;
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="section-label">{copy.ai.advisor}</p>
+          <p className="mt-1 text-sm text-[#58665e]">{copy.ai.description}</p>
+        </div>
+        {aiMessages.length > 0 && (
+          <button
+            type="button"
+            onClick={onClearChat}
+            className="inline-flex items-center gap-1 rounded-full border border-[#dfe5df] bg-white px-2.5 py-1 text-[11px] font-bold text-[#6c7971] hover:bg-[#f4f6f2]"
+          >
+            <X size={12} />
+            {copy.aiChat.clearChat}
+          </button>
+        )}
+      </div>
+
+      {aiMessages.length > 0 && (
+        <div className="mt-3 max-h-96 space-y-2.5 overflow-y-auto rounded-xl border border-[#e8ede8] bg-[#fafbf9] p-3">
+          {aiMessages.map((msg, i) =>
+            msg.role === "user" ? (
+              <div key={i} className="ml-6 rounded-xl rounded-tr-sm bg-[#173f30] px-3 py-2 text-sm text-white">
+                <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#b9d3c4]">
+                  <User size={11} />
+                  {copy.aiChat.you}
+                </div>
+                {msg.content}
+              </div>
+            ) : (
+              <div
+                key={i}
+                className="mr-2 rounded-xl rounded-tl-sm border border-[#dfe6df] bg-white px-3 py-2.5"
+              >
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#245f43]">
+                  <Bot size={12} />
+                  {msg.kind === "deep"
+                    ? copy.aiChat.deepAnalysis
+                    : msg.source === "offline"
+                      ? copy.ai.opinionOffline
+                      : copy.ai.opinionLive}
+                </div>
+                <FormattedOpinion text={msg.content} />
+              </div>
+            ),
+          )}
+        </div>
+      )}
+
+      <textarea
+        value={aiQuestion}
+        onChange={(e) => onAiQuestionChange(e.target.value)}
+        placeholder={aiMessages.length ? copy.aiChat.newQuestion : copy.ai.questionPlaceholder}
+        rows={3}
+        maxLength={500}
+        className="mt-3 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
+      />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onGetAiOpinion()}
+          disabled={aiDisabled}
+          className="btn-touch border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
+        >
+          {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
+          {askLabel}
+        </button>
+        <button
+          type="button"
+          onClick={() => onGetAiOpinion({ deepAnalysis: true })}
+          disabled={aiDisabled}
+          className="btn-touch bg-[#173f30] text-white disabled:opacity-60"
+        >
+          {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+          {copy.aiChat.deepAnalysis}
+        </button>
+      </div>
+
+      {aiError && (
+        <div className="mt-3 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] p-3.5 text-sm text-[#92441f]">
+          {aiError}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TankerDespatchPlanner({
   copy,
   tankerLoadMt,
   onTankerLoadChange,
   topPlans,
+  preferFewerTanks,
+  onPreferFewerTanksChange,
+  penaltyRm,
 }: {
   copy: Copy;
   tankerLoadMt: number;
   onTankerLoadChange: (value: number) => void;
   topPlans: DespatchPlan[];
+  preferFewerTanks: boolean;
+  onPreferFewerTanksChange: (value: boolean) => void;
+  penaltyRm: number | null;
 }) {
   const hasStock = topPlans.length > 0;
 
@@ -1643,6 +2133,22 @@ function TankerDespatchPlanner({
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[#758078]">{copy.despatch.tankerLoadHint}</p>
         </div>
+        <label className="mt-4 flex max-w-sm cursor-pointer items-start gap-2.5 rounded-xl border border-[#dce3dd] bg-white p-3">
+          <input
+            type="checkbox"
+            checked={preferFewerTanks}
+            onChange={(e) => onPreferFewerTanksChange(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#173f30]"
+          />
+          <span>
+            <span className="block text-sm font-bold text-[#173f30]">
+              {copy.despatchPrefs.preferFewerTanks}
+            </span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-[#758078]">
+              {copy.despatchPrefs.preferFewerTanksHint}
+            </span>
+          </span>
+        </label>
       </div>
       <div className="p-4 sm:p-5">
         {!hasStock ? (
@@ -1667,6 +2173,12 @@ function TankerDespatchPlanner({
               <p className="mt-3 text-sm text-[#92441f]">
                 {copy.despatch.shortfall(topPlans[0].shortfallMt)}
               </p>
+            )}
+            {penaltyRm !== null && penaltyRm > 0 && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] px-3 py-2.5 text-sm font-semibold text-[#92441f]">
+                <Coins size={16} className="shrink-0" />
+                {copy.penalty.totalExposure(n(penaltyRm, 0))}
+              </div>
             )}
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
               <Advice
@@ -1702,13 +2214,18 @@ function DespatchOption({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-bold text-[#173f30]">{copy.despatch.planRank(rank)}</span>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            plan.meetsLimit ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
-          }`}
-        >
-          {plan.meetsLimit ? copy.despatch.withinLimit : copy.despatch.aboveLimitShort}
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-[#58665e]">
+            {copy.despatchPrefs.usesTanks(plan.sources.length)}
+          </span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              plan.meetsLimit ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+            }`}
+          >
+            {plan.meetsLimit ? copy.despatch.withinLimit : copy.despatch.aboveLimitShort}
+          </span>
+        </div>
       </div>
       <div className="despatch-sources">
         {plan.sources.map((source) => (
@@ -1727,24 +2244,244 @@ function DespatchOption({
   );
 }
 
+function LossOptimizerPanel({
+  copy,
+  results,
+  hasProfile,
+  maxTransferPerDayMt,
+  onMaxTransferChange,
+}: {
+  copy: Copy;
+  results: HoldVsDespatch[];
+  hasProfile: boolean;
+  maxTransferPerDayMt: number;
+  onMaxTransferChange: (v: number) => void;
+}) {
+  const totalSavings = results.reduce((sum, r) => sum + r.savingsRm, 0);
+
+  return (
+    <Panel title={copy.lossOptimizer.title} subtitle={copy.lossOptimizer.subtitle} icon={<Scale size={19} />}>
+      <div className="max-w-xs">
+        <MiniField
+          label={copy.lossOptimizer.maxTransferLabel}
+          value={maxTransferPerDayMt}
+          onChange={(v) => onMaxTransferChange(Math.max(0, v))}
+          unit="MT/day"
+        />
+      </div>
+
+      {!hasProfile || results.length === 0 ? (
+        <p className="mt-4 text-sm text-[#58665e]">{copy.lossOptimizer.allGood}</p>
+      ) : (
+        <>
+          <div className="mt-4 space-y-3">
+            {results.map((r) => {
+              const hold = r.recommendation === "hold";
+              return (
+                <div
+                  key={r.tankName}
+                  className={`rounded-xl border p-3 ${
+                    hold ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#efc7aa] bg-[#fff8f3]"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-[#173f30]">{r.tankName}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        hold ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+                      }`}
+                    >
+                      {hold ? copy.lossOptimizer.hold : copy.lossOptimizer.despatchNow}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-sm leading-relaxed text-[#53625a]">
+                    {hold && r.hold.days !== null
+                      ? copy.lossOptimizer.holdRecommendation(r.hold.days)
+                      : copy.lossOptimizer.despatchNowRecommendation}
+                  </p>
+                  {hold && r.hold.days !== null && (
+                    <p className="mt-1 text-xs text-[#708078]">
+                      {copy.lossOptimizer.usingSources(
+                        n(r.hold.incomingUsedMt, 0),
+                        n(r.hold.transferUsedMt, 0),
+                      )}
+                    </p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#708078]">
+                    <span>
+                      {copy.lossOptimizer.despatchNowPenalty}:{" "}
+                      <strong className="text-[#92441f]">RM {n(r.despatchNowPenaltyRm, 0)}</strong>
+                    </span>
+                    <span className={r.savingsRm > 0 ? "font-bold text-[#278858]" : ""}>
+                      {r.savingsRm > 0
+                        ? `${copy.lossOptimizer.savingsIfHold}: RM ${n(r.savingsRm, 0)}`
+                        : copy.lossOptimizer.noSavings}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {totalSavings > 0 && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#c8dfae] bg-[#f6fae9] px-3 py-2.5 text-sm font-semibold text-[#173f30]">
+              <Scale size={16} className="shrink-0" />
+              {copy.lossOptimizer.totalPotentialSavings(n(totalSavings, 0))}
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function BatchBlendPlanner({
+  copy,
+  tanks,
+  selected,
+  onToggleTank,
+  target,
+  maxTransferPerDayMt,
+  onMaxTransferChange,
+  result,
+}: {
+  copy: Copy;
+  tanks: Tank[];
+  selected: Set<number>;
+  onToggleTank: (i: number) => void;
+  target: number;
+  maxTransferPerDayMt: number;
+  onMaxTransferChange: (v: number) => void;
+  result: BatchBlendResult | null;
+}) {
+  const reasonText = (reason: BatchBlendResult["reason"]) => {
+    switch (reason) {
+      case "no-spare-capacity":
+        return copy.batchBlend.reasonNoSpareCapacity;
+      case "no-low-ffa-source":
+        return copy.batchBlend.reasonNoLowFfaSource;
+      case "max-days-exceeded":
+        return copy.batchBlend.reasonMaxDaysExceeded;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Panel title={copy.batchBlend.title} subtitle={copy.batchBlend.subtitle} icon={<ArrowRightLeft size={19} />}>
+      <p className="section-label">{copy.batchBlend.selectTanks}</p>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {tanks.map((tank, i) => (
+          <label
+            key={tank.name}
+            className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-sm ${
+              selected.has(i) ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={selected.has(i)}
+              onChange={() => onToggleTank(i)}
+              className="h-4 w-4 shrink-0 accent-[#173f30]"
+            />
+            <span className="min-w-0 truncate">
+              <span className="block font-semibold text-[#173f30]">{tank.name}</span>
+              <span className="block text-[11px] text-[#708078]">{n(tank.ffa, 2)}% FFA</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <div className="mt-4 max-w-xs">
+        <MiniField
+          label={copy.batchBlend.maxTransferLabel}
+          value={maxTransferPerDayMt}
+          onChange={(v) => onMaxTransferChange(Math.max(0, v))}
+          unit="MT/day"
+        />
+      </div>
+
+      <div className="mt-4 border-t border-[#e8ede8] pt-4">
+        {selected.size < 2 || !result ? (
+          <p className="text-sm text-[#58665e]">{copy.batchBlend.needAtLeastTwo}</p>
+        ) : result.days === 0 ? (
+          <div className="flex items-start gap-2 rounded-xl bg-[#f6fae9] p-3 text-sm text-[#173f30]">
+            <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#278858]" />
+            {copy.batchBlend.alreadyGood}
+          </div>
+        ) : result.feasible ? (
+          <>
+            <div className="flex items-start gap-2 rounded-xl bg-[#f6fae9] p-3 text-sm font-semibold text-[#173f30]">
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#278858]" />
+              {copy.batchBlend.readyAfter(result.days ?? 0)}
+            </div>
+            {result.steps.length > 0 && (
+              <div className="mt-3">
+                <p className="section-label">{copy.batchBlend.stepsTitle}</p>
+                <div className="mt-2 space-y-1.5">
+                  {result.steps.map((s, i) => (
+                    <div key={i} className="rounded-lg bg-[#f9fbf8] px-3 py-2 text-xs text-[#53625a]">
+                      {copy.batchBlend.step(s.day, s.fromTank, s.toTank, n(s.mt, 0), n(s.toTankFfaAfter, 2))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex items-start gap-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3 text-sm text-[#92441f]">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>
+              {copy.batchBlend.notFeasible}
+              {reasonText(result.reason) ? ` ${reasonText(result.reason)}` : ""}
+            </span>
+          </div>
+        )}
+
+        {result && result.feasible && result.finalTanks.length > 0 && (
+          <div className="mt-4">
+            <p className="section-label">{copy.batchBlend.finalTitle}</p>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {result.finalTanks.map((t) => (
+                <div key={t.name} className="rounded-lg bg-[#f9fbf8] p-2 text-center">
+                  <p className="truncate text-[10px] text-[#708078]">{t.name}</p>
+                  <p
+                    className={`text-sm font-extrabold ${
+                      t.ffa <= target ? "text-[#173f30]" : "text-[#92441f]"
+                    }`}
+                  >
+                    {n(t.ffa, 2)}%
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 function DecisionSafeguards({
   copy,
   results,
   allocationTotal,
   highFFAStock,
   target,
+  anyProjectedBreach,
 }: {
   copy: Copy;
   results: Result[];
   allocationTotal: number;
   highFFAStock: number;
   target: number;
+  anyProjectedBreach: boolean;
 }) {
   const checks: [boolean, string][] = [
     [!results.some((r) => r.overflow), copy.safeguards.noOverflow],
     [allocationTotal === 100, copy.safeguards.allocation100],
     [highFFAStock === 0, copy.safeguards.noHighFfa],
     [results.every((r) => r.finalFFA <= target), copy.safeguards.finalFfaWithinLimit(target)],
+    [!anyProjectedBreach, copy.safeguards.noProjectedBreach],
   ];
 
   return (
@@ -1763,5 +2500,498 @@ function DecisionSafeguards({
         ))}
       </div>
     </section>
+  );
+}
+
+const PENALTY_STAT_COLOR = "#a4342c";
+
+function PenaltyPanel({
+  copy,
+  profiles,
+  activeProfile,
+  onSelectProfile,
+  onUpdateProfiles,
+  penaltyPerTank,
+  totalExposureRm,
+}: {
+  copy: Copy;
+  profiles: BuyerProfile[];
+  activeProfile: BuyerProfile | null;
+  onSelectProfile: (id: string) => void;
+  onUpdateProfiles: (updater: (profiles: BuyerProfile[]) => BuyerProfile[]) => void;
+  penaltyPerTank: { name: string; rmPerMt: number; totalRm: number; band: PenaltyBand | null }[];
+  totalExposureRm: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const addProfile = () => {
+    const fresh = createEmptyBuyerProfile(copy.penalty.newBuyer);
+    onUpdateProfiles((prev) => [...prev, fresh]);
+    onSelectProfile(fresh.id);
+    setExpanded(true);
+  };
+
+  const deleteProfile = (id: string) => {
+    onUpdateProfiles((prev) => prev.filter((p) => p.id !== id));
+    const remaining = profiles.filter((p) => p.id !== id);
+    if (remaining[0] && activeProfile?.id === id) onSelectProfile(remaining[0].id);
+  };
+
+  const renameActive = (name: string) => {
+    if (!activeProfile) return;
+    const id = activeProfile.id;
+    onUpdateProfiles((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)));
+  };
+
+  const addBand = () => {
+    if (!activeProfile) return;
+    const id = activeProfile.id;
+    const last = activeProfile.bands[activeProfile.bands.length - 1];
+    const minFfaPct = last ? (last.maxFfaPct ?? last.minFfaPct + 0.2) : 4.81;
+    onUpdateProfiles((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              bands: [
+                ...p.bands,
+                { id: newPenaltyBandId(), minFfaPct: Number(minFfaPct.toFixed(2)), maxFfaPct: null, deductionRmPerMt: 0 },
+              ],
+            }
+          : p,
+      ),
+    );
+  };
+
+  const updateBand = (bandId: string, patch: Partial<PenaltyBand>) => {
+    if (!activeProfile) return;
+    const id = activeProfile.id;
+    onUpdateProfiles((prev) =>
+      prev.map((p) =>
+        p.id === id ? { ...p, bands: p.bands.map((b) => (b.id === bandId ? { ...b, ...patch } : b)) } : p,
+      ),
+    );
+  };
+
+  const removeBand = (bandId: string) => {
+    if (!activeProfile) return;
+    const id = activeProfile.id;
+    onUpdateProfiles((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, bands: p.bands.filter((b) => b.id !== bandId) } : p)),
+    );
+  };
+
+  const exposedTanks = penaltyPerTank.filter((t) => t.totalRm > 0);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 gap-3">
+            <span className="mt-0.5 shrink-0 text-[#287451]">
+              <Coins size={19} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="font-bold">{copy.penalty.title}</h2>
+              <p className="mt-0.5 text-xs leading-relaxed text-[#758078]">{copy.penalty.subtitle}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-full border border-[#dfe5df] bg-white px-2.5 py-1.5 text-xs font-bold text-[#173f30]"
+          >
+            <Settings2 size={13} />
+            {copy.penalty.manageBands}
+            <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <select
+            value={activeProfile?.id ?? ""}
+            onChange={(e) => onSelectProfile(e.target.value)}
+            className="min-h-[40px] rounded-lg border border-[#dce3dd] bg-white px-3 text-sm font-semibold text-[#173f30] outline-none ring-[#88a84e] focus:ring-2"
+          >
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={addProfile}
+            className="inline-flex items-center gap-1 rounded-full border border-[#b9c8bd] bg-white px-2.5 py-1.5 text-xs font-bold text-[#173f30]"
+          >
+            <Plus size={13} />
+            {copy.penalty.newBuyer}
+          </button>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
+          <span className="text-sm font-semibold text-[#7a4a32]">{copy.penalty.estimatedExposure}</span>
+          <span className="text-lg font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
+            RM {n(totalExposureRm, 0)}
+          </span>
+        </div>
+
+        {exposedTanks.length > 0 ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {exposedTanks.map((t) => (
+              <div key={t.name} className="rounded-lg bg-[#f9fbf8] p-2 text-center">
+                <p className="truncate text-[10px] text-[#708078]">{t.name}</p>
+                <p className="text-sm font-extrabold text-[#7a4a32]">RM {n(t.totalRm, 0)}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-[#58665e]">{copy.penalty.noExposure}</p>
+        )}
+
+        {expanded && activeProfile && (
+          <div className="mt-4 space-y-3 border-t border-[#e8ede8] pt-4">
+            <TextField
+              label={copy.penalty.renameBuyer}
+              value={activeProfile.name}
+              onChange={renameActive}
+              compact
+            />
+
+            {activeProfile.bands.length === 0 && (
+              <p className="text-sm text-[#58665e]">{copy.penalty.noBands}</p>
+            )}
+
+            <div className="space-y-2">
+              {activeProfile.bands.map((band) => (
+                <div
+                  key={band.id}
+                  className="grid grid-cols-2 gap-2 rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-2.5 sm:grid-cols-[1fr_1fr_1fr_auto]"
+                >
+                  <MiniField
+                    label={copy.penalty.minFfa}
+                    value={band.minFfaPct}
+                    onChange={(v) => updateBand(band.id, { minFfaPct: v })}
+                    unit="%"
+                  />
+                  <label className="block min-w-0 max-w-full">
+                    <span className="field-label">{copy.penalty.maxFfa}</span>
+                    <div className="field-shell">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={band.maxFfaPct === null ? "" : String(band.maxFfaPct)}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          updateBand(band.id, { maxFfaPct: raw === "" ? null : Number(raw) || 0 });
+                        }}
+                        className="numeric-input"
+                      />
+                      <span className="shrink-0 text-sm text-[#7a867f]">%</span>
+                    </div>
+                  </label>
+                  <MiniField
+                    label={copy.penalty.deduction}
+                    value={band.deductionRmPerMt}
+                    onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
+                    unit="RM/MT"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeBand(band.id)}
+                    aria-label={copy.penalty.removeBand}
+                    className="remove-tank remove-tank--compact self-end justify-self-start sm:self-center"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={addBand}
+                className="btn-touch border border-[#b9c8bd] bg-white text-[#173f30]"
+              >
+                <Plus size={16} />
+                {copy.penalty.addBand}
+              </button>
+              {profiles.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => deleteProfile(activeProfile.id)}
+                  className="btn-touch border border-[#efd7ce] bg-white text-[#b45839]"
+                >
+                  <Trash2 size={16} />
+                  {copy.penalty.deleteBuyer}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const FORECAST_LINE_COLORS = ["#173f30", "#3d9b62", "#c9873f", "#b45839", "#88a84e", "#6c7971"];
+
+function FfaForecastPanel({
+  copy,
+  projections,
+  target,
+  riseFactorPerDay,
+  onRiseFactorChange,
+  horizonDays,
+  onHorizonChange,
+}: {
+  copy: Copy;
+  projections: { name: string; points: { day: number; ffaPct: number }[]; daysToLimit: number | null }[];
+  target: number;
+  riseFactorPerDay: number;
+  onRiseFactorChange: (v: number) => void;
+  horizonDays: number;
+  onHorizonChange: (v: number) => void;
+}) {
+  const chartData = useMemo(() => {
+    const rows: Record<string, number>[] = [];
+    for (let day = 0; day <= horizonDays; day += 1) {
+      const row: Record<string, number> = { day };
+      projections.forEach((p) => {
+        row[p.name] = p.points[day]?.ffaPct ?? p.points[p.points.length - 1]?.ffaPct ?? 0;
+      });
+      rows.push(row);
+    }
+    return rows;
+  }, [projections, horizonDays]);
+
+  return (
+    <Panel title={copy.prediction.title} subtitle={copy.prediction.subtitle} icon={<TrendingUp size={19} />}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <MiniField
+          label={copy.prediction.riseFactorLabel}
+          value={riseFactorPerDay}
+          onChange={onRiseFactorChange}
+          unit="×/day"
+        />
+        <MiniField
+          label={copy.prediction.horizonLabel}
+          value={horizonDays}
+          onChange={(v) => onHorizonChange(Math.max(1, Math.round(v)))}
+          unit="days"
+        />
+      </div>
+
+      {chartData.length > 0 && (
+        <div className="mt-4 h-56 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e8ede8" />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 11, fill: "#7a867f" }}
+                label={{ value: copy.prediction.daysAxis, position: "insideBottom", offset: -2, fontSize: 11, fill: "#7a867f" }}
+              />
+              <YAxis tick={{ fontSize: 11, fill: "#7a867f" }} width={40} />
+              <Tooltip
+                formatter={(value) => `${n(Number(value), 2)}%`}
+                labelFormatter={(label) => `${copy.prediction.daysAxis} ${label}`}
+                contentStyle={{ borderRadius: 10, border: "1px solid #dfe5df", fontSize: 12 }}
+              />
+              <ReferenceLine
+                y={target}
+                stroke="#c9483e"
+                strokeDasharray="4 4"
+                label={{ value: `${n(target, 2)}%`, position: "right", fontSize: 10, fill: "#c9483e" }}
+              />
+              {projections.map((p, i) => (
+                <Line
+                  key={p.name}
+                  type="monotone"
+                  dataKey={p.name}
+                  stroke={FORECAST_LINE_COLORS[i % FORECAST_LINE_COLORS.length]}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="mt-4 space-y-2">
+        {projections.map((p) => (
+          <div
+            key={p.name}
+            className={`flex items-start gap-2 rounded-lg p-2.5 text-sm ${
+              p.daysToLimit !== null ? "bg-[#fff8f3] text-[#92441f]" : "bg-[#f8faf7] text-[#58665e]"
+            }`}
+          >
+            {p.daysToLimit !== null ? (
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            ) : (
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#278858]" />
+            )}
+            <span>
+              {p.daysToLimit !== null
+                ? copy.prediction.willCross(p.name, p.daysToLimit)
+                : copy.prediction.staysWithin(p.name)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ProductionOptimizer({
+  copy,
+  suggestion,
+  showScenarioCompare,
+  onToggleScenarioCompare,
+  scenarios,
+  scenarioResults,
+  onScenarioChange,
+  baselineIncomingCpo,
+  baselineMeetsTarget,
+  baselineOverflow,
+}: {
+  copy: Copy;
+  suggestion: SafeProductionSuggestion;
+  showScenarioCompare: boolean;
+  onToggleScenarioCompare: () => void;
+  scenarios: { id: string; millCapacity: number; hours: number; utilisation: number; oer: number; incomingFFA: number }[];
+  scenarioResults: { id: string; incomingCpo: number; meetsTarget: boolean; overflow: boolean; feasible: boolean }[];
+  onScenarioChange: (id: string, key: "millCapacity" | "hours" | "utilisation" | "oer" | "incomingFFA", value: number) => void;
+  baselineIncomingCpo: number;
+  baselineMeetsTarget: boolean;
+  baselineOverflow: boolean;
+}) {
+  const bindingLabel =
+    suggestion.binding === "capacity"
+      ? copy.production.bindingCapacity
+      : suggestion.binding === "ffa"
+        ? copy.production.bindingFfa
+        : copy.production.bindingNone;
+
+  return (
+    <Panel title={copy.production.title} subtitle={copy.production.subtitle} icon={<Wand2 size={19} />}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl bg-[#f6fae9] p-3">
+          <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.production.safeIncoming}</p>
+          <p className="mt-1 text-xl font-extrabold text-[#173f30]">{n(suggestion.maxSafeIncomingCpoMt)} MT</p>
+          <p className="mt-1 text-xs text-[#58665e]">{bindingLabel}</p>
+        </div>
+        <div className="rounded-xl bg-[#f9fbf8] p-3">
+          <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.production.suggestedHours}</p>
+          <p className="mt-1 text-xl font-extrabold text-[#173f30]">
+            {suggestion.suggestedHoursAtCurrentUtilisation !== null
+              ? `${n(suggestion.suggestedHoursAtCurrentUtilisation)} hr`
+              : "—"}
+          </p>
+        </div>
+        <div className="rounded-xl bg-[#f9fbf8] p-3">
+          <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.production.suggestedUtilisation}</p>
+          <p className="mt-1 text-xl font-extrabold text-[#173f30]">
+            {suggestion.suggestedUtilisationPctAtCurrentHours !== null
+              ? `${n(suggestion.suggestedUtilisationPctAtCurrentHours, 0)}%`
+              : "—"}
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onToggleScenarioCompare}
+        className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[#dfe5df] bg-white px-3 py-1.5 text-xs font-bold text-[#173f30]"
+      >
+        {copy.production.compareScenarios}
+        <ChevronDown size={14} className={`transition-transform ${showScenarioCompare ? "rotate-180" : ""}`} />
+      </button>
+
+      {showScenarioCompare && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs leading-relaxed text-[#758078]">{copy.production.compareScenariosHint}</p>
+
+          <div className="rounded-xl border border-[#dfe5dc] bg-[#f9fbf8] p-3">
+            <p className="text-xs font-bold text-[#173f30]">{copy.production.scenarioBaseline}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+              <span className="text-[#58665e]">
+                {copy.production.incomingCpo}: <strong className="text-[#173f30]">{n(baselineIncomingCpo)} MT</strong>
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  baselineMeetsTarget && !baselineOverflow
+                    ? "bg-[#d7f08a] text-[#173f30]"
+                    : "bg-[#ffceb7] text-[#7c2d12]"
+                }`}
+              >
+                {baselineMeetsTarget && !baselineOverflow ? copy.production.meetsLimit : copy.production.overLimit}
+              </span>
+            </div>
+          </div>
+
+          {scenarios.map((s, i) => {
+            const result = scenarioResults.find((r) => r.id === s.id);
+            return (
+              <div key={s.id} className="rounded-xl border border-[#dfe5dc] bg-white p-3">
+                <p className="text-xs font-bold text-[#173f30]">{copy.production.scenarioLabel(i + 1)}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  <MiniField
+                    label={copy.forecast.capacity}
+                    value={s.millCapacity}
+                    onChange={(v) => onScenarioChange(s.id, "millCapacity", v)}
+                    unit="MT/hr"
+                  />
+                  <MiniField
+                    label={copy.forecast.operatingHours}
+                    value={s.hours}
+                    onChange={(v) => onScenarioChange(s.id, "hours", v)}
+                    unit="hr"
+                  />
+                  <MiniField
+                    label={copy.forecast.utilisation}
+                    value={s.utilisation}
+                    onChange={(v) => onScenarioChange(s.id, "utilisation", v)}
+                    unit="%"
+                  />
+                  <MiniField
+                    label={copy.forecast.expectedOer}
+                    value={s.oer}
+                    onChange={(v) => onScenarioChange(s.id, "oer", v)}
+                    unit="%"
+                  />
+                  <MiniField
+                    label={copy.forecast.incomingFfa}
+                    value={s.incomingFFA}
+                    onChange={(v) => onScenarioChange(s.id, "incomingFFA", v)}
+                    unit="%"
+                  />
+                </div>
+                {result && (
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                    <span className="text-[#58665e]">
+                      {copy.production.incomingCpo}: <strong className="text-[#173f30]">{n(result.incomingCpo)} MT</strong>
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        result.feasible && result.meetsTarget && !result.overflow
+                          ? "bg-[#d7f08a] text-[#173f30]"
+                          : "bg-[#ffceb7] text-[#7c2d12]"
+                      }`}
+                    >
+                      {result.feasible && result.meetsTarget && !result.overflow
+                        ? copy.production.meetsLimit
+                        : copy.production.overLimit}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
   );
 }

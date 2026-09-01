@@ -10,7 +10,7 @@ export const translations = {
     ready: "Ready",
     footer:
       "Decision-support tool only · Final transfer requires authorised engineer verification",
-    nav: { overview: "Overview", tanks: "Tanks", plan: "Plan", despatch: "Despatch" },
+    nav: { overview: "Overview", tanks: "Tanks", plan: "Plan", despatch: "Despatch", batch: "Batch blend" },
     metrics: {
       currentStock: "Current stock",
       highFfaStock: "High-FFA stock",
@@ -100,6 +100,8 @@ export const translations = {
         "Engineer must verify latest tank dipping, laboratory FFA, available capacity and valve routing. This recommendation is not an approval.",
       noFeasiblePlan:
         "No feasible plan is available. Available capacity is lower than expected incoming CPO.",
+      estimatedPenalty: (rm: string) => `Est. penalty: RM ${rm}`,
+      noPenalty: "No penalty",
     },
     despatch: {
       title: "Tanker despatch planning",
@@ -140,6 +142,113 @@ export const translations = {
       noHighFfa: "No stock above good FFA limit",
       finalFfaWithinLimit: (limit: number) =>
         `Final FFA ≤ ${n(limit, 2)}% (good limit · lower is better)`,
+      noProjectedBreach: "No tank projected to cross the limit within the forecast window",
+    },
+    penalty: {
+      title: "Refinery penalty exposure",
+      subtitle:
+        "Bands vary by buyer — define your own and switch profiles. Nothing here is a guess.",
+      activeBuyer: "Buyer profile",
+      newBuyer: "New buyer",
+      renameBuyer: "Buyer name",
+      deleteBuyer: "Delete profile",
+      manageBands: "Penalty bands",
+      addBand: "Add band",
+      minFfa: "From FFA %",
+      maxFfa: "To FFA % (blank = no ceiling)",
+      deduction: "Deduction RM/MT",
+      removeBand: "Remove band",
+      noBands: "No bands configured yet — add one to start estimating RM exposure.",
+      estimatedExposure: "Estimated exposure at current plan",
+      perTank: "By tank",
+      noExposure: "No deduction at current FFA levels for this buyer.",
+      totalExposure: (rm: string) => `Total estimated deduction: RM ${rm}`,
+    },
+    prediction: {
+      title: "FFA forecast",
+      subtitle:
+        "CPO's FFA keeps climbing in storage. Rate scales off incoming FFA quality — tune the multiplier to match your mill.",
+      riseFactorLabel: "Rise sensitivity (× incoming FFA per day)",
+      horizonLabel: "Forecast window (days)",
+      daysAxis: "Day",
+      ffaAxis: "FFA %",
+      willCross: (name: string, days: number) =>
+        days === 0
+          ? `${name} is already above the good FFA limit.`
+          : `${name} is projected to cross the good FFA limit in ${days} day${days === 1 ? "" : "s"} if left untouched.`,
+      staysWithin: (name: string) => `${name} stays within the good FFA limit across the forecast window.`,
+    },
+    production: {
+      title: "Production optimiser",
+      subtitle: "Safe mill parameters worked backward from tank capacity and the good FFA limit.",
+      safeIncoming: "Safe incoming CPO",
+      bindingCapacity: "Limited by tank capacity",
+      bindingFfa: "Limited by the good FFA limit",
+      bindingNone: "No safe capacity — every tank is full or already above the limit.",
+      suggestedHours: "Cap operating hours at (same utilisation)",
+      suggestedUtilisation: "Cap utilisation at (same hours)",
+      compareScenarios: "Compare scenarios",
+      compareScenariosHint: "Test alternative capacity / hours / OER combinations side by side.",
+      scenarioBaseline: "Current",
+      scenarioLabel: (n: number) => `Scenario ${n}`,
+      incomingCpo: "Incoming CPO",
+      planStatus: "Best-plan status",
+      meetsLimit: "Meets limit",
+      overLimit: "Over limit",
+    },
+    despatchPrefs: {
+      preferFewerTanks: "Prefer fewer source tanks",
+      preferFewerTanksHint: "Ranks despatch options to favour simpler loads when FFA outcome is similar.",
+      usesTanks: (count: number) => `Uses ${count} tank${count === 1 ? "" : "s"}`,
+    },
+    aiChat: {
+      deepAnalysis: "Full analysis",
+      newQuestion: "Ask a follow-up",
+      you: "You",
+      riskScore: "Risk snapshot",
+      penaltyExposure: "Penalty exposure",
+      daysToBreach: "Earliest projected breach",
+      noBreach: "None within forecast window",
+      clearChat: "Clear conversation",
+    },
+    lossOptimizer: {
+      title: "Sell now vs hold — loss optimiser",
+      subtitle:
+        "For stock already above the good FFA limit: compares despatching now (penalty) against holding and diluting it first, using incoming CPO and/or other tanks.",
+      allGood: "No tank is currently above the good FFA limit.",
+      hold: "Hold & blend down",
+      despatchNow: "Despatch now",
+      holdRecommendation: (days: number) =>
+        `Hold ${days} day${days === 1 ? "" : "s"}, then despatch penalty-free`,
+      despatchNowRecommendation: "No feasible dilution in time — despatch now and accept the penalty",
+      despatchNowPenalty: "Penalty if despatched now",
+      savingsIfHold: "Saved by holding",
+      noSavings: "Holding doesn't avoid any penalty here",
+      totalPotentialSavings: (rm: string) => `Total potential savings if you follow these calls: RM ${rm}`,
+      usingSources: (incoming: string, transfer: string) =>
+        `Using ${incoming} MT incoming CPO and ${transfer} MT transferred from other tanks.`,
+      maxTransferLabel: "Max transfer between tanks (MT/day)",
+    },
+    batchBlend: {
+      title: "Batch blend planner",
+      subtitle:
+        "Not processing daily? Work out how many days of tank-to-tank transfers it takes to bring existing stock down to the good FFA limit.",
+      selectTanks: "Tanks in this blend group",
+      maxTransferLabel: "Max transfer between tanks (MT/day)",
+      alreadyGood: "All selected tanks are already at or below the good FFA limit — ready to dispatch.",
+      readyAfter: (days: number) =>
+        days === 0
+          ? "Ready to dispatch now."
+          : `Ready to dispatch after ${days} day${days === 1 ? "" : "s"} of blending.`,
+      notFeasible: "Not feasible within 30 days with the current tanks and transfer rate.",
+      reasonNoSpareCapacity: "The high-FFA tank has no spare capacity to receive blending stock.",
+      reasonNoLowFfaSource: "No lower-FFA tank is available to blend in.",
+      reasonMaxDaysExceeded: "Even with continuous transfers, this doesn't reach the limit within 30 days.",
+      stepsTitle: "Transfer schedule",
+      step: (day: number, from: string, to: string, mt: string, ffa: string) =>
+        `Day ${day}: move ${mt} MT from ${from} to ${to} → ${to} FFA becomes ${ffa}%`,
+      finalTitle: "Final blend result",
+      needAtLeastTwo: "Select at least two tanks — one to receive, one lower-FFA source to blend from.",
     },
   },
   bm: {
@@ -148,7 +257,7 @@ export const translations = {
     ready: "Sedia",
     footer:
       "Alat sokongan keputusan sahaja · Pemindahan akhir memerlukan pengesahan jurutera berwibawa",
-    nav: { overview: "Ringkasan", tanks: "Tangki", plan: "Pelan", despatch: "Despatch" },
+    nav: { overview: "Ringkasan", tanks: "Tangki", plan: "Pelan", despatch: "Despatch", batch: "Campuran kelompok" },
     metrics: {
       currentStock: "Stok semasa",
       highFfaStock: "Stok FFA tinggi",
@@ -238,6 +347,8 @@ export const translations = {
         "Jurutera mesti sahkan dipping tangki terkini, FFA makmal, kapasiti available dan laluan injap. Cadangan ini bukan kelulusan.",
       noFeasiblePlan:
         "Tiada pelan munasabah. Kapasiti available lebih rendah daripada CPO masuk dijangka.",
+      estimatedPenalty: (rm: string) => `Anggaran penalti: RM ${rm}`,
+      noPenalty: "Tiada penalti",
     },
     despatch: {
       title: "Perancangan despatch tanker",
@@ -278,6 +389,110 @@ export const translations = {
       noHighFfa: "Tiada stok melebihi had FFA baik",
       finalFfaWithinLimit: (limit: number) =>
         `FFA akhir ≤ ${n(limit, 2)}% (had baik · lebih rendah lebih baik)`,
+      noProjectedBreach: "Tiada tangki dijangka melebihi had dalam tempoh ramalan",
+    },
+    penalty: {
+      title: "Pendedahan penalti kilang penapisan",
+      subtitle:
+        "Band berbeza mengikut pembeli — tetapkan sendiri dan tukar profil. Tiada nombor di sini adalah anggaran kami.",
+      activeBuyer: "Profil pembeli",
+      newBuyer: "Pembeli baharu",
+      renameBuyer: "Nama pembeli",
+      deleteBuyer: "Padam profil",
+      manageBands: "Band penalti",
+      addBand: "Tambah band",
+      minFfa: "Dari FFA %",
+      maxFfa: "Hingga FFA % (kosong = tiada siling)",
+      deduction: "Potongan RM/MT",
+      removeBand: "Buang band",
+      noBands: "Belum ada band dikonfigurasi — tambah satu untuk mula anggarkan pendedahan RM.",
+      estimatedExposure: "Anggaran pendedahan pada pelan semasa",
+      perTank: "Mengikut tangki",
+      noExposure: "Tiada potongan pada tahap FFA semasa untuk pembeli ini.",
+      totalExposure: (rm: string) => `Jumlah anggaran potongan: RM ${rm}`,
+    },
+    prediction: {
+      title: "Ramalan FFA",
+      subtitle:
+        "FFA CPO terus meningkat semasa disimpan. Kadar berskala mengikut kualiti FFA masuk — laraskan pengganda mengikut kilang anda.",
+      riseFactorLabel: "Sensitiviti kenaikan (× FFA masuk sehari)",
+      horizonLabel: "Tempoh ramalan (hari)",
+      daysAxis: "Hari",
+      ffaAxis: "FFA %",
+      willCross: (name: string, days: number) =>
+        days === 0
+          ? `${name} sudah melebihi had FFA baik.`
+          : `${name} dijangka melebihi had FFA baik dalam ${days} hari jika tidak diuruskan.`,
+      staysWithin: (name: string) => `${name} kekal dalam had FFA baik sepanjang tempoh ramalan.`,
+    },
+    production: {
+      title: "Pengoptimum pengeluaran",
+      subtitle: "Parameter kilang selamat dikira ke belakang daripada kapasiti tangki dan had FFA baik.",
+      safeIncoming: "CPO masuk selamat",
+      bindingCapacity: "Dihadkan oleh kapasiti tangki",
+      bindingFfa: "Dihadkan oleh had FFA baik",
+      bindingNone: "Tiada kapasiti selamat — semua tangki penuh atau sudah melebihi had.",
+      suggestedHours: "Hadkan jam operasi kepada (utilisasi sama)",
+      suggestedUtilisation: "Hadkan utilisasi kepada (jam sama)",
+      compareScenarios: "Banding senario",
+      compareScenariosHint: "Uji kombinasi kapasiti / jam / OER alternatif secara bersebelahan.",
+      scenarioBaseline: "Semasa",
+      scenarioLabel: (n: number) => `Senario ${n}`,
+      incomingCpo: "CPO masuk",
+      planStatus: "Status pelan terbaik",
+      meetsLimit: "Memenuhi had",
+      overLimit: "Melebihi had",
+    },
+    despatchPrefs: {
+      preferFewerTanks: "Utamakan tangki sumber yang sedikit",
+      preferFewerTanksHint: "Susun pilihan despatch untuk utamakan muatan mudah apabila hasil FFA hampir sama.",
+      usesTanks: (count: number) => `Guna ${count} tangki`,
+    },
+    aiChat: {
+      deepAnalysis: "Analisis penuh",
+      newQuestion: "Tanya soalan susulan",
+      you: "Anda",
+      riskScore: "Snapshot risiko",
+      penaltyExposure: "Pendedahan penalti",
+      daysToBreach: "Pelanggaran dijangka terawal",
+      noBreach: "Tiada dalam tempoh ramalan",
+      clearChat: "Kosongkan perbualan",
+    },
+    lossOptimizer: {
+      title: "Jual sekarang vs tahan — pengoptimum kerugian",
+      subtitle:
+        "Untuk stok yang sudah melebihi had FFA baik: banding despatch sekarang (penalti) dengan menahan dan mencairkan dahulu, menggunakan CPO masuk dan/atau tangki lain.",
+      allGood: "Tiada tangki melebihi had FFA baik pada masa ini.",
+      hold: "Tahan & cairkan",
+      despatchNow: "Despatch sekarang",
+      holdRecommendation: (days: number) => `Tahan ${days} hari, kemudian despatch tanpa penalti`,
+      despatchNowRecommendation: "Tiada pencairan munasabah dalam masa — despatch sekarang dan terima penalti",
+      despatchNowPenalty: "Penalti jika didespatch sekarang",
+      savingsIfHold: "Jimat dengan menahan",
+      noSavings: "Menahan tidak mengelakkan sebarang penalti di sini",
+      totalPotentialSavings: (rm: string) => `Jumlah potensi jimat jika ikut cadangan ini: RM ${rm}`,
+      usingSources: (incoming: string, transfer: string) =>
+        `Menggunakan ${incoming} MT CPO masuk dan ${transfer} MT dipindah daripada tangki lain.`,
+      maxTransferLabel: "Pemindahan maksimum antara tangki (MT/hari)",
+    },
+    batchBlend: {
+      title: "Perancang campuran kelompok",
+      subtitle:
+        "Tidak proses setiap hari? Kira berapa hari pemindahan tangki-ke-tangki diperlukan untuk turunkan stok sedia ada ke had FFA baik.",
+      selectTanks: "Tangki dalam kumpulan campuran ini",
+      maxTransferLabel: "Pemindahan maksimum antara tangki (MT/hari)",
+      alreadyGood: "Semua tangki dipilih sudah pada atau di bawah had FFA baik — sedia untuk despatch.",
+      readyAfter: (days: number) =>
+        days === 0 ? "Sedia untuk despatch sekarang." : `Sedia untuk despatch selepas ${days} hari campuran.`,
+      notFeasible: "Tidak munasabah dalam 30 hari dengan tangki dan kadar pemindahan semasa.",
+      reasonNoSpareCapacity: "Tangki FFA tinggi tiada ruang kosong untuk terima stok campuran.",
+      reasonNoLowFfaSource: "Tiada tangki FFA lebih rendah available untuk dicampur.",
+      reasonMaxDaysExceeded: "Walaupun pemindahan berterusan, ini tidak mencapai had dalam 30 hari.",
+      stepsTitle: "Jadual pemindahan",
+      step: (day: number, from: string, to: string, mt: string, ffa: string) =>
+        `Hari ${day}: pindah ${mt} MT daripada ${from} ke ${to} → FFA ${to} menjadi ${ffa}%`,
+      finalTitle: "Hasil campuran akhir",
+      needAtLeastTwo: "Pilih sekurang-kurangnya dua tangki — satu untuk terima, satu sumber FFA rendah untuk dicampur.",
     },
   },
 } as const;
