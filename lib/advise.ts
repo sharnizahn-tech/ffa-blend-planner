@@ -147,7 +147,7 @@ export const adviseRequestSchema = z.object({
 
 export type AdviseRequest = z.infer<typeof adviseRequestSchema>;
 
-const n = (v: number, d = 1) =>
+const n = (v: number, d = 2) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
 function section(lang: "en" | "bm", headingEn: string, headingBm: string, en: string, ms: string) {

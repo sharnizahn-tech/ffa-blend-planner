@@ -137,7 +137,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .field-shell--emphasis {
-  border-color: #88a84e;
+  border-color: #00b14f;
   background: #f6fae9;
 }
 
@@ -675,11 +675,11 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .bottom-nav__item.active {
-  color: #173f30;
+  color: #00713a;
 }
 
 .bottom-nav__item.active svg {
-  color: #287451;
+  color: #00b14f;
 }
 
 /* Sticky mobile action bar */
@@ -704,7 +704,8 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-/* Top section nav — tablet/desktop */
+/* Top section nav — tablet/desktop. Stays the single navigation at every
+   width above mobile; there is no separate "everything at once" layout. */
 .top-nav {
   display: none;
 }
@@ -717,47 +718,52 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 
   .top-nav__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     min-height: 44px;
     border-radius: 999px;
     border: 1px solid rgb(255 255 255 / 15%);
     background: rgb(255 255 255 / 8%);
-    padding: 0.5rem 0.875rem;
-    font-size: 0.75rem;
-    font-weight: 600;
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
     color: #c9dbd1;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .top-nav__item:hover {
+    border-color: rgb(255 255 255 / 30%);
+    background: rgb(255 255 255 / 14%);
   }
 
   .top-nav__item.active {
-    border-color: #d7f08a;
-    background: rgb(215 240 138 / 15%);
-    color: #d7f08a;
+    border-color: #00b14f;
+    background: #00b14f;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgb(0 177 79 / 35%);
+  }
+
+  .top-nav__step {
+    display: inline-flex;
+    height: 18px;
+    width: 18px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 18%);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .top-nav__item.active .top-nav__step {
+    background: rgb(255 255 255 / 25%);
   }
 }
 
-@media (min-width: 1280px) {
-  .top-nav {
-    display: none;
-  }
-}
-
-.mobile-panel {
+.app-panel {
   display: block;
-}
-
-@media (min-width: 1280px) {
-  .mobile-panel {
-    display: none;
-  }
-}
-
-.desktop-layout {
-  display: none;
-}
-
-@media (min-width: 1280px) {
-  .desktop-layout {
-    display: block;
-  }
 }
 
 .plan-pill {

@@ -97,7 +97,7 @@ function suggestTankName(tanks: Tank[]) {
   return `BST ${n}`;
 }
 
-const n = (v: number, d = 1) =>
+const n = (v: number, d = 2) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
 const allocationMt = (incomingCpo: number, pct: number) => (incomingCpo * pct) / 100;
@@ -268,7 +268,7 @@ function LanguageToggle({ lang, onChange }: { lang: Lang; onChange: (lang: Lang)
           type="button"
           onClick={() => onChange(code)}
           className={`rounded-full px-3 py-1.5 transition-colors ${
-            lang === code ? "bg-[#d7f08a] text-[#123c2c]" : "text-white/80 hover:text-white"
+            lang === code ? "bg-white text-[#00713a]" : "text-white/80 hover:text-white"
           }`}
         >
           {code.toUpperCase()}
@@ -822,7 +822,7 @@ export default function Home() {
         <Plus size={16} />
         {copy.allocation.addBst}
       </button>
-      <button type="button" onClick={useSuggested} className="btn-touch bg-[#173f30] text-white">
+      <button type="button" onClick={useSuggested} className="btn-touch bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047]">
         <Sparkles size={16} />
         {copy.allocation.useBestPlan}
       </button>
@@ -983,7 +983,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3 sm:px-7 sm:py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#d7f08a] text-[#123c2c]">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.45)]">
                 <Droplets size={24} />
               </div>
               <div className="min-w-0">
@@ -994,19 +994,20 @@ export default function Home() {
             <div className="flex shrink-0 items-center gap-2">
               <LanguageToggle lang={lang} onChange={setLanguage} />
               <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs md:flex">
-                <span className="h-2 w-2 rounded-full bg-[#bde85f]" />
+                <span className="h-2 w-2 rounded-full bg-[#00e676]" />
                 {copy.ready}
               </div>
             </div>
           </div>
           <nav className="top-nav" aria-label="Section navigation">
-            {navItems.map((item) => (
+            {navItems.map((item, i) => (
               <button
                 key={item.id}
                 type="button"
                 className={`top-nav__item ${mobileTab === item.id ? "active" : ""}`}
                 onClick={() => setMobileTab(item.id)}
               >
+                <span className="top-nav__step">{i + 1}</span>
                 {item.label}
               </button>
             ))}
@@ -1014,9 +1015,10 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1500px] px-4 py-4 pb-36 sm:px-7 sm:py-6 md:pb-8 xl:pb-6">
-        {/* Mobile tab panels */}
-        <div className="mobile-panel space-y-4">
+      <div className="mx-auto max-w-[1100px] px-4 py-4 pb-36 sm:px-7 sm:py-6 md:pb-8 xl:pb-10">
+        <FlowHint copy={copy} activeTab={mobileTab} />
+        {/* Tab panel — same one-job-per-screen flow at every screen size */}
+        <div className="app-panel space-y-4">
           {mobileTab === "overview" && (
             <>
               {metrics}
@@ -1040,22 +1042,6 @@ export default function Home() {
           {mobileTab === "plan" && planPanel}
           {mobileTab === "despatch" && despatchPanel}
           {mobileTab === "batch" && batchPanel}
-        </div>
-
-        {/* Desktop layout */}
-        <div className="desktop-layout space-y-5">
-          {metrics}
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,.75fr)]">
-            <div className="space-y-5">
-              {forecastPanel}
-              {productionOptimizerPanel}
-              {tanksPanel}
-              {ffaForecastPanel}
-              {despatchPanel}
-              {batchPanel}
-            </div>
-            <aside className="space-y-5">{planPanel}</aside>
-          </div>
         </div>
 
         <p className="mt-5 pb-2 text-center text-xs leading-relaxed text-[#758078] md:pb-4">
@@ -1084,7 +1070,7 @@ export default function Home() {
           <button
             type="button"
             onClick={useSuggested}
-            className="btn-touch w-full bg-[#173f30] text-white"
+            className="btn-touch w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)]"
           >
             <Sparkles size={16} />
             {copy.allocation.useBestPlan}
@@ -1092,6 +1078,29 @@ export default function Home() {
         </div>
       )}
     </main>
+  );
+}
+
+const FLOW_ORDER: MobileTab[] = ["overview", "tanks", "plan", "despatch", "batch"];
+
+function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
+  const stepIndex = FLOW_ORDER.indexOf(activeTab);
+  return (
+    <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#dbe9de] bg-white px-3.5 py-2.5 shadow-[0_1px_2px_rgba(15,45,32,0.04)]">
+      <div className="flex shrink-0 items-center gap-1">
+        {FLOW_ORDER.map((step, i) => (
+          <span
+            key={step}
+            className={`h-1.5 rounded-full transition-all ${
+              i === stepIndex ? "w-5 bg-[#00b14f]" : i < stepIndex ? "w-1.5 bg-[#00b14f]/50" : "w-1.5 bg-[#dfe5df]"
+            }`}
+          />
+        ))}
+      </div>
+      <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[#3f4c46]">
+        {copy.flow[activeTab]}
+      </p>
+    </div>
   );
 }
 
@@ -1148,12 +1157,14 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="min-w-0 max-w-full rounded-2xl border border-[#d9e2da] bg-white p-4 shadow-sm sm:p-5">
+    <section className="min-w-0 max-w-full rounded-2xl border border-[#e5eae5] bg-white p-4 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_8px_24px_-16px_rgba(15,45,32,0.18)] sm:p-5">
       <div
         className={`mb-5 flex gap-3 ${stackAction ? "flex-col" : "items-start justify-between"}`}
       >
         <div className="flex min-w-0 gap-3">
-          <span className="mt-0.5 shrink-0 text-[#287451]">{icon}</span>
+          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e5faed] text-[#00713a]">
+            {icon}
+          </span>
           <div className="min-w-0">
             <h2 className="font-bold">{title}</h2>
             <p className="mt-0.5 text-xs leading-relaxed text-[#758078]">{subtitle}</p>
@@ -1167,7 +1178,9 @@ function Panel({
 }
 
 function formatNumericValue(value: number) {
-  return Number.isFinite(value) ? String(value) : "";
+  if (!Number.isFinite(value)) return "";
+  const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+  return String(rounded);
 }
 
 function parseNumericDraft(draft: string) {
@@ -1213,6 +1226,47 @@ function NumericInput({
   );
 }
 
+function NullableNumericInput({
+  label,
+  value,
+  onChange,
+  className,
+}: {
+  label: string;
+  value: number | null;
+  onChange: (value: number | null) => void;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? (value === null ? "" : formatNumericValue(value));
+
+  return (
+    <input
+      aria-label={label}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      value={display}
+      onFocus={() => setDraft(value === null ? "" : formatNumericValue(value))}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (next === "" || /^-?\d*\.?\d*$/.test(next)) setDraft(next);
+      }}
+      onBlur={() => {
+        if (draft === null) return;
+        if (draft.trim() === "") {
+          onChange(null);
+        } else {
+          const parsed = parseNumericDraft(draft);
+          if (parsed !== null) onChange(parsed);
+        }
+        setDraft(null);
+      }}
+      className={className}
+    />
+  );
+}
+
 function TankNameInput({
   value,
   onChange,
@@ -1241,7 +1295,7 @@ function TankNameInput({
         if (trimmed) onChange(trimmed);
         setDraft(null);
       }}
-      className="input-touch w-full min-w-0 max-w-full rounded-lg border border-[#dfe5df] bg-white px-3 py-2.5 text-sm font-bold text-[#173f30] outline-none ring-[#88a84e] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
+      className="input-touch w-full min-w-0 max-w-full rounded-lg border border-[#dfe5df] bg-white px-3 py-2.5 text-sm font-bold text-[#173f30] outline-none ring-[#00b14f] placeholder:font-normal placeholder:text-[#9aa59f] focus:ring-2"
     />
   );
 }
@@ -1709,7 +1763,7 @@ function PlanOption({
           <button
             type="button"
             onClick={onApply}
-            className="btn-touch relative z-10 shrink-0 rounded-lg bg-[#173f30] px-3 py-2 text-xs font-bold text-white"
+            className="btn-touch relative z-10 shrink-0 rounded-lg bg-[#00b14f] px-3 py-2 text-xs font-bold text-white hover:bg-[#00a047]"
           >
             {copy.plan.useThisPlan}
           </button>
@@ -1727,7 +1781,7 @@ function PlanOption({
           {meetsTarget ? copy.plan.withinLimit : copy.plan.maxFinalFfa(maxFfa)}
         </p>
         {penaltyLabel && (
-          <p className={`mt-1 text-[10px] font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#278858]"}`}>
+          <p className={`mt-1 text-[10px] font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#00b14f]"}`}>
             {penaltyLabel}
           </p>
         )}
@@ -1738,14 +1792,14 @@ function PlanOption({
   return (
     <div
       className={`rounded-xl border p-3 ${
-        highlighted ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+        highlighted ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-bold text-[#173f30]">{copy.plan.planRank(rank)}</span>
         <span
           className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            meetsTarget ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+            meetsTarget ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
           }`}
         >
           {meetsTarget ? copy.plan.withinLimit : copy.plan.aboveLimitShort}
@@ -1762,7 +1816,7 @@ function PlanOption({
       </div>
       <p className="mt-2 text-[11px] text-[#708078]">{copy.plan.maxFinalFfa(maxFfa)}</p>
       {penaltyLabel && (
-        <p className={`mt-1 text-[11px] font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#278858]"}`}>
+        <p className={`mt-1 text-[11px] font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#00b14f]"}`}>
           {penaltyLabel}
         </p>
       )}
@@ -1770,7 +1824,7 @@ function PlanOption({
         type="button"
         onClick={onApply}
         className={`btn-touch relative z-10 mt-2 w-full scroll-mb-28 text-sm ${
-          highlighted ? "bg-[#173f30] text-white" : "bg-[#d7f08a] text-[#173f30]"
+          highlighted ? "bg-[#173f30] text-white" : "bg-[#d4f7e2] text-[#00713a]"
         }`}
       >
         <RefreshCw size={14} />
@@ -1827,12 +1881,12 @@ function SmartRecommendation({
       <div className="bg-[#173f30] p-4 text-white sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-bold">
-            <Sparkles size={19} className="text-[#d7f08a]" />
+            <Sparkles size={19} className="text-[#8ff0bb]" />
             {copy.plan.smartRecommendation}
           </div>
           <span
             className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-              valid ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+              valid ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
             }`}
           >
             {valid ? copy.plan.planChecked : copy.plan.checkInput}
@@ -1907,7 +1961,7 @@ function SmartRecommendation({
             <button
               type="button"
               onClick={() => onApplyPlan(best)}
-              className="btn-touch mt-5 hidden w-full bg-[#d7f08a] text-[#173f30] md:flex"
+              className="btn-touch mt-5 hidden w-full bg-[#d4f7e2] text-[#00713a] md:flex"
             >
               <RefreshCw size={16} />
               {copy.allocation.applyRecommended}
@@ -2059,7 +2113,7 @@ function AiAdvisorPanel({
         placeholder={aiMessages.length ? copy.aiChat.newQuestion : copy.ai.questionPlaceholder}
         rows={3}
         maxLength={500}
-        className="mt-3 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#88a84e] placeholder:text-[#9aa59f] focus:ring-2"
+        className="mt-3 w-full rounded-xl border border-[#dce3dd] bg-[#f9faf8] px-3 py-2.5 text-sm leading-relaxed text-[#17231d] outline-none ring-[#00b14f] placeholder:text-[#9aa59f] focus:ring-2"
       />
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -2075,7 +2129,7 @@ function AiAdvisorPanel({
           type="button"
           onClick={() => onGetAiOpinion({ deepAnalysis: true })}
           disabled={aiDisabled}
-          className="btn-touch bg-[#173f30] text-white disabled:opacity-60"
+          className="btn-touch bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] disabled:opacity-60"
         >
           {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
           {copy.aiChat.deepAnalysis}
@@ -2127,7 +2181,7 @@ function TankerDespatchPlanner({
               step={1}
               value={tankerLoadMt || ""}
               onChange={(e) => onTankerLoadChange(Number(e.target.value) || 0)}
-              className="w-full rounded-xl border border-[#dce3dd] bg-white px-3 py-2.5 text-sm font-semibold text-[#173f30] outline-none ring-[#88a84e] focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="w-full rounded-xl border border-[#dce3dd] bg-white px-3 py-2.5 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
             <span className="shrink-0 text-sm font-bold text-[#58665e]">MT</span>
           </div>
@@ -2209,7 +2263,7 @@ function DespatchOption({
   return (
     <div
       className={`rounded-xl border p-3 ${
-        highlighted ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+        highlighted ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2220,7 +2274,7 @@ function DespatchOption({
           </span>
           <span
             className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              plan.meetsLimit ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+              plan.meetsLimit ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
             }`}
           >
             {plan.meetsLimit ? copy.despatch.withinLimit : copy.despatch.aboveLimitShort}
@@ -2281,14 +2335,14 @@ function LossOptimizerPanel({
                 <div
                   key={r.tankName}
                   className={`rounded-xl border p-3 ${
-                    hold ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#efc7aa] bg-[#fff8f3]"
+                    hold ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#efc7aa] bg-[#fff8f3]"
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-bold text-[#173f30]">{r.tankName}</span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        hold ? "bg-[#d7f08a] text-[#173f30]" : "bg-[#ffceb7] text-[#7c2d12]"
+                        hold ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
                       }`}
                     >
                       {hold ? copy.lossOptimizer.hold : copy.lossOptimizer.despatchNow}
@@ -2312,7 +2366,7 @@ function LossOptimizerPanel({
                       {copy.lossOptimizer.despatchNowPenalty}:{" "}
                       <strong className="text-[#92441f]">RM {n(r.despatchNowPenaltyRm, 0)}</strong>
                     </span>
-                    <span className={r.savingsRm > 0 ? "font-bold text-[#278858]" : ""}>
+                    <span className={r.savingsRm > 0 ? "font-bold text-[#00b14f]" : ""}>
                       {r.savingsRm > 0
                         ? `${copy.lossOptimizer.savingsIfHold}: RM ${n(r.savingsRm, 0)}`
                         : copy.lossOptimizer.noSavings}
@@ -2374,7 +2428,7 @@ function BatchBlendPlanner({
           <label
             key={tank.name}
             className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-sm ${
-              selected.has(i) ? "border-[#88a84e] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+              selected.has(i) ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
             }`}
           >
             <input
@@ -2405,13 +2459,13 @@ function BatchBlendPlanner({
           <p className="text-sm text-[#58665e]">{copy.batchBlend.needAtLeastTwo}</p>
         ) : result.days === 0 ? (
           <div className="flex items-start gap-2 rounded-xl bg-[#f6fae9] p-3 text-sm text-[#173f30]">
-            <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#278858]" />
+            <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#00b14f]" />
             {copy.batchBlend.alreadyGood}
           </div>
         ) : result.feasible ? (
           <>
             <div className="flex items-start gap-2 rounded-xl bg-[#f6fae9] p-3 text-sm font-semibold text-[#173f30]">
-              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#278858]" />
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#00b14f]" />
               {copy.batchBlend.readyAfter(result.days ?? 0)}
             </div>
             {result.steps.length > 0 && (
@@ -2492,7 +2546,7 @@ function DecisionSafeguards({
           <div key={i} className="flex min-h-[44px] items-center justify-between gap-3">
             <span className="leading-snug text-[#53625a]">{label}</span>
             {ok ? (
-              <CheckCircle2 size={20} className="shrink-0 text-[#278858]" />
+              <CheckCircle2 size={20} className="shrink-0 text-[#00b14f]" />
             ) : (
               <AlertTriangle size={20} className="shrink-0 text-[#d2773d]" />
             )}
@@ -2611,7 +2665,7 @@ function PenaltyPanel({
           <select
             value={activeProfile?.id ?? ""}
             onChange={(e) => onSelectProfile(e.target.value)}
-            className="min-h-[40px] rounded-lg border border-[#dce3dd] bg-white px-3 text-sm font-semibold text-[#173f30] outline-none ring-[#88a84e] focus:ring-2"
+            className="min-h-[40px] rounded-lg border border-[#dce3dd] bg-white px-3 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2"
           >
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>
@@ -2677,14 +2731,10 @@ function PenaltyPanel({
                   <label className="block min-w-0 max-w-full">
                     <span className="field-label">{copy.penalty.maxFfa}</span>
                     <div className="field-shell">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={band.maxFfaPct === null ? "" : String(band.maxFfaPct)}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          updateBand(band.id, { maxFfaPct: raw === "" ? null : Number(raw) || 0 });
-                        }}
+                      <NullableNumericInput
+                        label={copy.penalty.maxFfa}
+                        value={band.maxFfaPct}
+                        onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
                         className="numeric-input"
                       />
                       <span className="shrink-0 text-sm text-[#7a867f]">%</span>
@@ -2735,7 +2785,7 @@ function PenaltyPanel({
   );
 }
 
-const FORECAST_LINE_COLORS = ["#173f30", "#3d9b62", "#c9873f", "#b45839", "#88a84e", "#6c7971"];
+const FORECAST_LINE_COLORS = ["#173f30", "#3d9b62", "#c9873f", "#b45839", "#00b14f", "#6c7971"];
 
 function FfaForecastPanel({
   copy,
@@ -2831,7 +2881,7 @@ function FfaForecastPanel({
             {p.daysToLimit !== null ? (
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             ) : (
-              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#278858]" />
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#00b14f]" />
             )}
             <span>
               {p.daysToLimit !== null
@@ -2923,7 +2973,7 @@ function ProductionOptimizer({
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                   baselineMeetsTarget && !baselineOverflow
-                    ? "bg-[#d7f08a] text-[#173f30]"
+                    ? "bg-[#d4f7e2] text-[#00713a]"
                     : "bg-[#ffceb7] text-[#7c2d12]"
                 }`}
               >
@@ -2977,7 +3027,7 @@ function ProductionOptimizer({
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                         result.feasible && result.meetsTarget && !result.overflow
-                          ? "bg-[#d7f08a] text-[#173f30]"
+                          ? "bg-[#d4f7e2] text-[#00713a]"
                           : "bg-[#ffceb7] text-[#7c2d12]"
                       }`}
                     >

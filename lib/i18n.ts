@@ -1,6 +1,6 @@
 export type Lang = "en" | "bm";
 
-const n = (v: number, d = 1) =>
+const n = (v: number, d = 2) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
 export const translations = {
@@ -11,6 +11,13 @@ export const translations = {
     footer:
       "Decision-support tool only · Final transfer requires authorised engineer verification",
     nav: { overview: "Overview", tanks: "Tanks", plan: "Plan", despatch: "Despatch", batch: "Batch blend" },
+    flow: {
+      overview: "Step 1 of 5 — Check today's incoming CPO and mill capacity.",
+      tanks: "Step 2 of 5 — Confirm what's in each tank right now.",
+      plan: "Step 3 of 5 — See the recommended blend and its cost/risk.",
+      despatch: "Step 4 of 5 — Decide what to load onto the tanker.",
+      batch: "Step 5 of 5 — Only if you don't process daily: plan tank-to-tank transfers.",
+    },
     metrics: {
       currentStock: "Current stock",
       highFfaStock: "High-FFA stock",
@@ -258,6 +265,13 @@ export const translations = {
     footer:
       "Alat sokongan keputusan sahaja · Pemindahan akhir memerlukan pengesahan jurutera berwibawa",
     nav: { overview: "Ringkasan", tanks: "Tangki", plan: "Pelan", despatch: "Despatch", batch: "Campuran kelompok" },
+    flow: {
+      overview: "Langkah 1/5 — Semak CPO masuk dan kapasiti kilang hari ini.",
+      tanks: "Langkah 2/5 — Sahkan apa yang ada dalam setiap tangki sekarang.",
+      plan: "Langkah 3/5 — Lihat cadangan campuran serta kos/risikonya.",
+      despatch: "Langkah 4/5 — Tentukan apa yang dimuatkan ke tanker.",
+      batch: "Langkah 5/5 — Jika tidak proses setiap hari: rancang pemindahan tangki-ke-tangki.",
+    },
     metrics: {
       currentStock: "Stok semasa",
       highFfaStock: "Stok FFA tinggi",
