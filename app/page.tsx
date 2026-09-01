@@ -1471,6 +1471,30 @@ function ReadonlyStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function QuickStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: TankState;
+}) {
+  const accentColor =
+    accent === "critical" ? "#a4342c" : accent === "warning" ? "#a64f24" : "#00713a";
+  return (
+    <div className="tank-unit__quickstat">
+      <span className="tank-unit__quickstat-label">{label}</span>
+      <span
+        className="tank-unit__quickstat-value"
+        style={accent ? { color: accentColor } : undefined}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function BeforeAfterPanel({
   copy,
   tank,
@@ -1598,19 +1622,37 @@ function TankUnitCard({
         <section className="tank-unit__identity">
           <div className="tank-unit__identity-head">
             <TankCylinder fillPct={result.utilisation} state={state} />
-            <div className="tank-unit__name">
+            <div className="tank-unit__identity-side">
               <TankNameInput
                 value={tank.name}
                 onChange={(v) => onUpdate("name", v)}
                 placeholder={copy.tanks.namePlaceholder}
                 ariaLabel={copy.tanks.name}
               />
-              <p className="tank-unit__meta">{copy.tanks.filledAfter(result.utilisation)}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className={`status-pill ${state}`}>
                   {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
                   {status}
                 </span>
+                <span className="text-xs font-semibold text-[#708078]">
+                  {copy.tanks.filledAfter(result.utilisation)}
+                </span>
+              </div>
+              <div className="tank-unit__quickstats">
+                <QuickStat label={copy.tanks.capacity} value={`${n(tank.capacity, 0)} MT`} />
+                <QuickStat label={copy.tanks.stockNow} value={`${n(tank.stock, 0)} MT`} />
+                <QuickStat label={copy.tanks.ffaNow} value={`${n(tank.ffa, 2)}%`} />
+                <QuickStat label={copy.tanks.allocation} value={`${n(allocationPct, 0)}%`} />
+                <QuickStat
+                  label={copy.tanks.finalStock}
+                  value={`${n(result.finalStock, 0)} MT`}
+                  accent={state}
+                />
+                <QuickStat
+                  label={copy.tanks.finalFfa}
+                  value={`${n(result.finalFFA, 2)}%`}
+                  accent={state}
+                />
               </div>
             </div>
           </div>
