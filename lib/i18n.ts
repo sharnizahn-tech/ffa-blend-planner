@@ -104,9 +104,14 @@ export const translations = {
       checkInput: "CHECK INPUT",
       safeAllocation: "A safe allocation is available",
       limitNotAchievable: "Good FFA limit cannot be met for all tanks",
+      consolidateTitle: (tank: string) => `Consolidate into ${tank}, then blend it down`,
+      consolidateBasis:
+        "Incoming FFA is above 5% — this batch goes to the highest-FFA tank on purpose, then gets diluted back down separately. See the blend-down plan below.",
       planBasis:
         "Based on tank capacity, current stock, and the good FFA limit (lower FFA is better; 4.8% is the maximum for good quality).",
       recommendedAllocation: "Recommended allocation",
+      blendDownPlan: "Blend-down plan",
+      useSplitInstead: "No — use the split plan instead",
       topPlans: "Top 3 plans",
       planRank: (rank: number) => (rank === 1 ? "Plan 1 (best)" : `Plan ${rank}`),
       useThisPlan: "Use this plan",
@@ -484,9 +489,14 @@ export const translations = {
       checkInput: "SEMAK INPUT",
       safeAllocation: "Peruntukan selamat tersedia",
       limitNotAchievable: "Had FFA baik tidak boleh dicapai untuk semua tangki",
+      consolidateTitle: (tank: string) => `Gabungkan ke ${tank}, kemudian cairkan`,
+      consolidateBasis:
+        "FFA masuk melebihi 5% — kelompok ini sengaja pergi ke tangki FFA tertinggi, kemudian dicairkan semula secara berasingan. Lihat pelan pencairan di bawah.",
       planBasis:
         "Berdasarkan kapasiti tangki, stok semasa, dan had FFA baik (FFA lebih rendah lebih baik; 4.8% ialah maksimum untuk kualiti baik).",
       recommendedAllocation: "Peruntukan disyorkan",
+      blendDownPlan: "Pelan pencairan",
+      useSplitInstead: "Tidak — guna pelan pisahan sebaliknya",
       topPlans: "3 pelan terbaik",
       planRank: (rank: number) => (rank === 1 ? "Pelan 1 (terbaik)" : `Pelan ${rank}`),
       useThisPlan: "Guna pelan ini",

@@ -1191,6 +1191,11 @@ export default function Home() {
             setAiError(null);
           }}
           penaltyBands={activeProfile?.bands}
+          consolidateRuleApplies={consolidateRuleApplies}
+          forceSplitFallback={forceSplitFallback}
+          bestSingleTank={bestSingleTank}
+          singleTankBlendPlan={singleTankBlendPlan}
+          onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
         />
       </div>
     </>
@@ -2796,6 +2801,11 @@ function SmartRecommendation({
   onGetAiOpinion,
   onClearChat,
   penaltyBands,
+  consolidateRuleApplies,
+  forceSplitFallback,
+  bestSingleTank,
+  singleTankBlendPlan,
+  onApplySingle,
 }: {
   copy: Copy;
   topPlans: BlendPlan[];
@@ -2816,8 +2826,35 @@ function SmartRecommendation({
   onGetAiOpinion: (opts?: { deepAnalysis?: boolean }) => void;
   onClearChat: () => void;
   penaltyBands?: PenaltyBand[] | null;
+  consolidateRuleApplies: boolean;
+  forceSplitFallback: boolean;
+  bestSingleTank: BlendPlan | null;
+  singleTankBlendPlan: { hold: HoldSimulation; dilutionTankName: string | null } | null;
+  onApplySingle: () => void;
 }) {
   const best = topPlans[0];
+  const useConsolidate = consolidateRuleApplies && !forceSplitFallback && !!bestSingleTank;
+  const singleIndex = useConsolidate ? bestSingleTank!.allocation.findIndex((v) => v === 100) : -1;
+  const singleResult = useConsolidate && singleIndex >= 0 ? bestSingleTank!.results[singleIndex] : null;
+
+  let blendDownText: string | null = null;
+  if (useConsolidate && singleResult) {
+    if (singleResult.finalFFA <= target) {
+      blendDownText = null;
+    } else if (!singleTankBlendPlan?.dilutionTankName) {
+      blendDownText = copy.routingStrategy.consolidateNoDilutionTank;
+    } else if (singleTankBlendPlan.hold.feasible && singleTankBlendPlan.hold.days !== null) {
+      blendDownText = copy.routingStrategy.consolidateBlendPlan(
+        n(singleTankBlendPlan.hold.transferUsedMt, 0),
+        singleTankBlendPlan.dilutionTankName,
+        singleTankBlendPlan.hold.days,
+        n(singleTankBlendPlan.hold.finalFfaPct, 2),
+      );
+    } else {
+      blendDownText = copy.routingStrategy.consolidateBlendInfeasible;
+    }
+  }
+
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
       <div className="relative overflow-hidden bg-[#173f30] p-4 text-white sm:p-5">
@@ -2844,13 +2881,73 @@ function SmartRecommendation({
             </span>
           </div>
           <h2 className="text-lg font-bold leading-snug sm:text-xl">
-            {bestMeetsTarget ? copy.plan.safeAllocation : copy.plan.limitNotAchievable}
+            {useConsolidate
+              ? copy.plan.consolidateTitle(tanks[singleIndex].name)
+              : bestMeetsTarget
+                ? copy.plan.safeAllocation
+                : copy.plan.limitNotAchievable}
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">{copy.plan.planBasis}</p>
+          <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">
+            {useConsolidate ? copy.plan.consolidateBasis : copy.plan.planBasis}
+          </p>
         </div>
       </div>
       <div className="p-4 sm:p-5">
-        {best ? (
+        {useConsolidate ? (
+          <>
+            <p className="section-label">{copy.plan.recommendedAllocation}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {bestSingleTank!.allocation.map((x, i) => (
+                <div key={i} className="plan-pill">
+                  <p className="text-xs text-[#708078]">{tanks[i].name}</p>
+                  <p className="mt-1 text-xl font-extrabold text-[#173f30]">{x}%</p>
+                  <p className="text-[11px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
+                </div>
+              ))}
+            </div>
+
+            {blendDownText && (
+              <div className="mt-4">
+                <p className="section-label">{copy.plan.blendDownPlan}</p>
+                <div className="mt-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3.5 text-sm leading-relaxed text-[#92441f]">
+                  {blendDownText}
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={onApplySingle}
+              className="btn-touch mt-5 flex w-full bg-[#d4f7e2] text-[#00713a]"
+            >
+              <RefreshCw size={16} />
+              {copy.routingStrategy.applySingle}
+            </button>
+            {best && (
+              <button
+                type="button"
+                onClick={() => onApplyPlan(best)}
+                className="btn-touch mt-2 flex w-full border border-[#dfe5df] bg-white text-[#3f4c46]"
+              >
+                {copy.plan.useSplitInstead}
+              </button>
+            )}
+
+            <div className="mt-5 border-t border-[#e8ede8] pt-5">
+              <AiAdvisorPanel
+                copy={copy}
+                aiMessages={aiMessages}
+                aiLoading={aiLoading}
+                aiError={aiError}
+                aiCooldown={aiCooldown}
+                aiQuestion={aiQuestion}
+                onAiQuestionChange={onAiQuestionChange}
+                onGetAiOpinion={onGetAiOpinion}
+                onClearChat={onClearChat}
+              />
+            </div>
+          </>
+        ) : best ? (
           <>
             <p className="section-label">{copy.plan.recommendedAllocation}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
