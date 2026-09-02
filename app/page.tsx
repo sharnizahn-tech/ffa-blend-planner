@@ -796,7 +796,7 @@ export default function Home() {
       subtitle={copy.forecast.subtitle}
       icon={<Gauge size={19} />}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <Field label={copy.forecast.capacity} value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
         <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hr" />
         <Field label={copy.forecast.utilisation} value={utilisation} onChange={setUtilisation} unit="%" />
@@ -3106,7 +3106,7 @@ function ProductionOptimizer({
 
   return (
     <Panel title={copy.production.title} subtitle={copy.production.subtitle} icon={<Wand2 size={19} />}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-xl bg-[#f6fae9] p-3">
           <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.production.safeIncoming}</p>
           <p className="mt-1 text-xl font-extrabold text-[#173f30]">{n(suggestion.maxSafeIncomingCpoMt)} MT</p>
