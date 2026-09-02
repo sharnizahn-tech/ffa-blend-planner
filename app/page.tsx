@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -1175,41 +1176,6 @@ function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
   );
 }
 
-function TankSilhouette() {
-  return (
-    <svg
-      viewBox="0 0 220 160"
-      aria-hidden
-      className="pointer-events-none absolute inset-y-0 right-0 h-full w-[38%] opacity-40 sm:w-[32%]"
-      preserveAspectRatio="xMaxYMid slice"
-    >
-      <defs>
-        <linearGradient id="tankShellGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#dcecdf" />
-          <stop offset="100%" stopColor="#a9c9ae" />
-        </linearGradient>
-        <linearGradient id="tankFadeGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#123c2c" stopOpacity="1" />
-          <stop offset="70%" stopColor="#123c2c" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#123c2c" stopOpacity="0.15" />
-        </linearGradient>
-      </defs>
-      {[
-        { x: 30, w: 34, h: 92 },
-        { x: 76, w: 40, h: 112 },
-        { x: 128, w: 34, h: 84 },
-        { x: 172, w: 38, h: 104 },
-      ].map((t, i) => (
-        <g key={i}>
-          <rect x={t.x} y={160 - t.h} width={t.w} height={t.h} rx={6} fill="url(#tankShellGrad)" />
-          <ellipse cx={t.x + t.w / 2} cy={160 - t.h} rx={t.w / 2} ry={5} fill="#eef6f0" />
-        </g>
-      ))}
-      <rect x="0" y="0" width="220" height="160" fill="url(#tankFadeGrad)" />
-    </svg>
-  );
-}
-
 function BlendSituationCard({
   copy,
   incomingCPO,
@@ -1242,7 +1208,18 @@ function BlendSituationCard({
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-[#d9e2da] bg-[#123c2c] text-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_8px_24px_-16px_rgba(15,45,32,0.3)]">
-      <TankSilhouette />
+      <div className="absolute inset-0">
+        <Image
+          src="/BST.webp"
+          alt=""
+          fill
+          priority
+          sizes="(min-width: 1024px) 60vw, 100vw"
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#123c2c] via-[#123c2c]/90 to-[#123c2c]/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#123c2c]/70 via-transparent to-transparent" />
+      </div>
       <div className="relative z-10 p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-bold sm:text-lg">{copy.blendSituation.title}</h2>
