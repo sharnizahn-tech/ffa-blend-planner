@@ -145,6 +145,14 @@ input[type="number"]::-webkit-outer-spin-button {
 .tank-panel {
   min-width: 0;
   max-width: 100%;
+  /* Tank cards switch between stacked and side-by-side internal layouts
+     based on the width they actually have to work with, not the browser
+     viewport — the panel might be full-width, or squeezed into a 50/50
+     split next to another panel. Without this, a card that looked fine
+     full-width clips the moment it shares a row with something else,
+     because @media only knows the viewport, never the container. */
+  container-type: inline-size;
+  container-name: tankpanel;
 }
 
 .tank-panel-actions {
@@ -293,8 +301,9 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* Only show the 0/50/100% scale once there's enough width for it not to
-   crowd the stat grid beside the cylinder. */
-@media (min-width: 1024px) {
+   crowd the stat grid beside the cylinder. Keyed to the tank panel's own
+   width (container query), not the viewport — see .tank-panel above. */
+@container tankpanel (min-width: 1024px) {
   .tank-unit__scale {
     display: flex;
   }
@@ -320,7 +329,7 @@ input[type="number"]::-webkit-outer-spin-button {
   align-self: center;
 }
 
-@media (min-width: 1024px) {
+@container tankpanel (min-width: 1024px) {
   .tank-unit__identity-head {
     flex-direction: row;
     align-items: flex-start;
@@ -701,7 +710,7 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-@media (min-width: 768px) {
+@container tankpanel (min-width: 768px) {
   .allocation-slider,
   .tank-unit__allocate-results {
     display: none;
@@ -709,8 +718,11 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* Tablet + desktop — identity (cylinder + stats) and allocation side by side
-   so the card uses the full card width instead of leaving space blank. */
-@media (min-width: 768px) {
+   so the card uses the full card width instead of leaving space blank.
+   Container query: keyed to the tank panel's own rendered width, so this
+   only switches once the card genuinely has 768px+ to work with — whether
+   that's the full page or a narrower column next to another panel. */
+@container tankpanel (min-width: 768px) {
   .tank-unit__body {
     grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr);
     grid-template-areas: "identity allocate";
@@ -732,7 +744,7 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-@media (min-width: 1024px) {
+@container tankpanel (min-width: 1024px) {
   .tank-unit__quickstats {
     max-width: 30rem;
   }
