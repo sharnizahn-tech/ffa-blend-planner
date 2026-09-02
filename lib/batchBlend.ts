@@ -26,6 +26,7 @@ export function planBatchBlend(
   target: number,
   maxTransferPerDayMt: number,
   maxDays = 30,
+  deadStockMt = 0,
 ): BatchBlendResult {
   const working = tanks.map((t) => ({ ...t }));
 
@@ -46,8 +47,10 @@ export function planBatchBlend(
       return { feasible: false, days: null, steps, finalTanks: working, reason: "no-spare-capacity" };
     }
 
+    // A source tank can only give up stock above its dead stock reserve —
+    // the bottom layer is never drawn down, since quality degrades near empty.
     const sources = working
-      .filter((t) => t !== high && t.ffa < target && t.stock > 0)
+      .filter((t) => t !== high && t.ffa < target && t.stock - deadStockMt > 0)
       .sort((a, b) => a.ffa - b.ffa);
     if (!sources.length) {
       return { feasible: false, days: null, steps, finalTanks: working, reason: "no-low-ffa-source" };
@@ -59,7 +62,7 @@ export function planBatchBlend(
       if (budget <= 0) break;
       const spare = high.capacity - high.stock;
       if (spare <= 0.01) break;
-      const moveMt = Math.min(budget, spare, src.stock);
+      const moveMt = Math.min(budget, spare, Math.max(0, src.stock - deadStockMt));
       if (moveMt <= 0) continue;
 
       const newStock = high.stock + moveMt;

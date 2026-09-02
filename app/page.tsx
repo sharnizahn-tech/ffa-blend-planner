@@ -329,6 +329,7 @@ export default function Home() {
   const [oer, setOer] = useState(19);
   const [incomingFFA, setIncomingFFA] = useState(6.7);
   const [target, setTarget] = useState(4.8);
+  const [deadStockMt, setDeadStockMtState] = useState(200);
   const [allocation, setAllocation] = useState([0, 100]);
   const [mobileTab, setMobileTab] = useState<MobileTab>("overview");
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -385,6 +386,17 @@ export default function Home() {
     setHorizonDays(v);
     saveHorizonDays(v);
   };
+  const changeDeadStockMt = (v: number) => {
+    const clamped = Math.max(0, v);
+    setDeadStockMtState(clamped);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("ffa-dead-stock-mt", String(clamped));
+      } catch {
+        // best-effort only
+      }
+    }
+  };
   const changeMaxTransferPerDay = (v: number) => {
     setMaxTransferPerDayMtState(v);
     setAutoTransfer(false);
@@ -435,6 +447,13 @@ export default function Home() {
       setMaxTransferPerDayMtState(storedTransfer);
       setAutoTransfer(false);
     }
+    try {
+      const storedDeadStock = window.localStorage.getItem("ffa-dead-stock-mt");
+      const parsed = storedDeadStock ? Number(storedDeadStock) : NaN;
+      if (Number.isFinite(parsed) && parsed >= 0) setDeadStockMtState(parsed);
+    } catch {
+      // best-effort only
+    }
   }, []);
 
   const setLanguage = (next: Lang) => {
@@ -475,14 +494,16 @@ export default function Home() {
         ? "medium"
         : "low";
   const blendAtRisk = incomingFFA > target || highFFAStock > 0;
+  // Dispatchable stock excludes the dead stock reserve — the bottom layer of
+  // a tank is never shipped, since quality near-empty is unreliable.
   const despatchTanks = useMemo(
     () =>
       results.map((r) => ({
         name: r.name,
-        stockMt: r.finalStock,
+        stockMt: Math.max(0, r.finalStock - deadStockMt),
         ffaPct: r.finalFFA,
       })),
-    [results],
+    [results, deadStockMt],
   );
   // Ship from good-FFA tanks first — tanks already over the limit are excluded
   // as despatch sources here (they belong on the Loss Optimizer / Transfer flow
@@ -555,10 +576,11 @@ export default function Home() {
           riseFactorPerDay,
           maxTransferPerDayMt,
           activeProfile.bands,
+          deadStockMt,
         );
       })
       .filter((r): r is HoldVsDespatch => r !== null);
-  }, [tanks, target, incomingCPO, incomingFFA, riseFactorPerDay, maxTransferPerDayMt, activeProfile]);
+  }, [tanks, target, incomingCPO, incomingFFA, riseFactorPerDay, maxTransferPerDayMt, activeProfile, deadStockMt]);
 
   const batchBlendTanks = useMemo(
     () => tanks.filter((_, i) => batchSelected.has(i)),
@@ -566,8 +588,8 @@ export default function Home() {
   );
   const batchBlendResult = useMemo<BatchBlendResult | null>(() => {
     if (batchBlendTanks.length < 2) return null;
-    return planBatchBlend(batchBlendTanks, target, maxTransferPerDayMt);
-  }, [batchBlendTanks, target, maxTransferPerDayMt]);
+    return planBatchBlend(batchBlendTanks, target, maxTransferPerDayMt, 30, deadStockMt);
+  }, [batchBlendTanks, target, maxTransferPerDayMt, deadStockMt]);
 
   const scenarioResults = useMemo(
     () =>
@@ -854,7 +876,7 @@ export default function Home() {
       subtitle={copy.forecast.subtitle}
       icon={<Gauge size={19} />}
     >
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
         <Field label={copy.forecast.capacity} value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
         <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hr" />
         <Field label={copy.forecast.utilisation} value={utilisation} onChange={setUtilisation} unit="%" />
@@ -867,8 +889,11 @@ export default function Home() {
           accent
         />
         <Field label={copy.forecast.ffaLimit} value={target} onChange={setTarget} unit="%" />
+        <Field label={copy.forecast.deadStock} value={deadStockMt} onChange={changeDeadStockMt} unit="MT" />
       </div>
-      <p className="mt-3 text-xs leading-relaxed text-[#758078]">{copy.forecast.ffaLimitHint}</p>
+      <p className="mt-3 text-xs leading-relaxed text-[#758078]">
+        {copy.forecast.ffaLimitHint} {copy.forecast.deadStockHint}
+      </p>
     </Panel>
   );
 
@@ -1040,6 +1065,7 @@ export default function Home() {
         onPreferFewerTanksChange={setPreferFewerTanks}
         penaltyRm={activeProfile ? despatchPenaltyRm : null}
         totalDespatchableMt={despatchTanks.reduce((s, t) => s + t.stockMt, 0)}
+        penaltyBands={activeProfile?.bands}
       />
       <LossOptimizerPanel
         copy={copy}
@@ -1055,7 +1081,7 @@ export default function Home() {
 
   const transferPanel = (
     <>
-      <SimpleTransferCalculator copy={copy} tanks={tanks} onTransfer={transferStock} />
+      <SimpleTransferCalculator copy={copy} tanks={tanks} deadStockMt={deadStockMt} onTransfer={transferStock} />
       <details className="advanced-disclosure">
         <summary>{copy.transferCalc.advanced}</summary>
         <div className="mt-4">
@@ -1162,13 +1188,6 @@ export default function Home() {
                 despatchPlan={topDespatchPlans[0] ?? null}
                 batchResult={batchBlendResult}
                 onApply={useSuggested}
-              />
-              <DecisionSafeguards
-                copy={copy}
-                results={results}
-                allocationTotal={allocationTotal}
-                target={target}
-                anyProjectedBreach={anyProjectedBreach}
               />
             </>
           )}
@@ -2215,10 +2234,12 @@ function TankSummaryTable({ copy, tanks, target }: { copy: Copy; tanks: Tank[]; 
 function SimpleTransferCalculator({
   copy,
   tanks,
+  deadStockMt,
   onTransfer,
 }: {
   copy: Copy;
   tanks: Tank[];
+  deadStockMt: number;
   onTransfer: (sourceIndex: number, destIndex: number, amountMt: number) => void;
 }) {
   const [sourceIndex, setSourceIndex] = useState(0);
@@ -2228,7 +2249,8 @@ function SimpleTransferCalculator({
   const source = tanks[sourceIndex];
   const dest = tanks[destIndex];
   const sameTank = sourceIndex === destIndex;
-  const notEnoughStock = !sameTank && source ? amount > source.stock : false;
+  const sourceAvailable = source ? Math.max(0, source.stock - deadStockMt) : 0;
+  const notEnoughStock = !sameTank && source ? amount > sourceAvailable : false;
   const destNewStock = dest ? dest.stock + amount : 0;
   const wouldOverflow = !sameTank && dest ? destNewStock > dest.capacity : false;
   const destNewFfa =
@@ -2273,6 +2295,11 @@ function SimpleTransferCalculator({
 
       <div className="mt-3 max-w-xs">
         <MiniField label={copy.transferCalc.amount} value={amount} onChange={(v) => setAmount(Math.max(0, v))} unit="MT" />
+        {!sameTank && source && (
+          <p className="mt-1.5 text-xs text-[#708078]">
+            {copy.transferCalc.availableToTransfer(n(sourceAvailable, 0), n(deadStockMt, 0))}
+          </p>
+        )}
       </div>
 
       {sameTank && (
@@ -2546,30 +2573,6 @@ function SmartRecommendation({
               </div>
             )}
 
-            <div className="mt-5 space-y-3">
-              <Advice
-                icon={<ShieldCheck size={17} />}
-                title={copy.plan.priorityAction}
-                text={
-                  highFFAStock
-                    ? copy.plan.priorityHighFfa(highFFAStock, highFfaTankNames)
-                    : copy.plan.priorityAllOk
-                }
-              />
-              <Advice
-                icon={<Info size={17} />}
-                title={copy.plan.assessment}
-                text={
-                  bestMeetsTarget ? copy.plan.assessmentMeetsLimit : copy.plan.assessmentMinImpact
-                }
-              />
-              <Advice
-                icon={<AlertTriangle size={17} />}
-                title={copy.plan.beforeTransfer}
-                text={copy.plan.beforeTransferText}
-                warning
-              />
-            </div>
             <button
               type="button"
               onClick={() => onApplyPlan(best)}
@@ -2748,6 +2751,7 @@ function TankerDespatchPlanner({
   onPreferFewerTanksChange,
   penaltyRm,
   totalDespatchableMt,
+  penaltyBands,
 }: {
   copy: Copy;
   tankerLoadMt: number;
@@ -2757,9 +2761,18 @@ function TankerDespatchPlanner({
   onPreferFewerTanksChange: (value: boolean) => void;
   penaltyRm: number | null;
   totalDespatchableMt: number;
+  penaltyBands?: PenaltyBand[] | null;
 }) {
   const hasStock = topPlans.length > 0;
   const loadsNeeded = tankerLoadMt > 0 ? Math.ceil(totalDespatchableMt / tankerLoadMt) : 0;
+  const [tankersToday, setTankersToday] = useState(1);
+  const bestOptionPenalty =
+    penaltyBands && topPlans[0]
+      ? calcTotalExposure(
+          topPlans[0].sources.map((s) => ({ ffaPct: s.ffaPct, tonnageMt: s.mt })),
+          penaltyBands,
+        )
+      : null;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
@@ -2827,6 +2840,7 @@ function TankerDespatchPlanner({
                   plan={plan}
                   copy={copy}
                   highlighted={i === 0}
+                  penaltyBands={penaltyBands}
                 />
               ))}
             </div>
@@ -2839,6 +2853,47 @@ function TankerDespatchPlanner({
               <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#f0cfb9] bg-[#fff8f3] px-3 py-2.5 text-sm font-semibold text-[#92441f]">
                 <Coins size={16} className="shrink-0" />
                 {copy.penalty.totalExposure(n(penaltyRm, 0))}
+              </div>
+            )}
+
+            {bestOptionPenalty !== null && (
+              <div className="mt-4 rounded-xl border border-[#dce3dd] bg-[#f9fbf8] p-3.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Truck size={16} className="shrink-0 text-[#245f43]" />
+                  <span className="text-sm font-bold text-[#173f30]">{copy.despatch.todaysSummary}</span>
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-end gap-3">
+                  <label className="block">
+                    <span className="field-label">{copy.despatch.tankersToday}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={tankersToday || ""}
+                      onChange={(e) => setTankersToday(Math.max(1, Number(e.target.value) || 1))}
+                      className="mt-1 w-24 rounded-lg border border-[#dce3dd] bg-white px-3 py-2 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </label>
+                  <div className="rounded-lg bg-white px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-[#7a867f]">
+                      {copy.despatch.totalMtToday}
+                    </p>
+                    <p className="text-sm font-extrabold text-[#173f30]">
+                      {n(tankersToday * topPlans[0].totalMt, 0)} MT
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-[#7a867f]">
+                      {copy.despatch.totalPenaltyToday}
+                    </p>
+                    <p className={`text-sm font-extrabold ${bestOptionPenalty > 0 ? "text-[#92441f]" : "text-[#00713a]"}`}>
+                      RM {n(tankersToday * bestOptionPenalty, 0)}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-[#758078]">
+                  {copy.despatch.todaysSummaryHint}
+                </p>
               </div>
             )}
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
@@ -2861,12 +2916,21 @@ function DespatchOption({
   plan,
   copy,
   highlighted,
+  penaltyBands,
 }: {
   rank: number;
   plan: DespatchPlan;
   copy: Copy;
   highlighted: boolean;
+  penaltyBands?: PenaltyBand[] | null;
 }) {
+  const penaltyRm = penaltyBands
+    ? calcTotalExposure(
+        plan.sources.map((s) => ({ ffaPct: s.ffaPct, tonnageMt: s.mt })),
+        penaltyBands,
+      )
+    : null;
+
   return (
     <div
       className={`rounded-xl border p-2.5 ${
@@ -2901,6 +2965,11 @@ function DespatchOption({
         {copy.despatch.totalLoad(plan.totalMt)}
       </p>
       <p className="mt-1 text-xs font-bold text-[#00b14f]">{copy.despatch.loadFfa(plan.loadFfaPct)}</p>
+      {penaltyRm !== null && (
+        <p className={`mt-1 text-xs font-bold ${penaltyRm > 0 ? "text-[#92441f]" : "text-[#00713a]"}`}>
+          {penaltyRm > 0 ? copy.despatch.optionPenalty(n(penaltyRm, 0)) : copy.despatch.optionNoPenalty}
+        </p>
+      )}
     </div>
   );
 }

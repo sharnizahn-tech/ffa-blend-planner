@@ -31,6 +31,7 @@ export function simulateHoldToTarget(
   riseFactorPerDay: number,
   maxTransferPerDayMt: number,
   maxDays = 30,
+  deadStockMt = 0,
 ): HoldSimulation {
   let stock = tank.stock;
   let ffa = tank.ffa;
@@ -65,7 +66,7 @@ export function simulateHoldToTarget(
       let budget = maxTransferPerDayMt;
       for (const src of sources) {
         if (budget <= 0 || spare <= 0.01) break;
-        const moveMt = Math.min(budget, spare, src.stock);
+        const moveMt = Math.min(budget, spare, Math.max(0, src.stock - deadStockMt));
         if (moveMt <= 0) continue;
         const newStock = stock + moveMt;
         ffa = (stock * ffa + moveMt * src.ffa) / newStock;
@@ -103,6 +104,7 @@ export function compareHoldVsDespatch(
   riseFactorPerDay: number,
   maxTransferPerDayMt: number,
   bands: PenaltyBand[],
+  deadStockMt = 0,
 ): HoldVsDespatch {
   const despatchNowPenaltyRm = calcPenaltyExposure(tank.ffa, tank.stock, bands).totalRm;
   const hold = simulateHoldToTarget(
@@ -113,6 +115,8 @@ export function compareHoldVsDespatch(
     incomingFfaPct,
     riseFactorPerDay,
     maxTransferPerDayMt,
+    30,
+    deadStockMt,
   );
   // Only a *feasible* hold (tank actually reaches the good FFA limit in
   // time) can ever show savings. An infeasible hold must show zero savings
