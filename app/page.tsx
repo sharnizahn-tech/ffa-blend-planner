@@ -8,6 +8,7 @@ import {
   Bot,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Coins,
   Droplets,
   Gauge,
@@ -421,6 +422,22 @@ export default function Home() {
   const valid = allocationTotal === 100 && !results.some((r) => r.overflow);
   const bestMeetsTarget = !!best && best.results.every((r) => r.finalFFA <= target);
   const hasOverflow = results.some((r) => r.overflow);
+  const projectedBlendFfa = best
+    ? (() => {
+        const totalStock = best.results.reduce((s, r) => s + r.finalStock, 0);
+        return totalStock > 0
+          ? best.results.reduce((s, r) => s + r.finalFFA * r.finalStock, 0) / totalStock
+          : incomingFFA;
+      })()
+    : incomingFFA;
+  const blendConfidence: "high" | "medium" | "low" = !best
+    ? "low"
+    : bestMeetsTarget && !hasOverflow
+      ? "high"
+      : !hasOverflow
+        ? "medium"
+        : "low";
+  const blendAtRisk = incomingFFA > target || highFFAStock > 0;
   const despatchTanks = useMemo(
     () =>
       results.map((r) => ({
@@ -742,33 +759,41 @@ export default function Home() {
     });
 
   const metrics = (
-    <section className="grid grid-cols-4 gap-1.5 sm:gap-3 lg:grid-cols-4">
-      <Metric
-        icon={<Gauge size={18} />}
-        label={copy.metrics.currentStock}
-        value={`${n(currentStock, 0)} MT`}
-        note={copy.metrics.acrossTanks(tanks.length)}
-      />
-      <Metric
-        icon={<AlertTriangle size={18} />}
-        label={copy.metrics.highFfaStock}
-        value={`${n(highFFAStock, 0)} MT`}
-        note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.goodQuality}
-        warning={!!highFFAStock}
-      />
-      <Metric
-        icon={<Droplets size={18} />}
-        label={copy.metrics.expectedCpo}
-        value={`${n(incomingCPO)} MT`}
-        note={copy.metrics.fromFfb(estimatedFFB)}
-      />
-      <Metric
-        icon={<Beaker size={18} />}
-        label={copy.metrics.incomingFfa}
-        value={`${n(incomingFFA, 2)}%`}
-        note={copy.metrics.ffaLimitNote(target)}
-        warning={incomingFFA > target}
-      />
+    <section className="metrics-scroll flex gap-2 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:pb-0 lg:grid-cols-4">
+      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
+        <Metric
+          icon={<Gauge size={18} />}
+          label={copy.metrics.currentStock}
+          value={`${n(currentStock, 0)} MT`}
+          note={copy.metrics.acrossTanks(tanks.length)}
+        />
+      </div>
+      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
+        <Metric
+          icon={<AlertTriangle size={18} />}
+          label={copy.metrics.highFfaStock}
+          value={`${n(highFFAStock, 0)} MT`}
+          note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.goodQuality}
+          warning={!!highFFAStock}
+        />
+      </div>
+      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
+        <Metric
+          icon={<Droplets size={18} />}
+          label={copy.metrics.expectedCpo}
+          value={`${n(incomingCPO)} MT`}
+          note={copy.metrics.fromFfb(estimatedFFB)}
+        />
+      </div>
+      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
+        <Metric
+          icon={<Beaker size={18} />}
+          label={copy.metrics.incomingFfa}
+          value={`${n(incomingFFA, 2)}%`}
+          note={copy.metrics.ffaLimitNote(target)}
+          warning={incomingFFA > target}
+        />
+      </div>
     </section>
   );
 
@@ -1038,7 +1063,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1100px] px-4 py-4 pb-36 sm:px-7 sm:py-6 md:pb-8 xl:pb-10">
+      <div className="mx-auto max-w-[1400px] px-4 py-4 pb-36 sm:px-7 sm:py-6 md:pb-8 xl:pb-10">
         <FlowHint copy={copy} activeTab={mobileTab} />
         {/* Tab panel — same one-job-per-screen flow at every screen size */}
         <div className="app-panel space-y-4">
@@ -1051,9 +1076,32 @@ export default function Home() {
                   text={copy.alerts.overflowText}
                 />
               )}
-              {forecastPanel}
-              {productionOptimizerPanel}
+              <div className="grid gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] md:items-start">
+                <BlendSituationCard
+                  copy={copy}
+                  incomingCPO={incomingCPO}
+                  incomingFFA={incomingFFA}
+                  highFFAStock={highFFAStock}
+                  target={target}
+                  projectedFfa={projectedBlendFfa}
+                  atRisk={blendAtRisk}
+                  confidence={blendConfidence}
+                  onViewBlend={() => setMobileTab("plan")}
+                />
+                <div className="space-y-4">
+                  {forecastPanel}
+                  {productionOptimizerPanel}
+                </div>
+              </div>
               {allocationBanner}
+              <button
+                type="button"
+                onClick={useSuggested}
+                className="btn-touch w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047]"
+              >
+                <Sparkles size={16} />
+                {copy.blendSituation.generateBestPlan}
+              </button>
             </>
           )}
           {mobileTab === "tanks" && (
@@ -1123,6 +1171,148 @@ function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
       <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[#3f4c46]">
         {copy.flow[activeTab]}
       </p>
+    </div>
+  );
+}
+
+function TankSilhouette() {
+  return (
+    <svg
+      viewBox="0 0 220 160"
+      aria-hidden
+      className="pointer-events-none absolute inset-y-0 right-0 h-full w-[38%] opacity-40 sm:w-[32%]"
+      preserveAspectRatio="xMaxYMid slice"
+    >
+      <defs>
+        <linearGradient id="tankShellGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#dcecdf" />
+          <stop offset="100%" stopColor="#a9c9ae" />
+        </linearGradient>
+        <linearGradient id="tankFadeGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#123c2c" stopOpacity="1" />
+          <stop offset="70%" stopColor="#123c2c" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#123c2c" stopOpacity="0.15" />
+        </linearGradient>
+      </defs>
+      {[
+        { x: 30, w: 34, h: 92 },
+        { x: 76, w: 40, h: 112 },
+        { x: 128, w: 34, h: 84 },
+        { x: 172, w: 38, h: 104 },
+      ].map((t, i) => (
+        <g key={i}>
+          <rect x={t.x} y={160 - t.h} width={t.w} height={t.h} rx={6} fill="url(#tankShellGrad)" />
+          <ellipse cx={t.x + t.w / 2} cy={160 - t.h} rx={t.w / 2} ry={5} fill="#eef6f0" />
+        </g>
+      ))}
+      <rect x="0" y="0" width="220" height="160" fill="url(#tankFadeGrad)" />
+    </svg>
+  );
+}
+
+function BlendSituationCard({
+  copy,
+  incomingCPO,
+  incomingFFA,
+  highFFAStock,
+  target,
+  projectedFfa,
+  atRisk,
+  confidence,
+  onViewBlend,
+}: {
+  copy: Copy;
+  incomingCPO: number;
+  incomingFFA: number;
+  highFFAStock: number;
+  target: number;
+  projectedFfa: number;
+  atRisk: boolean;
+  confidence: "high" | "medium" | "low";
+  onViewBlend: () => void;
+}) {
+  const confidenceLabel =
+    confidence === "high"
+      ? copy.blendSituation.confidenceHigh
+      : confidence === "medium"
+        ? copy.blendSituation.confidenceMedium
+        : copy.blendSituation.confidenceLow;
+  const confidenceColor =
+    confidence === "high" ? "#00713a" : confidence === "medium" ? "#a64f24" : "#a4342c";
+
+  return (
+    <section className="relative overflow-hidden rounded-2xl border border-[#d9e2da] bg-[#123c2c] text-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_8px_24px_-16px_rgba(15,45,32,0.3)]">
+      <TankSilhouette />
+      <div className="relative z-10 p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-bold sm:text-lg">{copy.blendSituation.title}</h2>
+          <span
+            className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+              atRisk ? "bg-[#ffceb7] text-[#7c2d12]" : "bg-[#d4f7e2] text-[#00713a]"
+            }`}
+          >
+            {atRisk ? copy.blendSituation.highRisk : copy.blendSituation.onTrack}
+          </span>
+        </div>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-[#cfe0d5]">
+          {atRisk ? copy.blendSituation.highRiskText : copy.blendSituation.onTrackText}
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-3 lg:gap-3">
+          <BlendStat
+            label={copy.blendSituation.incomingCpo}
+            value={`${n(incomingCPO, 0)} MT`}
+            sub={`@ ${n(incomingFFA, 2)}% FFA`}
+          />
+          <BlendStat label={copy.blendSituation.highFfaStock} value={`${n(highFFAStock, 0)} MT`} />
+          <BlendStat label={copy.blendSituation.targetDispatchFfa} value={`≤ ${n(target, 2)}%`} />
+          <BlendStat
+            label={copy.blendSituation.projectedAfterBlending}
+            value={`${n(projectedFfa, 2)}%`}
+            highlight
+          />
+          <BlendStat
+            label={copy.blendSituation.confidence}
+            value={confidenceLabel}
+            valueStyle={{ color: confidenceColor }}
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={onViewBlend}
+          className="btn-touch mt-5 w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] sm:w-auto"
+        >
+          {copy.blendSituation.viewRecommendedBlend}
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function BlendStat({
+  label,
+  value,
+  sub,
+  highlight = false,
+  valueStyle,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  highlight?: boolean;
+  valueStyle?: React.CSSProperties;
+}) {
+  return (
+    <div
+      className={`rounded-xl p-2.5 ${highlight ? "bg-[#00b14f]/20 ring-1 ring-[#00b14f]/40" : "bg-white/10"}`}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#cfe0d5]">{label}</p>
+      <p className="mt-1 text-base font-extrabold text-white sm:text-lg" style={valueStyle}>
+        {value}
+      </p>
+      {sub && <p className="text-[10px] text-[#cfe0d5]">{sub}</p>}
     </div>
   );
 }
