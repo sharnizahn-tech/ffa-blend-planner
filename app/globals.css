@@ -753,7 +753,7 @@ input[type="number"]::-webkit-outer-spin-button {
   left: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   border-top: 1px solid #dfe5dc;
   background: #fff;
   padding-bottom: var(--safe-bottom);
@@ -897,4 +897,38 @@ input[type="number"]::-webkit-outer-spin-button {
   margin-top: 2px;
   font-size: 1.25rem;
   color: #173f30;
+}
+
+/* Collapsible "Advanced" sections — production ceiling, FFA forecast, the
+   full multi-day transfer schedule. Collapsed by default so the primary
+   flow on each tab stays short. */
+.advanced-disclosure {
+  border: 1px solid #d9e2da;
+  border-radius: 16px;
+  background: #fff;
+  padding: 1rem 1.25rem;
+}
+
+.advanced-disclosure summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #173f30;
+}
+
+.advanced-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-disclosure summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.5rem;
+  color: #00b14f;
+  transition: transform 0.15s ease;
+}
+
+.advanced-disclosure[open] summary::before {
+  transform: rotate(90deg);
 }

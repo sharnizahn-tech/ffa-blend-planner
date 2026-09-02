@@ -377,15 +377,15 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
       ? batchBlend.days === 0
         ? { en: "already ready to dispatch.", bm: "sudah sedia untuk despatch." }
         : {
-            en: `ready to dispatch after ${batchBlend.days} day(s) of tank-to-tank blending.`,
-            bm: `sedia untuk despatch selepas ${batchBlend.days} hari campuran tangki-ke-tangki.`,
+            en: `ready to dispatch after ${batchBlend.days} day(s) of tank-to-tank transfers.`,
+            bm: `sedia untuk despatch selepas ${batchBlend.days} hari pemindahan tangki-ke-tangki.`,
           }
       : { en: `not feasible within the planning horizon (${batchBlend.reason ?? "unknown reason"}).`, bm: `tidak munasabah dalam tempoh perancangan (${batchBlend.reason ?? "sebab tidak diketahui"}).` };
     sections.push(
       section(
         lang,
-        "Batch blend (no daily processing)",
-        "Campuran kelompok (tiada proses harian)",
+        "Batch transfer (no daily processing)",
+        "Pemindahan kelompok (tiada proses harian)",
         `Selected tanks are ${status.en}`,
         `Tangki dipilih ${status.bm}`,
       ),
@@ -427,10 +427,10 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
           lang,
           "Tanker despatch",
           "Despatch tanker",
-          `Tanker load target is ${n(despatch.tankerLoadMt)} MT from post-blend stock. ${ranked
+          `Tanker load target is ${n(despatch.tankerLoadMt)} MT from post-allocation stock. ${ranked
             .map((plan, i) => formatDespatch(plan, i === 0 ? "Best despatch" : `Despatch ${i + 1}`))
             .join(" ")}`,
-          `Sasaran muatan tanker ialah ${n(despatch.tankerLoadMt)} MT daripada stok selepas campuran. ${ranked
+          `Sasaran muatan tanker ialah ${n(despatch.tankerLoadMt)} MT daripada stok selepas peruntukan. ${ranked
             .map((plan, i) =>
               formatDespatch(plan, i === 0 ? "Despatch terbaik" : `Despatch ${i + 1}`),
             )
@@ -443,8 +443,8 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
           lang,
           "Tanker despatch",
           "Despatch tanker",
-          `No tanker despatch plan for ${n(despatch.tankerLoadMt)} MT — check post-blend stock after allocation.`,
-          `Tiada pelan despatch tanker untuk ${n(despatch.tankerLoadMt)} MT — semak stok selepas campuran selepas peruntukan.`,
+          `No tanker despatch plan for ${n(despatch.tankerLoadMt)} MT — check post-allocation stock after allocation.`,
+          `Tiada pelan despatch tanker untuk ${n(despatch.tankerLoadMt)} MT — semak stok selepas peruntukan.`,
         ),
       );
     }
@@ -484,20 +484,20 @@ export function buildSystemPrompt(
     ? "The user message includes a conversationHistory array of prior turns in this session. Treat it as context — do not repeat earlier points verbatim, answer the latest question in light of what was already discussed."
     : "";
 
-  return `You are a senior palm oil mill CPO blending advisor supporting engineers at a Malaysian mill.
+  return `You are a senior palm oil mill CPO stock optimisation advisor supporting engineers at a Malaysian mill.
 
 Rules:
 - Use ONLY the numbers and flags provided in the user message. Never invent tank readings, percentages, RM figures, or MT values.
 - The recommendedPlan is rank 1; alternativePlans (if present) are ranks 2–3 from the same engine. Treat recommendedPlan as the mathematical best unless flags show it is infeasible.
 - When alternativePlans are provided, briefly compare how plans 2 and 3 differ and when an engineer might choose them over plan 1.
-- despatch (if present) covers tanker loading from post-blend stock. recommendedPlan is the best despatch option; alternativePlans are ranks 2–3. Mention which tanks to load, blended load FFA, and shortfall if the tanker cannot be fully filled.
-- When despatch data is provided, include tanker loading advice alongside blend allocation advice when relevant to the engineer's question.
+- despatch (if present) covers tanker loading from post-allocation stock. recommendedPlan is the best despatch option; alternativePlans are ranks 2–3. Mention which tanks to load, the combined load FFA, and shortfall if the tanker cannot be fully filled.
+- When despatch data is provided, include tanker loading advice alongside stock allocation advice when relevant to the engineer's question.
 - penalty (if provided) is the estimated RM deduction from the engineer's own configured buyer penalty bands — cite the totalExposureRm and worst tanks exactly as given, never estimate your own RM figure.
 - prediction (if provided) is a forward FFA projection using the engineer's own configured rise-rate assumption — cite daysUntilLimit values as given; do not invent a different timeline.
 - productionSuggestion (if provided) is the engine's calculated safe incoming CPO ceiling and which constraint (capacity or FFA limit) binds it — reference it when discussing production planning, do not recompute your own number.
 - lossOptimizer (if provided) is a per-tank comparison, already computed by the engine, of despatching a high-FFA tank now (despatchNowPenaltyRm) versus holding it and diluting the FFA down first (holdFeasible, holdDays, holdPenaltyRm, savingsRm, recommendation). Always state the engine's recommendation and the RM savings figure exactly as given — this is the core "should we sell now or hold" decision the engineer needs; do not soften it into vague advice.
 - batchBlend (if provided) is the engine's day-by-day tank-to-tank transfer plan for bringing existing stock to good FFA without any new incoming CPO (for mills not running daily). Cite feasible/days/steps exactly as given.
-- Each blend/despatch plan may include penaltyRm — the estimated RM deduction for that specific plan under the engineer's configured buyer profile. When comparing plans, mention the penalty difference between them, not just the FFA difference.
+- Each allocation/despatch plan may include penaltyRm — the estimated RM deduction for that specific plan under the engineer's configured buyer profile. When comparing plans, mention the penalty difference between them, not just the FFA difference.
 - targetFfaPct is the GOOD FFA LIMIT (maximum for good quality), not a target to hit. FFA lower than this limit is better; 4.8% means at or below 4.8% is good, and lower values are preferable.
 - Explain WHY the recommended allocation is best, which tanks are risky, and what operational actions the engineer should take before transfer.
 - Compare currentPlan vs recommendedPlan when they differ.

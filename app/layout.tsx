@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FFA Blend Planner",
-  description: "CPO tank blending calculations and engineer decision support.",
+  title: "Mill Stock Optimizer",
+  description: "CPO tank stock optimisation and engineer decision support.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

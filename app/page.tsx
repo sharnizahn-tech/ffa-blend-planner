@@ -87,7 +87,7 @@ type Result = Tank & {
   overflow: boolean;
 };
 type TankState = "safe" | "warning" | "critical";
-type MobileTab = "overview" | "tanks" | "plan" | "despatch" | "batch";
+type MobileTab = "overview" | "production" | "despatch" | "transfer";
 
 const initialTanks: Tank[] = [
   { name: "BST 1", capacity: 2000, stock: 465, ffa: 4.54 },
@@ -331,6 +331,7 @@ export default function Home() {
   const [target, setTarget] = useState(4.8);
   const [allocation, setAllocation] = useState([0, 100]);
   const [mobileTab, setMobileTab] = useState<MobileTab>("overview");
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [expandedTanks, setExpandedTanks] = useState<Set<number>>(() => new Set([0]));
   const [aiMessages, setAiMessages] = useState<
     { role: "user" | "assistant"; content: string; source?: "openai" | "offline"; kind?: "deep" }[]
@@ -483,9 +484,16 @@ export default function Home() {
       })),
     [results],
   );
+  // Ship from good-FFA tanks first — tanks already over the limit are excluded
+  // as despatch sources here (they belong on the Loss Optimizer / Transfer flow
+  // instead, not mixed into a tanker load).
+  const goodFfaDespatchTanks = useMemo(
+    () => despatchTanks.filter((t) => t.ffaPct <= target),
+    [despatchTanks, target],
+  );
   const topDespatchPlans = useMemo(
-    () => findTopDespatchPlans(despatchTanks, tankerLoadMt, target, 3, preferFewerTanks),
-    [despatchTanks, tankerLoadMt, target, preferFewerTanks],
+    () => findTopDespatchPlans(goodFfaDespatchTanks, tankerLoadMt, target, 3, preferFewerTanks),
+    [goodFfaDespatchTanks, tankerLoadMt, target, preferFewerTanks],
   );
 
   const penaltyPerTank = useMemo(
@@ -764,12 +772,27 @@ export default function Home() {
     );
   const applyPlan = (plan: BlendPlan) => setAllocation(plan.allocation);
   const useSuggested = () => best && applyPlan(best);
+  const transferStock = (sourceIndex: number, destIndex: number, amountMt: number) => {
+    setTanks((prev) => {
+      const source = prev[sourceIndex];
+      const dest = prev[destIndex];
+      if (!source || !dest || sourceIndex === destIndex || amountMt <= 0) return prev;
+      const sourceNewStock = Math.max(0, source.stock - amountMt);
+      const destNewStock = dest.stock + amountMt;
+      const destNewFfa = destNewStock > 0 ? (dest.stock * dest.ffa + amountMt * source.ffa) / destNewStock : dest.ffa;
+      return prev.map((t, i) => {
+        if (i === sourceIndex) return { ...t, stock: sourceNewStock };
+        if (i === destIndex) return { ...t, stock: destNewStock, ffa: destNewFfa };
+        return t;
+      });
+    });
+  };
   const addTank = () => {
     setTanks((p) => [...p, { name: suggestTankName(p), capacity: 2000, stock: 0, ffa: 0 }]);
     setAllocation((p) => [...p, 0]);
     setExpandedTanks((p) => new Set([...p, tanks.length]));
     setBatchSelected((p) => new Set([...p, tanks.length]));
-    setMobileTab("tanks");
+    setMobileTab("production");
   };
   const removeTank = (index: number) => {
     if (tanks.length <= 1) return;
@@ -963,9 +986,20 @@ export default function Home() {
     />
   );
 
-  const planPanel = (
+  const productionAdvanced = (
+    <details className="advanced-disclosure">
+      <summary>{copy.advanced.title}</summary>
+      <div className="mt-4 space-y-4">
+        {productionOptimizerPanel}
+        {ffaForecastPanel}
+      </div>
+    </details>
+  );
+
+  const productionPanel = (
     <>
-      {penaltyPanel}
+      {forecastPanel}
+      {tanksPanel}
       <SmartRecommendation
         copy={copy}
         topPlans={topPlans}
@@ -976,10 +1010,7 @@ export default function Home() {
         highFFAStock={highFFAStock}
         highFfaTankNames={highFfaTankNames}
         incomingCPO={incomingCPO}
-        onApplyPlan={(plan) => {
-          applyPlan(plan);
-          setMobileTab("tanks");
-        }}
+        onApplyPlan={(plan) => applyPlan(plan)}
         aiMessages={aiMessages}
         aiLoading={aiLoading}
         aiError={aiError}
@@ -993,18 +1024,13 @@ export default function Home() {
         }}
         penaltyBands={activeProfile?.bands}
       />
-      <DecisionSafeguards
-        copy={copy}
-        results={results}
-        allocationTotal={allocationTotal}
-        target={target}
-        anyProjectedBreach={anyProjectedBreach}
-      />
+      {productionAdvanced}
     </>
   );
 
   const despatchPanel = (
     <>
+      {penaltyPanel}
       <TankerDespatchPlanner
         copy={copy}
         tankerLoadMt={tankerLoadMt}
@@ -1027,34 +1053,41 @@ export default function Home() {
     </>
   );
 
-  const batchPanel = (
-    <BatchBlendPlanner
-      copy={copy}
-      tanks={tanks}
-      selected={batchSelected}
-      onToggleTank={(i) =>
-        setBatchSelected((p) => {
-          const next = new Set(p);
-          if (next.has(i)) next.delete(i);
-          else next.add(i);
-          return next;
-        })
-      }
-      target={target}
-      maxTransferPerDayMt={maxTransferPerDayMt}
-      onMaxTransferChange={changeMaxTransferPerDay}
-      autoTransfer={autoTransfer}
-      onUseAuto={useAutoTransfer}
-      result={batchBlendResult}
-    />
+  const transferPanel = (
+    <>
+      <SimpleTransferCalculator copy={copy} tanks={tanks} onTransfer={transferStock} />
+      <details className="advanced-disclosure">
+        <summary>{copy.transferCalc.advanced}</summary>
+        <div className="mt-4">
+          <BatchBlendPlanner
+            copy={copy}
+            tanks={tanks}
+            selected={batchSelected}
+            onToggleTank={(i) =>
+              setBatchSelected((p) => {
+                const next = new Set(p);
+                if (next.has(i)) next.delete(i);
+                else next.add(i);
+                return next;
+              })
+            }
+            target={target}
+            maxTransferPerDayMt={maxTransferPerDayMt}
+            onMaxTransferChange={changeMaxTransferPerDay}
+            autoTransfer={autoTransfer}
+            onUseAuto={useAutoTransfer}
+            result={batchBlendResult}
+          />
+        </div>
+      </details>
+    </>
   );
 
   const navItems: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: copy.nav.overview, icon: <LayoutDashboard size={20} /> },
-    { id: "tanks", label: copy.nav.tanks, icon: <Droplets size={20} /> },
-    { id: "plan", label: copy.nav.plan, icon: <Sparkles size={20} /> },
+    { id: "production", label: copy.nav.production, icon: <Droplets size={20} /> },
     { id: "despatch", label: copy.nav.despatch, icon: <Truck size={20} /> },
-    { id: "batch", label: copy.nav.batch, icon: <ArrowRightLeft size={20} /> },
+    { id: "transfer", label: copy.nav.transfer, icon: <ArrowRightLeft size={20} /> },
   ];
 
   return (
@@ -1102,49 +1135,46 @@ export default function Home() {
           {mobileTab === "overview" && (
             <>
               {metrics}
-              {hasOverflow && (
-                <AlertBanner
-                  title={copy.alerts.overflowTitle}
-                  text={copy.alerts.overflowText}
-                />
-              )}
-              <div className="grid gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] md:items-start">
-                <BlendSituationCard
-                  copy={copy}
-                  incomingCPO={incomingCPO}
-                  incomingFFA={incomingFFA}
-                  highFFAStock={highFFAStock}
-                  target={target}
-                  projectedFfa={projectedBlendFfa}
-                  atRisk={blendAtRisk}
-                  confidence={blendConfidence}
-                  onViewBlend={() => setMobileTab("plan")}
-                />
-                <div className="space-y-4">
-                  {forecastPanel}
-                  {productionOptimizerPanel}
-                </div>
-              </div>
-              {allocationBanner}
-              <button
-                type="button"
-                onClick={useSuggested}
-                className="btn-touch w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047]"
-              >
-                <Sparkles size={16} />
-                {copy.blendSituation.generateBestPlan}
-              </button>
+              <BlendSituationCard
+                copy={copy}
+                incomingCPO={incomingCPO}
+                incomingFFA={incomingFFA}
+                highFFAStock={highFFAStock}
+                highFfaTankNames={highFfaTankNames}
+                target={target}
+                projectedFfa={projectedBlendFfa}
+                atRisk={blendAtRisk}
+                confidence={blendConfidence}
+                onViewBlend={() => setMobileTab("production")}
+              />
+              <WarningsPanel
+                copy={copy}
+                hasOverflow={hasOverflow}
+                atRisk={blendAtRisk}
+                anyProjectedBreach={anyProjectedBreach}
+              />
+              <AiRecommendationCard
+                copy={copy}
+                tanks={tanks}
+                incomingCPO={incomingCPO}
+                best={best}
+                despatchPlan={topDespatchPlans[0] ?? null}
+                batchResult={batchBlendResult}
+                onApply={useSuggested}
+              />
+              <TankSummaryTable copy={copy} tanks={tanks} target={target} />
+              <DecisionSafeguards
+                copy={copy}
+                results={results}
+                allocationTotal={allocationTotal}
+                target={target}
+                anyProjectedBreach={anyProjectedBreach}
+              />
             </>
           )}
-          {mobileTab === "tanks" && (
-            <>
-              {tanksPanel}
-              {ffaForecastPanel}
-            </>
-          )}
-          {mobileTab === "plan" && planPanel}
+          {mobileTab === "production" && productionPanel}
           {mobileTab === "despatch" && despatchPanel}
-          {mobileTab === "batch" && batchPanel}
+          {mobileTab === "transfer" && transferPanel}
         </div>
 
         <p className="mt-5 pb-2 text-center text-xs leading-relaxed text-[#758078] md:pb-4">
@@ -1167,8 +1197,8 @@ export default function Home() {
         ))}
       </nav>
 
-      {/* Mobile sticky action bar — tanks/overview only so Plan tab buttons stay clickable */}
-      {(mobileTab === "overview" || mobileTab === "tanks") && (
+      {/* Mobile sticky action bar — overview/production only so other tabs' own buttons stay clickable */}
+      {(mobileTab === "overview" || mobileTab === "production") && (
         <div className="mobile-action-bar md:hidden">
           <button
             type="button"
@@ -1180,11 +1210,56 @@ export default function Home() {
           </button>
         </div>
       )}
+
+      {/* Floating Ask AI button — visible on every tab */}
+      <button
+        type="button"
+        onClick={() => setAiModalOpen(true)}
+        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-[#00b14f] px-4 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(0,177,79,0.45)] hover:bg-[#00a047] md:bottom-6"
+      >
+        <Bot size={18} />
+        {copy.askAi.button}
+      </button>
+
+      {aiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:rounded-2xl sm:p-5">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 font-bold text-[#173f30]">
+                <Bot size={19} className="text-[#245f43]" />
+                {copy.askAi.title}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setAiModalOpen(false)}
+                aria-label={copy.askAi.close}
+                className="grid h-8 w-8 place-items-center rounded-full text-[#708078] hover:bg-[#f4f6f2]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <AiAdvisorPanel
+              copy={copy}
+              aiMessages={aiMessages}
+              aiLoading={aiLoading}
+              aiError={aiError}
+              aiCooldown={aiCooldown}
+              aiQuestion={aiQuestion}
+              onAiQuestionChange={setAiQuestion}
+              onGetAiOpinion={fetchAiOpinion}
+              onClearChat={() => {
+                setAiMessages([]);
+                setAiError(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
-const FLOW_ORDER: MobileTab[] = ["overview", "tanks", "plan", "despatch", "batch"];
+const FLOW_ORDER: MobileTab[] = ["overview", "production", "despatch", "transfer"];
 
 function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
   const stepIndex = FLOW_ORDER.indexOf(activeTab);
@@ -1212,6 +1287,7 @@ function BlendSituationCard({
   incomingCPO,
   incomingFFA,
   highFFAStock,
+  highFfaTankNames,
   target,
   projectedFfa,
   atRisk,
@@ -1222,6 +1298,7 @@ function BlendSituationCard({
   incomingCPO: number;
   incomingFFA: number;
   highFFAStock: number;
+  highFfaTankNames: string;
   target: number;
   projectedFfa: number;
   atRisk: boolean;
@@ -1272,7 +1349,11 @@ function BlendSituationCard({
             value={`${n(incomingCPO, 0)} MT`}
             sub={`@ ${n(incomingFFA, 2)}% FFA`}
           />
-          <BlendStat label={copy.blendSituation.highFfaStock} value={`${n(highFFAStock, 0)} MT`} />
+          <BlendStat
+            label={copy.blendSituation.highFfaStock}
+            value={`${n(highFFAStock, 0)} MT`}
+            sub={highFfaTankNames || undefined}
+          />
           <BlendStat label={copy.blendSituation.targetDispatchFfa} value={`≤ ${n(target, 2)}%`} />
           <BlendStat
             label={copy.blendSituation.projectedAfterBlending}
@@ -1944,6 +2025,263 @@ function AlertBanner({ title, text }: { title: string; text: string }) {
         <p className="mt-1 text-sm leading-relaxed text-[#7a4a32]">{text}</p>
       </div>
     </div>
+  );
+}
+
+function WarningsPanel({
+  copy,
+  hasOverflow,
+  atRisk,
+  anyProjectedBreach,
+}: {
+  copy: Copy;
+  hasOverflow: boolean;
+  atRisk: boolean;
+  anyProjectedBreach: boolean;
+}) {
+  const items: { title: string; text: string }[] = [];
+  if (hasOverflow) items.push({ title: copy.warnings.overflowTitle, text: copy.warnings.overflowText });
+  if (atRisk) items.push({ title: copy.warnings.highRiskTitle, text: copy.warnings.highRiskText });
+  if (anyProjectedBreach) items.push({ title: copy.warnings.breachTitle, text: copy.warnings.breachText });
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-[#c8dfae] bg-[#f6fae9] px-4 py-3 text-sm font-semibold text-[#173f30]">
+        <CheckCircle2 size={17} className="shrink-0 text-[#00b14f]" />
+        {copy.warnings.allGood}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map((item, i) => (
+        <AlertBanner key={i} title={item.title} text={item.text} />
+      ))}
+    </div>
+  );
+}
+
+function AiRecommendationCard({
+  copy,
+  tanks,
+  incomingCPO,
+  best,
+  despatchPlan,
+  batchResult,
+  onApply,
+}: {
+  copy: Copy;
+  tanks: Tank[];
+  incomingCPO: number;
+  best: BlendPlan | null;
+  despatchPlan: DespatchPlan | null;
+  batchResult: BatchBlendResult | null;
+  onApply: () => void;
+}) {
+  const lines: string[] = [];
+
+  if (despatchPlan && despatchPlan.sources.length > 0) {
+    const top = despatchPlan.sources[0];
+    lines.push(copy.aiRecommendation.despatchLine(n(top.mt, 0), top.name));
+  }
+
+  if (best && incomingCPO > 0) {
+    const parts = best.allocation
+      .map((pct, i) => ({ pct, mt: allocationMt(incomingCPO, pct), name: tanks[i]?.name }))
+      .filter((p) => p.mt > 0)
+      .map((p) => `${n(p.mt, 0)} MT→${p.name}`)
+      .join(", ");
+    if (parts) lines.push(copy.aiRecommendation.allocateLine(parts));
+  }
+
+  if (batchResult && batchResult.feasible && batchResult.steps.length > 0) {
+    const step = batchResult.steps[0];
+    lines.push(copy.aiRecommendation.transferLine(n(step.mt, 0), step.fromTank, step.toTank));
+  }
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
+      <div className="border-b border-[#e8ede8] bg-[#f8faf7] p-4 sm:p-5">
+        <div className="flex items-center gap-2 font-bold text-[#173f30]">
+          <Bot size={19} className="text-[#245f43]" />
+          {copy.aiRecommendation.title}
+        </div>
+        <p className="mt-1 text-sm text-[#58665e]">{copy.aiRecommendation.subtitle}</p>
+      </div>
+      <div className="p-4 sm:p-5">
+        {lines.length === 0 ? (
+          <p className="text-sm text-[#58665e]">{copy.aiRecommendation.noAction}</p>
+        ) : (
+          <>
+            <p className="section-label">{copy.aiRecommendation.todaysPlan}</p>
+            <ol className="mt-2 space-y-2">
+              {lines.map((line, i) => (
+                <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-[#17231d]">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#e5faed] text-[10px] font-bold text-[#00713a]">
+                    {i + 1}
+                  </span>
+                  {line}
+                </li>
+              ))}
+            </ol>
+            <button
+              type="button"
+              onClick={onApply}
+              className="btn-touch mt-4 w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047]"
+            >
+              <Sparkles size={16} />
+              {copy.aiRecommendation.apply}
+            </button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function TankSummaryTable({ copy, tanks, target }: { copy: Copy; tanks: Tank[]; target: number }) {
+  return (
+    <Panel title={copy.tankSummary.title} subtitle="" icon={<Droplets size={19} />}>
+      <div className="table-scroll overflow-x-auto">
+        <table className="w-full min-w-[420px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#7a867f]">
+              <th className="pb-2 pr-3">{copy.tankSummary.name}</th>
+              <th className="pb-2 pr-3">{copy.tankSummary.stock}</th>
+              <th className="pb-2 pr-3">{copy.tankSummary.ffa}</th>
+              <th className="pb-2">{copy.tankSummary.status}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tanks.map((tank, i) => {
+              const tier = currentFfaTier(tank.ffa, target);
+              const label = currentFfaLabel(tier, copy);
+              return (
+                <tr key={i} className="border-b border-[#f2f5f0] last:border-0">
+                  <td className="py-2.5 pr-3 font-semibold text-[#17231d]">{tank.name}</td>
+                  <td className="py-2.5 pr-3 text-[#3f4c46]">{n(tank.stock, 0)} MT</td>
+                  <td className="py-2.5 pr-3 text-[#3f4c46]">{n(tank.ffa, 2)}%</td>
+                  <td className="py-2.5">
+                    <span className={`status-pill ${tier}`}>
+                      {tier === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                      {label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function SimpleTransferCalculator({
+  copy,
+  tanks,
+  onTransfer,
+}: {
+  copy: Copy;
+  tanks: Tank[];
+  onTransfer: (sourceIndex: number, destIndex: number, amountMt: number) => void;
+}) {
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [destIndex, setDestIndex] = useState(tanks.length > 1 ? 1 : 0);
+  const [amount, setAmount] = useState(0);
+
+  const source = tanks[sourceIndex];
+  const dest = tanks[destIndex];
+  const sameTank = sourceIndex === destIndex;
+  const notEnoughStock = !sameTank && source ? amount > source.stock : false;
+  const destNewStock = dest ? dest.stock + amount : 0;
+  const wouldOverflow = !sameTank && dest ? destNewStock > dest.capacity : false;
+  const destNewFfa =
+    !sameTank && dest && source && destNewStock > 0
+      ? (dest.stock * dest.ffa + amount * source.ffa) / destNewStock
+      : dest?.ffa ?? 0;
+  const sourceNewStock = source ? source.stock - amount : 0;
+  const canApply = !sameTank && amount > 0 && !notEnoughStock && !wouldOverflow;
+
+  return (
+    <Panel title={copy.transferCalc.title} subtitle={copy.transferCalc.subtitle} icon={<ArrowRightLeft size={19} />}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block min-w-0">
+          <span className="field-label">{copy.transferCalc.source}</span>
+          <select
+            value={sourceIndex}
+            onChange={(e) => setSourceIndex(Number(e.target.value))}
+            className="min-h-[44px] w-full rounded-lg border border-[#dce3dd] bg-white px-3 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2"
+          >
+            {tanks.map((t, i) => (
+              <option key={i} value={i}>
+                {t.name} — {n(t.stock, 0)} MT · {n(t.ffa, 2)}%
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block min-w-0">
+          <span className="field-label">{copy.transferCalc.destination}</span>
+          <select
+            value={destIndex}
+            onChange={(e) => setDestIndex(Number(e.target.value))}
+            className="min-h-[44px] w-full rounded-lg border border-[#dce3dd] bg-white px-3 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2"
+          >
+            {tanks.map((t, i) => (
+              <option key={i} value={i}>
+                {t.name} — {n(t.stock, 0)} MT · {n(t.ffa, 2)}%
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="mt-3 max-w-xs">
+        <MiniField label={copy.transferCalc.amount} value={amount} onChange={(v) => setAmount(Math.max(0, v))} unit="MT" />
+      </div>
+
+      {sameTank && (
+        <p className="mt-3 text-sm font-semibold text-[#92441f]">{copy.transferCalc.selectDifferent}</p>
+      )}
+      {!sameTank && notEnoughStock && (
+        <p className="mt-3 text-sm font-semibold text-[#92441f]">{copy.transferCalc.notEnoughStock}</p>
+      )}
+      {!sameTank && wouldOverflow && (
+        <p className="mt-3 text-sm font-semibold text-[#92441f]">{copy.transferCalc.wouldOverflow}</p>
+      )}
+
+      {!sameTank && amount > 0 && !notEnoughStock && !wouldOverflow && (
+        <div className="mt-4">
+          <p className="section-label">{copy.transferCalc.preview}</p>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-[#f9fbf8] p-3">
+              <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.transferCalc.sourceAfter}</p>
+              <p className="mt-1 text-lg font-extrabold text-[#173f30]">{n(sourceNewStock, 0)} MT</p>
+              <p className="text-xs text-[#708078]">{n(source.ffa, 2)}% FFA</p>
+            </div>
+            <div className="rounded-xl bg-[#f6fae9] p-3">
+              <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.transferCalc.destAfter}</p>
+              <p className="mt-1 text-lg font-extrabold text-[#173f30]">{n(destNewStock, 0)} MT</p>
+              <p className="text-xs text-[#708078]">{n(destNewFfa, 2)}% FFA</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        disabled={!canApply}
+        onClick={() => {
+          onTransfer(sourceIndex, destIndex, amount);
+          setAmount(0);
+        }}
+        className="btn-touch mt-4 w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] disabled:opacity-40"
+      >
+        <ArrowRightLeft size={16} />
+        {copy.transferCalc.confirmTransfer}
+      </button>
+    </Panel>
   );
 }
 
