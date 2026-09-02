@@ -760,41 +760,33 @@ export default function Home() {
     });
 
   const metrics = (
-    <section className="metrics-scroll flex gap-2 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:pb-0 lg:grid-cols-4">
-      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
-        <Metric
-          icon={<Gauge size={18} />}
-          label={copy.metrics.currentStock}
-          value={`${n(currentStock, 0)} MT`}
-          note={copy.metrics.acrossTanks(tanks.length)}
-        />
-      </div>
-      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
-        <Metric
-          icon={<AlertTriangle size={18} />}
-          label={copy.metrics.highFfaStock}
-          value={`${n(highFFAStock, 0)} MT`}
-          note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.goodQuality}
-          warning={!!highFFAStock}
-        />
-      </div>
-      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
-        <Metric
-          icon={<Droplets size={18} />}
-          label={copy.metrics.expectedCpo}
-          value={`${n(incomingCPO)} MT`}
-          note={copy.metrics.fromFfb(estimatedFFB)}
-        />
-      </div>
-      <div className="w-[42vw] shrink-0 min-w-[150px] sm:w-auto sm:shrink sm:min-w-0">
-        <Metric
-          icon={<Beaker size={18} />}
-          label={copy.metrics.incomingFfa}
-          value={`${n(incomingFFA, 2)}%`}
-          note={copy.metrics.ffaLimitNote(target)}
-          warning={incomingFFA > target}
-        />
-      </div>
+    <section className="grid grid-cols-2 gap-1.5 sm:gap-3 lg:grid-cols-4">
+      <Metric
+        icon={<Gauge size={18} />}
+        label={copy.metrics.currentStock}
+        value={`${n(currentStock, 0)} MT`}
+        note={copy.metrics.acrossTanks(tanks.length)}
+      />
+      <Metric
+        icon={<AlertTriangle size={18} />}
+        label={copy.metrics.highFfaStock}
+        value={`${n(highFFAStock, 0)} MT`}
+        note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.goodQuality}
+        warning={!!highFFAStock}
+      />
+      <Metric
+        icon={<Droplets size={18} />}
+        label={copy.metrics.expectedCpo}
+        value={`${n(incomingCPO)} MT`}
+        note={copy.metrics.fromFfb(estimatedFFB)}
+      />
+      <Metric
+        icon={<Beaker size={18} />}
+        label={copy.metrics.incomingFfa}
+        value={`${n(incomingFFA, 2)}%`}
+        note={copy.metrics.ffaLimitNote(target)}
+        warning={incomingFFA > target}
+      />
     </section>
   );
 
