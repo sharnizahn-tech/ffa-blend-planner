@@ -174,8 +174,8 @@ export const translations = {
     prediction: {
       title: "FFA forecast",
       subtitle:
-        "CPO's FFA keeps climbing in storage. Rate scales off incoming FFA quality — tune the multiplier to match your mill.",
-      riseFactorLabel: "Rise sensitivity (× incoming FFA per day)",
+        "CPO's FFA keeps climbing in storage. This is an estimate: each day, FFA is assumed to rise by this % of the incoming CPO's own FFA reading. Adjust it to match what you actually see in your tanks.",
+      riseFactorLabel: "Estimated daily FFA rise (% of incoming FFA)",
       horizonLabel: "Forecast window (days)",
       daysAxis: "Day",
       ffaAxis: "FFA %",
@@ -428,8 +428,8 @@ export const translations = {
     prediction: {
       title: "Ramalan FFA",
       subtitle:
-        "FFA CPO terus meningkat semasa disimpan. Kadar berskala mengikut kualiti FFA masuk — laraskan pengganda mengikut kilang anda.",
-      riseFactorLabel: "Sensitiviti kenaikan (× FFA masuk sehari)",
+        "FFA CPO terus meningkat semasa disimpan. Ini anggaran: setiap hari, FFA dijangka naik sebanyak % ini daripada bacaan FFA CPO masuk. Laraskan mengikut apa yang anda lihat sebenar di tangki anda.",
+      riseFactorLabel: "Anggaran kenaikan FFA harian (% daripada FFA masuk)",
       horizonLabel: "Tempoh ramalan (hari)",
       daysAxis: "Hari",
       ffaAxis: "FFA %",

@@ -100,6 +100,29 @@ function suggestTankName(tanks: Tank[]) {
 const n = (v: number, d = 2) =>
   v.toLocaleString("en-MY", { minimumFractionDigits: d, maximumFractionDigits: d });
 
+/** Round every number nested inside an object/array to `decimals` places.
+ *  Used right before payloads leave the app (e.g. to the AI advisor) so
+ *  downstream consumers never see raw floating-point noise like
+ *  6.312304147465437 or 111240.00000000001. */
+function roundDeep<T>(value: T, decimals = 2): T {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return value;
+    const factor = 10 ** decimals;
+    return (Math.round((value + Number.EPSILON) * factor) / factor) as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => roundDeep(item, decimals)) as unknown as T;
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = roundDeep(val, decimals);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 const allocationMt = (incomingCpo: number, pct: number) => (incomingCpo * pct) / 100;
 
 function calculate(
@@ -642,7 +665,7 @@ export default function Home() {
       const response = await fetch("/api/advise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(roundDeep(payload, 2)),
       });
 
       const data = (await response.json()) as {
@@ -1462,15 +1485,6 @@ function AllocationField({
   );
 }
 
-function ReadonlyStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 max-w-full">
-      <span className="field-label">{label}</span>
-      <p className="text-sm font-bold leading-snug text-[#17231d]">{value}</p>
-    </div>
-  );
-}
-
 function QuickStat({
   label,
   value,
@@ -1495,49 +1509,30 @@ function QuickStat({
   );
 }
 
-function BeforeAfterPanel({
-  copy,
-  tank,
-  result,
-  target,
+function QuickStatInput({
+  label,
+  value,
+  onChange,
+  unit,
 }: {
-  copy: Copy;
-  tank: Tank;
-  result: Result;
-  target: number;
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  unit: string;
 }) {
-  const ffaImproved = result.finalFFA < tank.ffa;
-  const afterFfaClass =
-    result.finalFFA > target ? "text-[#a84618]" : ffaImproved ? "text-[#187449]" : "";
-
   return (
-    <div className="tank-compare min-w-0 max-w-full">
-      <p className="field-label">{copy.tanks.beforeAfter}</p>
-      <div className="tank-compare__grid">
-        <div className="tank-compare__block">
-          <span className="tank-compare__heading">{copy.tanks.before}</span>
-          <p>
-            {copy.tanks.stock}: <strong>{n(tank.stock, 0)} MT</strong>
-          </p>
-          <p>
-            {copy.tanks.ffa}: <strong>{n(tank.ffa, 2)}%</strong>
-          </p>
-        </div>
-        <div className="tank-compare__arrow" aria-hidden>
-          →
-        </div>
-        <div className="tank-compare__block">
-          <span className="tank-compare__heading">{copy.tanks.after}</span>
-          <p>
-            {copy.tanks.stock}: <strong>{n(result.finalStock)} MT</strong>
-          </p>
-          <p>
-            {copy.tanks.ffa}:{" "}
-            <strong className={afterFfaClass}>{n(result.finalFFA, 2)}%</strong>
-          </p>
-        </div>
-      </div>
-    </div>
+    <label className="tank-unit__quickstat tank-unit__quickstat--input">
+      <span className="tank-unit__quickstat-label">{label}</span>
+      <span className="tank-unit__quickstat-inputrow">
+        <NumericInput
+          label={label}
+          value={value}
+          onChange={onChange}
+          className="tank-unit__quickstat-input"
+        />
+        <span className="tank-unit__quickstat-unit">{unit}</span>
+      </span>
+    </label>
   );
 }
 
@@ -1571,7 +1566,6 @@ function TankUnitCard({
   onRemove: () => void;
 }) {
   const state = tankState(result, target);
-  const remainingCapacity = Math.max(0, tank.capacity - result.finalStock);
   const status = statusLabel(state, result.overflow, result.finalFFA, target, copy);
 
   return (
@@ -1639,9 +1633,24 @@ function TankUnitCard({
                 </span>
               </div>
               <div className="tank-unit__quickstats">
-                <QuickStat label={copy.tanks.capacity} value={`${n(tank.capacity, 0)} MT`} />
-                <QuickStat label={copy.tanks.stockNow} value={`${n(tank.stock, 0)} MT`} />
-                <QuickStat label={copy.tanks.ffaNow} value={`${n(tank.ffa, 2)}%`} />
+                <QuickStatInput
+                  label={copy.tanks.capacity}
+                  value={tank.capacity}
+                  onChange={(v) => onUpdate("capacity", v)}
+                  unit="MT"
+                />
+                <QuickStatInput
+                  label={copy.tanks.stockNow}
+                  value={tank.stock}
+                  onChange={(v) => onUpdate("stock", v)}
+                  unit="MT"
+                />
+                <QuickStatInput
+                  label={copy.tanks.ffaNow}
+                  value={tank.ffa}
+                  onChange={(v) => onUpdate("ffa", v)}
+                  unit="%"
+                />
                 <QuickStat label={copy.tanks.allocation} value={`${n(allocationPct, 0)}%`} />
                 <QuickStat
                   label={copy.tanks.finalStock}
@@ -1658,29 +1667,6 @@ function TankUnitCard({
           </div>
         </section>
 
-        <section className="tank-unit__readings">
-          <div className="tank-unit__readings-grid tank-unit__readings-grid--wide">
-            <MiniField
-              label={copy.tanks.capacity}
-              value={tank.capacity}
-              onChange={(v) => onUpdate("capacity", v)}
-              unit="MT"
-            />
-            <MiniField
-              label={copy.tanks.stockNow}
-              value={tank.stock}
-              onChange={(v) => onUpdate("stock", v)}
-              unit="MT"
-            />
-            <MiniField
-              label={copy.tanks.ffaNow}
-              value={tank.ffa}
-              onChange={(v) => onUpdate("ffa", v)}
-              unit="%"
-            />
-          </div>
-        </section>
-
         <section className="tank-unit__allocate">
           <AllocationField
             label={copy.tanks.allocation}
@@ -1690,18 +1676,6 @@ function TankUnitCard({
             onChange={onAllocationChange}
             showSlider
           />
-          <div className="tank-unit__allocate-results mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
-            <ReadonlyStat label={copy.tanks.finalStock} value={`${n(result.finalStock)} MT`} />
-            <ReadonlyStat label={copy.tanks.finalFfa} value={`${n(result.finalFFA, 2)}%`} />
-            <ReadonlyStat
-              label={copy.tanks.remainingCapacity}
-              value={`${n(remainingCapacity)} MT`}
-            />
-          </div>
-        </section>
-
-        <section className="tank-unit__compare">
-          <BeforeAfterPanel copy={copy} tank={tank} result={result} target={target} />
         </section>
 
         {canRemove && (
@@ -1819,11 +1793,11 @@ function PlanOption({
             </div>
           ))}
         </div>
-        <p className="mt-1.5 text-[10px] text-[#708078]">
+        <p className="mt-1.5 text-xs font-bold text-[#3f4c46]">
           {meetsTarget ? copy.plan.withinLimit : copy.plan.maxFinalFfa(maxFfa)}
         </p>
         {penaltyLabel && (
-          <p className={`mt-1 text-[10px] font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#00b14f]"}`}>
+          <p className={`mt-1 text-xs font-bold ${penaltyRm && penaltyRm > 0 ? "text-[#92441f]" : "text-[#00b14f]"}`}>
             {penaltyLabel}
           </p>
         )}
@@ -1943,7 +1917,7 @@ function SmartRecommendation({
         {best ? (
           <>
             <p className="section-label">{copy.plan.recommendedAllocation}</p>
-            <div className="mt-3 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-2 gap-2">
               {best.allocation.map((x, i) => (
                 <div key={i} className="plan-pill">
                   <p className="text-xs text-[#708078]">{tanks[i].name}</p>
@@ -1954,9 +1928,9 @@ function SmartRecommendation({
             </div>
 
             {topPlans.length > 1 && (
-              <div className="mt-4 hidden lg:block">
+              <div className="mt-4">
                 <p className="section-label">{copy.plan.topPlans}</p>
-                <div className="mt-2 space-y-2">
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {topPlans.slice(1).map((plan, i) => (
                     <PlanOption
                       key={plan.allocation.join("-")}
@@ -2003,29 +1977,11 @@ function SmartRecommendation({
             <button
               type="button"
               onClick={() => onApplyPlan(best)}
-              className="btn-touch mt-5 hidden w-full bg-[#d4f7e2] text-[#00713a] md:flex"
+              className="btn-touch mt-5 flex w-full bg-[#d4f7e2] text-[#00713a]"
             >
               <RefreshCw size={16} />
               {copy.allocation.applyRecommended}
             </button>
-
-            <div className="mt-5 space-y-3 pb-2 lg:hidden">
-              <p className="section-label">{copy.plan.topPlans}</p>
-              {topPlans.map((plan, i) => (
-                <PlanOption
-                  key={`mobile-${plan.allocation.join("-")}`}
-                  rank={i + 1}
-                  plan={plan}
-                  tanks={tanks}
-                  target={target}
-                  incomingCPO={incomingCPO}
-                  copy={copy}
-                  highlighted={i === 0}
-                  onApply={() => onApplyPlan(plan)}
-                  penaltyBands={penaltyBands}
-                />
-              ))}
-            </div>
 
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
               <AiAdvisorPanel
@@ -2254,7 +2210,7 @@ function TankerDespatchPlanner({
         ) : (
           <>
             <p className="section-label">{copy.despatch.topPlans}</p>
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {topPlans.map((plan, i) => (
                 <DespatchOption
                   key={plan.sources.map((s) => `${s.name}-${s.mt}`).join("|")}
@@ -2304,12 +2260,12 @@ function DespatchOption({
 }) {
   return (
     <div
-      className={`rounded-xl border p-3 ${
+      className={`rounded-xl border p-2.5 ${
         highlighted ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-bold text-[#173f30]">{copy.despatch.planRank(rank)}</span>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-[#173f30]">{copy.despatch.planRank(rank)}</span>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-[#58665e]">
             {copy.despatchPrefs.usesTanks(plan.sources.length)}
@@ -2332,10 +2288,10 @@ function DespatchOption({
           </div>
         ))}
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#708078]">
-        <span>{copy.despatch.totalLoad(plan.totalMt)}</span>
-        <span>{copy.despatch.loadFfa(plan.loadFfaPct)}</span>
-      </div>
+      <p className="mt-1.5 text-xs font-bold text-[#3f4c46]">
+        {copy.despatch.totalLoad(plan.totalMt)}
+      </p>
+      <p className="mt-1 text-xs font-bold text-[#00b14f]">{copy.despatch.loadFfa(plan.loadFfaPct)}</p>
     </div>
   );
 }
@@ -2863,9 +2819,9 @@ function FfaForecastPanel({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <MiniField
           label={copy.prediction.riseFactorLabel}
-          value={riseFactorPerDay}
-          onChange={onRiseFactorChange}
-          unit="×/day"
+          value={riseFactorPerDay * 100}
+          onChange={(v) => onRiseFactorChange(v / 100)}
+          unit="%"
         />
         <MiniField
           label={copy.prediction.horizonLabel}
@@ -2876,16 +2832,38 @@ function FfaForecastPanel({
       </div>
 
       {chartData.length > 0 && (
-        <div className="mt-4 h-56 w-full">
+        <div className="mt-4 h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+            <LineChart data={chartData} margin={{ top: 8, right: 12, left: 4, bottom: 22 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8ede8" />
               <XAxis
                 dataKey="day"
-                tick={{ fontSize: 11, fill: "#7a867f" }}
-                label={{ value: copy.prediction.daysAxis, position: "insideBottom", offset: -2, fontSize: 11, fill: "#7a867f" }}
+                tick={{ fontSize: 11, fill: "#4b5750" }}
+                tickMargin={8}
+                label={{
+                  value: copy.prediction.daysAxis,
+                  position: "bottom",
+                  offset: 0,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fill: "#3f4c46",
+                }}
               />
-              <YAxis tick={{ fontSize: 11, fill: "#7a867f" }} width={40} />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#4b5750" }}
+                width={52}
+                tickMargin={6}
+                label={{
+                  value: copy.prediction.ffaAxis,
+                  angle: -90,
+                  position: "insideLeft",
+                  offset: 12,
+                  style: { textAnchor: "middle" },
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fill: "#3f4c46",
+                }}
+              />
               <Tooltip
                 formatter={(value) => `${n(Number(value), 2)}%`}
                 labelFormatter={(label) => `${copy.prediction.daysAxis} ${label}`}

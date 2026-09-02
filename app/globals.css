@@ -263,6 +263,42 @@ input[type="number"]::-webkit-outer-spin-button {
   color: #17231d;
 }
 
+.tank-unit__quickstat--input {
+  cursor: text;
+  border: 1px solid #dfe5df;
+  background: #fff;
+}
+
+.tank-unit__quickstat--input:focus-within {
+  border-color: #00b14f;
+  background: #f6fffa;
+}
+
+.tank-unit__quickstat-inputrow {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tank-unit__quickstat-input {
+  min-width: 0;
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #17231d;
+  outline: none;
+}
+
+.tank-unit__quickstat-unit {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: #9aa59f;
+}
+
 .tank-icon {
   display: grid;
   height: 44px;
@@ -618,13 +654,13 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-/* Tablet + laptop (sidebar leaves narrow main column) */
-@media (min-width: 768px) and (max-width: 1599px) {
+/* Tablet + desktop — identity (cylinder + stats) and allocation side by side
+   so the card uses the full card width instead of leaving space blank. */
+@media (min-width: 768px) {
   .tank-unit__body {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "identity readings"
-      "allocate compare";
+    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr);
+    grid-template-areas: "identity allocate";
+    align-items: start;
     padding-top: 1rem;
     padding-right: 2.75rem;
   }
@@ -633,19 +669,11 @@ input[type="number"]::-webkit-outer-spin-button {
     grid-area: identity;
   }
 
-  .tank-unit__readings {
-    grid-area: readings;
-  }
-
   .tank-unit__allocate {
     grid-area: allocate;
   }
 
-  .tank-unit__compare {
-    grid-area: compare;
-  }
-
-  .tank-unit__readings-grid {
+  .tank-unit__quickstats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -654,32 +682,9 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-/* Wide desktop — full horizontal row */
-@media (min-width: 1600px) {
-  .tank-unit__body {
-    grid-template-columns:
-      minmax(180px, 1.1fr)
-      minmax(300px, 1.8fr)
-      minmax(170px, 0.8fr)
-      minmax(280px, 1.1fr);
-    align-items: start;
-    padding-top: 1rem;
-    padding-right: 2.75rem;
-  }
-
-  .tank-unit__identity,
-  .tank-unit__readings,
-  .tank-unit__allocate,
-  .tank-unit__compare {
-    grid-area: auto;
-  }
-
-  .tank-unit__readings-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .tank-unit__delete {
-    display: grid;
+@media (min-width: 1024px) {
+  .tank-unit__quickstats {
+    max-width: 30rem;
   }
 }
 
