@@ -1011,71 +1011,64 @@ export default function Home() {
     />
   );
 
-  const productionAdvanced = (
-    <details className="advanced-disclosure">
-      <summary>{copy.advanced.title}</summary>
-      <div className="mt-4 space-y-4">
-        {productionOptimizerPanel}
-        {ffaForecastPanel}
-      </div>
-    </details>
-  );
-
   const productionPanel = (
     <>
       {forecastPanel}
-      {tanksPanel}
-      <SmartRecommendation
-        copy={copy}
-        topPlans={topPlans}
-        target={target}
-        tanks={tanks}
-        valid={valid}
-        bestMeetsTarget={bestMeetsTarget}
-        highFFAStock={highFFAStock}
-        highFfaTankNames={highFfaTankNames}
-        incomingCPO={incomingCPO}
-        onApplyPlan={(plan) => applyPlan(plan)}
-        aiMessages={aiMessages}
-        aiLoading={aiLoading}
-        aiError={aiError}
-        aiCooldown={aiCooldown}
-        aiQuestion={aiQuestion}
-        onAiQuestionChange={setAiQuestion}
-        onGetAiOpinion={fetchAiOpinion}
-        onClearChat={() => {
-          setAiMessages([]);
-          setAiError(null);
-        }}
-        penaltyBands={activeProfile?.bands}
-      />
-      {productionAdvanced}
+      <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+        {tanksPanel}
+        <SmartRecommendation
+          copy={copy}
+          topPlans={topPlans}
+          target={target}
+          tanks={tanks}
+          valid={valid}
+          bestMeetsTarget={bestMeetsTarget}
+          highFFAStock={highFFAStock}
+          highFfaTankNames={highFfaTankNames}
+          incomingCPO={incomingCPO}
+          onApplyPlan={(plan) => applyPlan(plan)}
+          aiMessages={aiMessages}
+          aiLoading={aiLoading}
+          aiError={aiError}
+          aiCooldown={aiCooldown}
+          aiQuestion={aiQuestion}
+          onAiQuestionChange={setAiQuestion}
+          onGetAiOpinion={fetchAiOpinion}
+          onClearChat={() => {
+            setAiMessages([]);
+            setAiError(null);
+          }}
+          penaltyBands={activeProfile?.bands}
+        />
+      </div>
     </>
   );
 
   const despatchPanel = (
     <>
       {penaltyPanel}
-      <TankerDespatchPlanner
-        copy={copy}
-        tankerLoadMt={tankerLoadMt}
-        onTankerLoadChange={setTankerLoadMt}
-        topPlans={topDespatchPlans}
-        preferFewerTanks={preferFewerTanks}
-        onPreferFewerTanksChange={setPreferFewerTanks}
-        penaltyRm={activeProfile ? despatchPenaltyRm : null}
-        totalDespatchableMt={despatchTanks.reduce((s, t) => s + t.stockMt, 0)}
-        penaltyBands={activeProfile?.bands}
-      />
-      <LossOptimizerPanel
-        copy={copy}
-        results={lossOptimizerResults}
-        hasProfile={!!activeProfile}
-        maxTransferPerDayMt={maxTransferPerDayMt}
-        onMaxTransferChange={changeMaxTransferPerDay}
-        autoTransfer={autoTransfer}
-        onUseAuto={useAutoTransfer}
-      />
+      <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+        <TankerDespatchPlanner
+          copy={copy}
+          tankerLoadMt={tankerLoadMt}
+          onTankerLoadChange={setTankerLoadMt}
+          topPlans={topDespatchPlans}
+          preferFewerTanks={preferFewerTanks}
+          onPreferFewerTanksChange={setPreferFewerTanks}
+          penaltyRm={activeProfile ? despatchPenaltyRm : null}
+          totalDespatchableMt={despatchTanks.reduce((s, t) => s + t.stockMt, 0)}
+          penaltyBands={activeProfile?.bands}
+        />
+        <LossOptimizerPanel
+          copy={copy}
+          results={lossOptimizerResults}
+          hasProfile={!!activeProfile}
+          maxTransferPerDayMt={maxTransferPerDayMt}
+          onMaxTransferChange={changeMaxTransferPerDay}
+          autoTransfer={autoTransfer}
+          onUseAuto={useAutoTransfer}
+        />
+      </div>
     </>
   );
 
@@ -1180,15 +1173,6 @@ export default function Home() {
                 incomingFFA={incomingFFA}
                 target={target}
                 ffaProjections={ffaProjections}
-              />
-              <AiRecommendationCard
-                copy={copy}
-                tanks={tanks}
-                incomingCPO={incomingCPO}
-                best={best}
-                despatchPlan={topDespatchPlans[0] ?? null}
-                batchResult={batchBlendResult}
-                onApply={useSuggested}
               />
             </>
           )}
