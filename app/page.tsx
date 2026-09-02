@@ -1137,6 +1137,7 @@ export default function Home() {
               {metrics}
               <BlendSituationCard
                 copy={copy}
+                tanks={tanks}
                 incomingCPO={incomingCPO}
                 incomingFFA={incomingFFA}
                 highFFAStock={highFFAStock}
@@ -1162,7 +1163,6 @@ export default function Home() {
                 batchResult={batchBlendResult}
                 onApply={useSuggested}
               />
-              <TankSummaryTable copy={copy} tanks={tanks} target={target} />
               <DecisionSafeguards
                 copy={copy}
                 results={results}
@@ -1284,6 +1284,7 @@ function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
 
 function BlendSituationCard({
   copy,
+  tanks,
   incomingCPO,
   incomingFFA,
   highFFAStock,
@@ -1295,6 +1296,7 @@ function BlendSituationCard({
   onViewBlend,
 }: {
   copy: Copy;
+  tanks: Tank[];
   incomingCPO: number;
   incomingFFA: number;
   highFFAStock: number;
@@ -1365,6 +1367,38 @@ function BlendSituationCard({
             value={confidenceLabel}
             valueStyle={{ color: confidenceColor }}
           />
+        </div>
+
+        <div className="mt-5 border-t border-white/15 pt-4">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[#9fc3ae]">
+            {copy.tankSummary.title}
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {tanks.map((tank, i) => {
+              const tier = currentFfaTier(tank.ffa, target);
+              const label = currentFfaLabel(tier, copy);
+              const badgeClass =
+                tier === "safe"
+                  ? "bg-[#d4f7e2] text-[#00713a]"
+                  : tier === "warning"
+                    ? "bg-[#ffe3c2] text-[#7a4a1f]"
+                    : "bg-[#ffceb7] text-[#7c2d12]";
+              return (
+                <div
+                  key={i}
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-white/10 px-3 py-2 text-sm"
+                >
+                  <span className="font-semibold">{tank.name}</span>
+                  <span className="text-[#cfe0d5]">
+                    {n(tank.stock, 0)} MT · {n(tank.ffa, 2)}%
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
+                    {label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <button
