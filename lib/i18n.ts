@@ -242,6 +242,11 @@ export const translations = {
       noBreach: "None within forecast window",
       clearChat: "Clear conversation",
     },
+    transferAuto: {
+      badge: "Auto",
+      useAuto: "Use auto",
+      hint: "Estimated from tank capacity (10% of the smaller tank's capacity/day) — a starting point, not a measured pump rate. Type your own number to override.",
+    },
     lossOptimizer: {
       title: "Sell now vs hold — loss optimiser",
       subtitle:
@@ -519,6 +524,11 @@ export const translations = {
       daysToBreach: "Pelanggaran dijangka terawal",
       noBreach: "Tiada dalam tempoh ramalan",
       clearChat: "Kosongkan perbualan",
+    },
+    transferAuto: {
+      badge: "Auto",
+      useAuto: "Guna auto",
+      hint: "Dianggarkan daripada kapasiti tangki (10% kapasiti tangki lebih kecil/hari) — titik mula, bukan kadar pam diukur. Taip nombor sendiri untuk menggantikannya.",
     },
     lossOptimizer: {
       title: "Jual sekarang vs tahan — pengoptimum kerugian",

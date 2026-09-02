@@ -114,8 +114,14 @@ export function compareHoldVsDespatch(
     riseFactorPerDay,
     maxTransferPerDayMt,
   );
-  const holdPenaltyRm = hold.feasible ? 0 : calcPenaltyExposure(hold.finalFfaPct, tank.stock, bands).totalRm;
-  const savingsRm = Math.max(0, despatchNowPenaltyRm - holdPenaltyRm);
+  // Only a *feasible* hold (tank actually reaches the good FFA limit in
+  // time) can ever show savings. An infeasible hold must show zero savings
+  // even if the simulation happened to end just above the limit but below
+  // the buyer's lowest penalty band threshold — that band gap is real
+  // (nothing charged there) but the tank is still non-compliant, so citing
+  // "savings" would be presenting a number the plan never actually achieves.
+  const holdPenaltyRm = hold.feasible ? 0 : despatchNowPenaltyRm;
+  const savingsRm = hold.feasible ? Math.max(0, despatchNowPenaltyRm - holdPenaltyRm) : 0;
   const recommendation: "hold" | "despatchNow" =
     hold.feasible && savingsRm > 0 ? "hold" : "despatchNow";
 
@@ -131,6 +137,20 @@ export function compareHoldVsDespatch(
 
 const TRANSFER_RATE_KEY = "ffa-max-transfer-per-day-mt";
 export const DEFAULT_MAX_TRANSFER_PER_DAY_MT = 200;
+
+/** Auto-recommended max transfer rate when no real pump/valve spec is known:
+ *  10% of the smallest involved tank's capacity per day is a common
+ *  conservative rule of thumb for gravity/pump transfers between adjacent
+ *  process tanks, clamped to a sane 50-300 MT/day operating range. This is
+ *  an estimate to get started with, not a measured pump rate — replace it
+ *  by typing your own number if you know your actual transfer capacity. */
+export function autoMaxTransferPerDayMt(tanks: { capacity: number }[]): number {
+  if (!tanks.length) return DEFAULT_MAX_TRANSFER_PER_DAY_MT;
+  const minCapacity = Math.min(...tanks.map((t) => t.capacity));
+  const raw = minCapacity * 0.1;
+  const rounded = Math.round(raw / 10) * 10;
+  return Math.min(300, Math.max(50, rounded));
+}
 
 export function loadMaxTransferPerDay(): number | null {
   if (typeof window === "undefined") return null;

@@ -68,6 +68,7 @@ import {
 } from "@/lib/prediction";
 import { suggestSafeProduction, type SafeProductionSuggestion } from "@/lib/production";
 import {
+  autoMaxTransferPerDayMt,
   compareHoldVsDespatch,
   DEFAULT_MAX_TRANSFER_PER_DAY_MT,
   loadMaxTransferPerDay,
@@ -353,13 +354,16 @@ export default function Home() {
     { id: "b", millCapacity: 40, hours: 22, utilisation: 100, oer: 19, incomingFFA: 6.7 },
     { id: "c", millCapacity: 40, hours: 18, utilisation: 100, oer: 19, incomingFFA: 6.7 },
   ]);
-  const [maxTransferPerDayMt, setMaxTransferPerDayMtState] = useState(DEFAULT_MAX_TRANSFER_PER_DAY_MT);
+  const [manualMaxTransferPerDayMt, setMaxTransferPerDayMtState] = useState(DEFAULT_MAX_TRANSFER_PER_DAY_MT);
+  const [autoTransfer, setAutoTransfer] = useState(true);
   const [batchSelected, setBatchSelected] = useState<Set<number>>(
     () => new Set(initialTanks.map((_, i) => i)),
   );
 
   const copy = getCopy(lang);
   const activeProfile = buyerProfiles.find((p) => p.id === activeProfileId) ?? buyerProfiles[0] ?? null;
+  const autoTransferValue = useMemo(() => autoMaxTransferPerDayMt(tanks), [tanks]);
+  const maxTransferPerDayMt = autoTransfer ? autoTransferValue : manualMaxTransferPerDayMt;
 
   const updateBuyerProfiles = (updater: (profiles: BuyerProfile[]) => BuyerProfile[]) => {
     setBuyerProfiles((prev) => {
@@ -382,7 +386,18 @@ export default function Home() {
   };
   const changeMaxTransferPerDay = (v: number) => {
     setMaxTransferPerDayMtState(v);
+    setAutoTransfer(false);
     saveMaxTransferPerDay(v);
+  };
+  const useAutoTransfer = () => {
+    setAutoTransfer(true);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("ffa-max-transfer-per-day-mt");
+      } catch {
+        // best-effort only
+      }
+    }
   };
   const highFfaTankNames = tanks
     .filter((t) => t.ffa > target)
@@ -413,7 +428,12 @@ export default function Home() {
     const storedHorizon = loadHorizonDays();
     if (storedHorizon !== null) setHorizonDays(storedHorizon);
     const storedTransfer = loadMaxTransferPerDay();
-    if (storedTransfer !== null) setMaxTransferPerDayMtState(storedTransfer);
+    if (storedTransfer !== null) {
+      // A saved value only exists once the engineer has typed their own
+      // number, so its presence means "auto" was turned off.
+      setMaxTransferPerDayMtState(storedTransfer);
+      setAutoTransfer(false);
+    }
   }, []);
 
   const setLanguage = (next: Lang) => {
@@ -977,7 +997,6 @@ export default function Home() {
         copy={copy}
         results={results}
         allocationTotal={allocationTotal}
-        highFFAStock={highFFAStock}
         target={target}
         anyProjectedBreach={anyProjectedBreach}
       />
@@ -1002,6 +1021,8 @@ export default function Home() {
         hasProfile={!!activeProfile}
         maxTransferPerDayMt={maxTransferPerDayMt}
         onMaxTransferChange={changeMaxTransferPerDay}
+        autoTransfer={autoTransfer}
+        onUseAuto={useAutoTransfer}
       />
     </>
   );
@@ -1022,6 +1043,8 @@ export default function Home() {
       target={target}
       maxTransferPerDayMt={maxTransferPerDayMt}
       onMaxTransferChange={changeMaxTransferPerDay}
+      autoTransfer={autoTransfer}
+      onUseAuto={useAutoTransfer}
       result={batchBlendResult}
     />
   );
@@ -2085,24 +2108,34 @@ function SmartRecommendation({
   const best = topPlans[0];
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
-      <div className="bg-[#173f30] p-4 text-white sm:p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-bold">
-            <Sparkles size={19} className="text-[#8ff0bb]" />
-            {copy.plan.smartRecommendation}
+      <div className="relative overflow-hidden bg-[#173f30] p-4 text-white sm:p-5">
+        <Image
+          src="/Oil.png"
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 40vw, 100vw"
+          className="object-cover object-right opacity-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#173f30] via-[#173f30]/95 to-[#173f30]/40" />
+        <div className="relative z-10">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-bold">
+              <Sparkles size={19} className="text-[#8ff0bb]" />
+              {copy.plan.smartRecommendation}
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                valid ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
+              }`}
+            >
+              {valid ? copy.plan.planChecked : copy.plan.checkInput}
+            </span>
           </div>
-          <span
-            className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-              valid ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
-            }`}
-          >
-            {valid ? copy.plan.planChecked : copy.plan.checkInput}
-          </span>
+          <h2 className="text-lg font-bold leading-snug sm:text-xl">
+            {bestMeetsTarget ? copy.plan.safeAllocation : copy.plan.limitNotAchievable}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">{copy.plan.planBasis}</p>
         </div>
-        <h2 className="text-lg font-bold leading-snug sm:text-xl">
-          {bestMeetsTarget ? copy.plan.safeAllocation : copy.plan.limitNotAchievable}
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">{copy.plan.planBasis}</p>
       </div>
       <div className="p-4 sm:p-5">
         {best ? (
@@ -2364,22 +2397,24 @@ function TankerDespatchPlanner({
           {copy.despatch.title}
         </div>
         <p className="mt-2 text-sm leading-relaxed text-[#58665e]">{copy.despatch.subtitle}</p>
-        <div className="mt-4 max-w-xs">
-          <label className="text-xs font-bold text-[#6c7971]">{copy.despatch.tankerLoad}</label>
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={tankerLoadMt || ""}
-              onChange={(e) => onTankerLoadChange(Number(e.target.value) || 0)}
-              className="w-full rounded-xl border border-[#dce3dd] bg-white px-3 py-2.5 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <span className="shrink-0 text-sm font-bold text-[#58665e]">MT</span>
+        <div className="mt-4 flex flex-wrap items-start gap-3">
+          <div className="max-w-xs flex-1 min-w-[180px]">
+            <label className="text-xs font-bold text-[#6c7971]">{copy.despatch.tankerLoad}</label>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={tankerLoadMt || ""}
+                onChange={(e) => onTankerLoadChange(Number(e.target.value) || 0)}
+                className="w-full rounded-xl border border-[#dce3dd] bg-white px-3 py-2.5 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <span className="shrink-0 text-sm font-bold text-[#58665e]">MT</span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[#758078]">{copy.despatch.tankerLoadHint}</p>
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-[#758078]">{copy.despatch.tankerLoadHint}</p>
           {totalDespatchableMt > 0 && tankerLoadMt > 0 && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#f6fae9] px-3 py-2.5">
+            <div className="flex flex-1 min-w-[220px] items-center gap-2 self-stretch rounded-xl bg-[#f6fae9] px-3 py-2.5">
               <Truck size={16} className="shrink-0 text-[#00713a]" />
               <p className="text-sm font-semibold text-[#173f30]">
                 {copy.despatch.loadsNeeded(loadsNeeded, n(totalDespatchableMt, 0))}
@@ -2498,31 +2533,76 @@ function DespatchOption({
   );
 }
 
+function TransferRateField({
+  copy,
+  label,
+  value,
+  onChange,
+  autoTransfer,
+  onUseAuto,
+}: {
+  copy: Copy;
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  autoTransfer: boolean;
+  onUseAuto: () => void;
+}) {
+  return (
+    <div className="max-w-xs">
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <MiniField label={label} value={value} onChange={(v) => onChange(Math.max(0, v))} unit="MT/day" />
+        </div>
+        {autoTransfer ? (
+          <span className="mb-0.5 inline-flex h-[42px] shrink-0 items-center gap-1 rounded-lg bg-[#d4f7e2] px-2.5 text-xs font-bold text-[#00713a]">
+            <Wand2 size={12} />
+            {copy.transferAuto.badge}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onUseAuto}
+            className="mb-0.5 h-[42px] shrink-0 rounded-lg border border-[#dce3dd] bg-white px-2.5 text-xs font-bold text-[#173f30] hover:bg-[#f4f6f2]"
+          >
+            {copy.transferAuto.useAuto}
+          </button>
+        )}
+      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-[#9aa59f]">{copy.transferAuto.hint}</p>
+    </div>
+  );
+}
+
 function LossOptimizerPanel({
   copy,
   results,
   hasProfile,
   maxTransferPerDayMt,
   onMaxTransferChange,
+  autoTransfer,
+  onUseAuto,
 }: {
   copy: Copy;
   results: HoldVsDespatch[];
   hasProfile: boolean;
   maxTransferPerDayMt: number;
   onMaxTransferChange: (v: number) => void;
+  autoTransfer: boolean;
+  onUseAuto: () => void;
 }) {
   const totalSavings = results.reduce((sum, r) => sum + r.savingsRm, 0);
 
   return (
     <Panel title={copy.lossOptimizer.title} subtitle={copy.lossOptimizer.subtitle} icon={<Scale size={19} />}>
-      <div className="max-w-xs">
-        <MiniField
-          label={copy.lossOptimizer.maxTransferLabel}
-          value={maxTransferPerDayMt}
-          onChange={(v) => onMaxTransferChange(Math.max(0, v))}
-          unit="MT/day"
-        />
-      </div>
+      <TransferRateField
+        copy={copy}
+        label={copy.lossOptimizer.maxTransferLabel}
+        value={maxTransferPerDayMt}
+        onChange={onMaxTransferChange}
+        autoTransfer={autoTransfer}
+        onUseAuto={onUseAuto}
+      />
 
       {!hasProfile || results.length === 0 ? (
         <p className="mt-4 text-sm text-[#58665e]">{copy.lossOptimizer.allGood}</p>
@@ -2596,6 +2676,8 @@ function BatchBlendPlanner({
   target,
   maxTransferPerDayMt,
   onMaxTransferChange,
+  autoTransfer,
+  onUseAuto,
   result,
 }: {
   copy: Copy;
@@ -2605,6 +2687,8 @@ function BatchBlendPlanner({
   target: number;
   maxTransferPerDayMt: number;
   onMaxTransferChange: (v: number) => void;
+  autoTransfer: boolean;
+  onUseAuto: () => void;
   result: BatchBlendResult | null;
 }) {
   const reasonText = (reason: BatchBlendResult["reason"]) => {
@@ -2645,12 +2729,14 @@ function BatchBlendPlanner({
         ))}
       </div>
 
-      <div className="mt-4 max-w-xs">
-        <MiniField
+      <div className="mt-4">
+        <TransferRateField
+          copy={copy}
           label={copy.batchBlend.maxTransferLabel}
           value={maxTransferPerDayMt}
-          onChange={(v) => onMaxTransferChange(Math.max(0, v))}
-          unit="MT/day"
+          onChange={onMaxTransferChange}
+          autoTransfer={autoTransfer}
+          onUseAuto={onUseAuto}
         />
       </div>
 
@@ -2719,21 +2805,18 @@ function DecisionSafeguards({
   copy,
   results,
   allocationTotal,
-  highFFAStock,
   target,
   anyProjectedBreach,
 }: {
   copy: Copy;
   results: Result[];
   allocationTotal: number;
-  highFFAStock: number;
   target: number;
   anyProjectedBreach: boolean;
 }) {
   const checks: [boolean, string][] = [
     [!results.some((r) => r.overflow), copy.safeguards.noOverflow],
     [allocationTotal === 100, copy.safeguards.allocation100],
-    [highFFAStock === 0, copy.safeguards.noHighFfa],
     [results.every((r) => r.finalFFA <= target), copy.safeguards.finalFfaWithinLimit(target)],
     [!anyProjectedBreach, copy.safeguards.noProjectedBreach],
   ];
