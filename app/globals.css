@@ -294,7 +294,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 /* Only show the 0/50/100% scale once there's enough width for it not to
    crowd the stat grid beside the cylinder. */
-@media (min-width: 420px) {
+@media (min-width: 1024px) {
   .tank-unit__scale {
     display: flex;
   }
@@ -320,7 +320,7 @@ input[type="number"]::-webkit-outer-spin-button {
   align-self: center;
 }
 
-@media (min-width: 420px) {
+@media (min-width: 1024px) {
   .tank-unit__identity-head {
     flex-direction: row;
     align-items: flex-start;
@@ -738,15 +738,12 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-/* Desktop: two tank cards per row when there's room, matching the rest of
-   the dashboard's 2-column layout. */
-@media (min-width: 1280px) {
-  .tank-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.875rem;
-  }
-}
+/* Tank cards stay single-column at every width, full container width. A
+   2-column grid here would halve each card's width below the point where
+   its internal identity/allocate split (and the cylinder + stat grid
+   inside that) has room to lay out without clipping — card layout is
+   viewport-width media queries, not container queries, so it can't adapt
+   to a narrower card automatically. */
 
 /* Bottom navigation — mobile only */
 .bottom-nav {
