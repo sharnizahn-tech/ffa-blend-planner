@@ -1178,6 +1178,7 @@ export default function Home() {
           highFFAStock={highFFAStock}
           highFfaTankNames={highFfaTankNames}
           incomingCPO={incomingCPO}
+          allocation={allocation}
           onApplyPlan={(plan) => applyPlan(plan)}
           aiMessages={aiMessages}
           aiLoading={aiLoading}
@@ -1191,10 +1192,10 @@ export default function Home() {
             setAiError(null);
           }}
           penaltyBands={activeProfile?.bands}
-          consolidateRuleApplies={consolidateRuleApplies}
-          forceSplitFallback={forceSplitFallback}
           bestSingleTank={bestSingleTank}
           singleTankBlendPlan={singleTankBlendPlan}
+          singleTankFollowUp={singleTankFollowUp}
+          hasProfile={!!activeProfile}
           onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
         />
       </div>
@@ -2670,23 +2671,38 @@ function RoutingStrategyCard({
           ? copy.routingStrategy.recommendSplitOverSingle(singleTank.name, n(singleResult.finalFFA, 2))
           : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
 
+  // Two separate lines when consolidating: what to physically transfer
+  // (MT, source tank, days, resulting FFA), and what it's worth in penalty
+  // terms (despatch-now cost, or the saving from blending first) — the
+  // engineer needs both before deciding whether to despatch.
   let followUpText: string | null = null;
+  let blendText: string | null = null;
+  let penaltyText: string | null = null;
   if (forceSplitFallback) {
     followUpText = null;
   } else if (consolidateRuleApplies) {
     if (singleResult.finalFFA > target && singleTankBlendPlan) {
       if (!singleTankBlendPlan.dilutionTankName) {
-        followUpText = copy.routingStrategy.consolidateNoDilutionTank;
+        blendText = copy.routingStrategy.consolidateNoDilutionTank;
       } else if (singleTankBlendPlan.hold.feasible && singleTankBlendPlan.hold.days !== null) {
-        followUpText = copy.routingStrategy.consolidateBlendPlan(
+        blendText = copy.routingStrategy.consolidateBlendPlan(
           n(singleTankBlendPlan.hold.transferUsedMt, 0),
           singleTankBlendPlan.dilutionTankName,
           singleTankBlendPlan.hold.days,
           n(singleTankBlendPlan.hold.finalFfaPct, 2),
         );
       } else {
-        followUpText = copy.routingStrategy.consolidateBlendInfeasible;
+        blendText = copy.routingStrategy.consolidateBlendInfeasible;
       }
+      penaltyText = !hasProfile
+        ? copy.routingStrategy.followUpNoProfile
+        : singleTankFollowUp?.recommendation === "hold" && singleTankFollowUp.hold.days !== null
+          ? copy.routingStrategy.followUpHold(singleTankFollowUp.hold.days, n(singleTankFollowUp.savingsRm, 0))
+          : singleTankFollowUp
+            ? copy.routingStrategy.followUpDespatchNow(n(singleTankFollowUp.despatchNowPenaltyRm, 0))
+            : null;
+    } else if (singleResult.finalFFA <= target) {
+      blendText = copy.routingStrategy.alreadyCompliant(n(singleResult.finalFFA, 2));
     }
   } else if (!singleMeets) {
     followUpText = !hasProfile
@@ -2777,6 +2793,22 @@ function RoutingStrategyCard({
           {followUpText}
         </div>
       )}
+      {blendText && (
+        <div className="mt-2">
+          <p className="section-label">{copy.routingStrategy.whatToTransfer}</p>
+          <div className="mt-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3.5 text-sm leading-relaxed text-[#92441f]">
+            {blendText}
+          </div>
+        </div>
+      )}
+      {penaltyText && (
+        <div className="mt-2">
+          <p className="section-label">{copy.routingStrategy.penaltyExposure}</p>
+          <div className="mt-2 rounded-xl border border-[#d9c7a3] bg-[#fdf7ec] p-3.5 text-sm leading-relaxed text-[#6b4c14]">
+            {penaltyText}
+          </div>
+        </div>
+      )}
     </Panel>
   );
 }
@@ -2791,6 +2823,7 @@ function SmartRecommendation({
   highFFAStock,
   highFfaTankNames,
   incomingCPO,
+  allocation,
   onApplyPlan,
   aiMessages,
   aiLoading,
@@ -2801,10 +2834,10 @@ function SmartRecommendation({
   onGetAiOpinion,
   onClearChat,
   penaltyBands,
-  consolidateRuleApplies,
-  forceSplitFallback,
   bestSingleTank,
   singleTankBlendPlan,
+  singleTankFollowUp,
+  hasProfile,
   onApplySingle,
 }: {
   copy: Copy;
@@ -2816,6 +2849,7 @@ function SmartRecommendation({
   highFFAStock: number;
   highFfaTankNames: string;
   incomingCPO: number;
+  allocation: number[];
   onApplyPlan: (plan: BlendPlan) => void;
   aiMessages: AiMessage[];
   aiLoading: boolean;
@@ -2826,32 +2860,46 @@ function SmartRecommendation({
   onGetAiOpinion: (opts?: { deepAnalysis?: boolean }) => void;
   onClearChat: () => void;
   penaltyBands?: PenaltyBand[] | null;
-  consolidateRuleApplies: boolean;
-  forceSplitFallback: boolean;
   bestSingleTank: BlendPlan | null;
   singleTankBlendPlan: { hold: HoldSimulation; dilutionTankName: string | null } | null;
+  singleTankFollowUp: HoldVsDespatch | null;
+  hasProfile: boolean;
   onApplySingle: () => void;
 }) {
   const best = topPlans[0];
-  const useConsolidate = consolidateRuleApplies && !forceSplitFallback && !!bestSingleTank;
+  // Which view to show is driven by what's actually APPLIED right now — not
+  // by the >5% rule alone — so picking "Route into this tank" always surfaces
+  // the full blend/despatch/penalty plan here, and picking the split plan
+  // always shows the standard top-plans view, regardless of the rule.
+  const useConsolidate = !!bestSingleTank && sameAllocation(allocation, bestSingleTank.allocation);
   const singleIndex = useConsolidate ? bestSingleTank!.allocation.findIndex((v) => v === 100) : -1;
   const singleResult = useConsolidate && singleIndex >= 0 ? bestSingleTank!.results[singleIndex] : null;
 
   let blendDownText: string | null = null;
+  let penaltyText: string | null = null;
   if (useConsolidate && singleResult) {
     if (singleResult.finalFFA <= target) {
-      blendDownText = null;
-    } else if (!singleTankBlendPlan?.dilutionTankName) {
-      blendDownText = copy.routingStrategy.consolidateNoDilutionTank;
-    } else if (singleTankBlendPlan.hold.feasible && singleTankBlendPlan.hold.days !== null) {
-      blendDownText = copy.routingStrategy.consolidateBlendPlan(
-        n(singleTankBlendPlan.hold.transferUsedMt, 0),
-        singleTankBlendPlan.dilutionTankName,
-        singleTankBlendPlan.hold.days,
-        n(singleTankBlendPlan.hold.finalFfaPct, 2),
-      );
+      blendDownText = copy.routingStrategy.alreadyCompliant(n(singleResult.finalFFA, 2));
     } else {
-      blendDownText = copy.routingStrategy.consolidateBlendInfeasible;
+      if (!singleTankBlendPlan?.dilutionTankName) {
+        blendDownText = copy.routingStrategy.consolidateNoDilutionTank;
+      } else if (singleTankBlendPlan.hold.feasible && singleTankBlendPlan.hold.days !== null) {
+        blendDownText = copy.routingStrategy.consolidateBlendPlan(
+          n(singleTankBlendPlan.hold.transferUsedMt, 0),
+          singleTankBlendPlan.dilutionTankName,
+          singleTankBlendPlan.hold.days,
+          n(singleTankBlendPlan.hold.finalFfaPct, 2),
+        );
+      } else {
+        blendDownText = copy.routingStrategy.consolidateBlendInfeasible;
+      }
+      penaltyText = !hasProfile
+        ? copy.routingStrategy.followUpNoProfile
+        : singleTankFollowUp?.recommendation === "hold" && singleTankFollowUp.hold.days !== null
+          ? copy.routingStrategy.followUpHold(singleTankFollowUp.hold.days, n(singleTankFollowUp.savingsRm, 0))
+          : singleTankFollowUp
+            ? copy.routingStrategy.followUpDespatchNow(n(singleTankFollowUp.despatchNowPenaltyRm, 0))
+            : null;
     }
   }
 
@@ -2911,6 +2959,14 @@ function SmartRecommendation({
                 <p className="section-label">{copy.plan.blendDownPlan}</p>
                 <div className="mt-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3.5 text-sm leading-relaxed text-[#92441f]">
                   {blendDownText}
+                </div>
+              </div>
+            )}
+            {penaltyText && (
+              <div className="mt-3">
+                <p className="section-label">{copy.routingStrategy.penaltyExposure}</p>
+                <div className="mt-2 rounded-xl border border-[#d9c7a3] bg-[#fdf7ec] p-3.5 text-sm leading-relaxed text-[#6b4c14]">
+                  {penaltyText}
                 </div>
               </div>
             )}

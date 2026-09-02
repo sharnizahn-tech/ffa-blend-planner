@@ -370,6 +370,10 @@ export const translations = {
         "No good-FFA tank is available to dilute with right now — despatch this stock instead (see Loss Optimizer).",
       forceSplitText: (tank: string) =>
         `${tank} has no spare room for today's batch, so there's no single tank to consolidate into — splitting across tanks is the only way to take in this CPO without an overflow.`,
+      whatToTransfer: "What to transfer",
+      penaltyExposure: "Penalty exposure",
+      alreadyCompliant: (ffa: string) =>
+        `Already within limit after this batch — lands at ${ffa}% FFA, no blending needed before despatch.`,
     },
     transferCalc: {
       title: "Transfer calculator",
@@ -752,6 +756,10 @@ export const translations = {
         "Tiada tangki FFA baik tersedia untuk mencairkan sekarang — despatch stok ini sahaja (lihat Loss Optimizer).",
       forceSplitText: (tank: string) =>
         `${tank} tiada ruang lagi untuk kelompok hari ini, jadi tiada satu tangki untuk digabungkan — pisahan merentasi tangki satu-satunya cara untuk terima CPO ini tanpa limpah.`,
+      whatToTransfer: "Apa untuk dipindah",
+      penaltyExposure: "Pendedahan penalti",
+      alreadyCompliant: (ffa: string) =>
+        `Sudah dalam had selepas kelompok ini — berada pada ${ffa}% FFA, tiada pencairan diperlukan sebelum despatch.`,
     },
     transferCalc: {
       title: "Kalkulator pemindahan",
