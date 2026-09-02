@@ -331,6 +331,30 @@ export const translations = {
     advanced: {
       title: "Advanced: production ceiling & FFA forecast",
     },
+    routingStrategy: {
+      title: "Allocation strategy",
+      subtitle: "Compare routing everything into one tank against splitting the incoming flow across several.",
+      singleLabel: "Single tank (simple to execute)",
+      splitLabel: "Split across tanks (current method)",
+      singleHint: "One valve, one number to record — no flow-splitting needed.",
+      splitHint: "Needs precise flow control to hit the % split accurately.",
+      recommendSingle: (tank: string) =>
+        `Recommended: route 100% into ${tank}. It stays within the good FFA limit, and there's only one number to record — no need to split the flow.`,
+      recommendSplitOverSingle: (tank: string, ffa: string) =>
+        `Recommended: split across tanks. Routing 100% into ${tank} alone would leave it at ${ffa}% FFA — over the limit. Splitting keeps every tank compliant, though it needs careful flow control to execute accurately.`,
+      recommendSingleWithFollowUp: (tank: string, ffa: string) =>
+        `Neither option keeps every tank compliant today. Routing 100% into ${tank} (ending at ${ffa}%) is simpler to execute — see below for exactly what to do about it.`,
+      followUpDespatchNow: (rm: string) =>
+        `What to do about it: despatch it now. Diluting it with other tanks or incoming CPO won't get it compliant in time, so holding would only cost more — the penalty is RM ${rm}.`,
+      followUpHold: (days: number, rm: string) =>
+        `What to do about it: hold and dilute it — using other tanks and incoming CPO, it reaches the good FFA limit in ${days} day${days === 1 ? "" : "s"}. That saves RM ${rm} versus despatching it now.`,
+      followUpNoProfile:
+        "Set up a buyer penalty profile on the Despatch tab to get a concrete despatch-now-vs-hold recommendation for this tank.",
+      applySingle: "Route into this tank",
+      applySplit: "Use the split plan",
+      meetsLimit: "Stays within limit",
+      overLimit: "Over limit",
+    },
     transferCalc: {
       title: "Transfer calculator",
       subtitle: "Move stock from one tank to another and preview the result before committing.",
@@ -672,6 +696,30 @@ export const translations = {
     },
     advanced: {
       title: "Lanjutan: siling pengeluaran & ramalan FFA",
+    },
+    routingStrategy: {
+      title: "Strategi peruntukan",
+      subtitle: "Banding alirkan semua ke satu tangki dengan pisahkan aliran masuk merentasi beberapa tangki.",
+      singleLabel: "Satu tangki (mudah dilaksana)",
+      splitLabel: "Pisah merentasi tangki (kaedah semasa)",
+      singleHint: "Satu injap, satu nombor untuk direkod — tiada pemisahan aliran diperlukan.",
+      splitHint: "Perlukan kawalan aliran tepat untuk capai pisahan % dengan betul.",
+      recommendSingle: (tank: string) =>
+        `Disyorkan: alirkan 100% ke ${tank}. Ia kekal dalam had FFA baik, dan hanya satu nombor untuk direkod — tiada keperluan pisah aliran.`,
+      recommendSplitOverSingle: (tank: string, ffa: string) =>
+        `Disyorkan: pisah merentasi tangki. Mengalirkan 100% ke ${tank} sahaja akan tinggalkannya pada ${ffa}% FFA — melebihi had. Pisahan mengekalkan setiap tangki patuh, walaupun ia perlukan kawalan aliran teliti untuk dilaksanakan dengan tepat.`,
+      recommendSingleWithFollowUp: (tank: string, ffa: string) =>
+        `Tiada pilihan yang mengekalkan setiap tangki patuh hari ini. Mengalirkan 100% ke ${tank} (berakhir pada ${ffa}%) lebih mudah dilaksanakan — lihat di bawah untuk tindakan sebenar.`,
+      followUpDespatchNow: (rm: string) =>
+        `Apa nak buat: despatch sekarang. Mencairkan dengan tangki lain atau CPO masuk tidak akan patuh dalam masa, jadi menahan hanya akan kos lebih — penalti ialah RM ${rm}.`,
+      followUpHold: (days: number, rm: string) =>
+        `Apa nak buat: tahan dan cairkan — menggunakan tangki lain dan CPO masuk, ia capai had FFA baik dalam ${days} hari. Ini jimat RM ${rm} berbanding despatch sekarang.`,
+      followUpNoProfile:
+        "Tetapkan profil penalti pembeli di tab Despatch untuk dapatkan cadangan despatch-vs-tahan yang konkrit untuk tangki ini.",
+      applySingle: "Alirkan ke tangki ini",
+      applySplit: "Guna pelan pisahan",
+      meetsLimit: "Kekal dalam had",
+      overLimit: "Melebihi had",
     },
     transferCalc: {
       title: "Kalkulator pemindahan",

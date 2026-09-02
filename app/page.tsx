@@ -212,6 +212,28 @@ function findTopPlans(
   return top;
 }
 
+/** The alternative to splitting incoming CPO by % across tanks: route the
+ *  whole batch into ONE tank instead. Operationally simpler — one valve, one
+ *  number to record — but if that tank ends up over the limit, it needs a
+ *  follow-up dilution (Transfer tab) rather than staying clean on arrival.
+ *  Reuses the exact same scoring rule as the split-allocation planner
+ *  (scorePlan) so the two approaches are judged on identical terms. */
+function findBestSingleTankOption(
+  tanks: Tank[],
+  incomingCPO: number,
+  incomingFFA: number,
+  target: number,
+): BlendPlan | null {
+  const options: BlendPlan[] = [];
+  for (let i = 0; i < tanks.length; i += 1) {
+    const allocation = tanks.map((_, j) => (j === i ? 100 : 0));
+    const plan = scorePlan(tanks, allocation, incomingCPO, incomingFFA, target);
+    if (plan) options.push(plan);
+  }
+  options.sort((a, b) => a.score - b.score);
+  return options[0] ?? null;
+}
+
 function planToAdvisePayload(
   plan: BlendPlan,
   rank: number,
@@ -472,6 +494,10 @@ export default function Home() {
     [tanks, incomingCPO, incomingFFA, target],
   );
   const best = topPlans[0] ?? null;
+  const bestSingleTank = useMemo(
+    () => findBestSingleTankOption(tanks, incomingCPO, incomingFFA, target),
+    [tanks, incomingCPO, incomingFFA, target],
+  );
   const allocationTotal = allocation.reduce((a, b) => a + b, 0);
   const currentStock = tanks.reduce((s, t) => s + t.stock, 0);
   const highFFAStock = tanks.filter((t) => t.ffa > target).reduce((s, t) => s + t.stock, 0);
@@ -581,6 +607,31 @@ export default function Home() {
       })
       .filter((r): r is HoldVsDespatch => r !== null);
   }, [tanks, target, incomingCPO, incomingFFA, riseFactorPerDay, maxTransferPerDayMt, activeProfile, deadStockMt]);
+
+  // If routing 100% into one tank leaves it over the limit, don't just say
+  // "sort it out later" — reuse the same despatch-vs-hold engine the Loss
+  // Optimizer uses, so the recommendation names a concrete number: despatch
+  // now for RM X, or hold and dilute over N days to save RM Y.
+  const singleTankFollowUp = useMemo<HoldVsDespatch | null>(() => {
+    if (!bestSingleTank || !activeProfile) return null;
+    const singleIndex = bestSingleTank.allocation.findIndex((v) => v === 100);
+    if (singleIndex < 0) return null;
+    const result = bestSingleTank.results[singleIndex];
+    if (result.finalFFA <= target) return null;
+    const resultingTank = { name: result.name, capacity: result.capacity, stock: result.finalStock, ffa: result.finalFFA };
+    const others = tanks.filter((_, j) => j !== singleIndex);
+    return compareHoldVsDespatch(
+      resultingTank,
+      others,
+      target,
+      incomingCPO,
+      incomingFFA,
+      riseFactorPerDay,
+      maxTransferPerDayMt,
+      activeProfile.bands,
+      deadStockMt,
+    );
+  }, [bestSingleTank, tanks, target, incomingCPO, incomingFFA, riseFactorPerDay, maxTransferPerDayMt, activeProfile, deadStockMt]);
 
   const batchBlendTanks = useMemo(
     () => tanks.filter((_, i) => batchSelected.has(i)),
@@ -1014,6 +1065,18 @@ export default function Home() {
   const productionPanel = (
     <>
       {forecastPanel}
+      <RoutingStrategyCard
+        copy={copy}
+        tanks={tanks}
+        target={target}
+        incomingCPO={incomingCPO}
+        best={best}
+        bestSingleTank={bestSingleTank}
+        singleTankFollowUp={singleTankFollowUp}
+        hasProfile={!!activeProfile}
+        onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
+        onApplySplit={() => best && applyPlan(best)}
+      />
       <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
         {tanksPanel}
         <SmartRecommendation
@@ -2463,6 +2526,129 @@ function PlanOption({
         {copy.plan.useThisPlan}
       </button>
     </div>
+  );
+}
+
+function RoutingStrategyCard({
+  copy,
+  tanks,
+  target,
+  incomingCPO,
+  best,
+  bestSingleTank,
+  singleTankFollowUp,
+  hasProfile,
+  onApplySingle,
+  onApplySplit,
+}: {
+  copy: Copy;
+  tanks: Tank[];
+  target: number;
+  incomingCPO: number;
+  best: BlendPlan | null;
+  bestSingleTank: BlendPlan | null;
+  singleTankFollowUp: HoldVsDespatch | null;
+  hasProfile: boolean;
+  onApplySingle: () => void;
+  onApplySplit: () => void;
+}) {
+  if (!best || !bestSingleTank || incomingCPO <= 0) return null;
+
+  const singleIndex = bestSingleTank.allocation.findIndex((v) => v === 100);
+  const singleTank = tanks[singleIndex];
+  const singleResult = bestSingleTank.results[singleIndex];
+  const singleMeets = bestSingleTank.results.every((r) => r.finalFFA <= target);
+  const splitMeets = best.results.every((r) => r.finalFFA <= target);
+  const recommendSingle = singleMeets || (!splitMeets && bestSingleTank.score <= best.score);
+
+  const recommendationText = singleMeets
+    ? copy.routingStrategy.recommendSingle(singleTank.name)
+    : splitMeets
+      ? copy.routingStrategy.recommendSplitOverSingle(singleTank.name, n(singleResult.finalFFA, 2))
+      : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
+
+  const followUpText = singleMeets
+    ? null
+    : !hasProfile
+      ? copy.routingStrategy.followUpNoProfile
+      : singleTankFollowUp?.recommendation === "hold" && singleTankFollowUp.hold.days !== null
+        ? copy.routingStrategy.followUpHold(singleTankFollowUp.hold.days, n(singleTankFollowUp.savingsRm, 0))
+        : singleTankFollowUp
+          ? copy.routingStrategy.followUpDespatchNow(n(singleTankFollowUp.despatchNowPenaltyRm, 0))
+          : null;
+
+  return (
+    <Panel
+      title={copy.routingStrategy.title}
+      subtitle={copy.routingStrategy.subtitle}
+      icon={<ArrowRightLeft size={19} />}
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div
+          className={`rounded-xl border p-3.5 ${
+            recommendSingle ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-[#173f30]">{copy.routingStrategy.singleLabel}</p>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              singleMeets ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
+            }`}>
+              {singleMeets ? copy.routingStrategy.meetsLimit : copy.routingStrategy.overLimit}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-[#708078]">{copy.routingStrategy.singleHint}</p>
+          <p className="mt-2 text-sm text-[#3f4c46]">
+            {n(incomingCPO, 0)} MT → {singleTank.name} · {n(singleResult.finalFFA, 2)}% FFA
+          </p>
+          <button
+            type="button"
+            onClick={onApplySingle}
+            className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30]"
+          >
+            {copy.routingStrategy.applySingle}
+          </button>
+        </div>
+
+        <div
+          className={`rounded-xl border p-3.5 ${
+            !recommendSingle ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-[#173f30]">{copy.routingStrategy.splitLabel}</p>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              splitMeets ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
+            }`}>
+              {splitMeets ? copy.routingStrategy.meetsLimit : copy.routingStrategy.overLimit}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-[#708078]">{copy.routingStrategy.splitHint}</p>
+          <p className="mt-2 text-sm text-[#3f4c46]">
+            {best.allocation
+              .map((pct, i) => (pct > 0 ? `${pct}%→${tanks[i].name}` : null))
+              .filter(Boolean)
+              .join(", ")}
+          </p>
+          <button
+            type="button"
+            onClick={onApplySplit}
+            className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30]"
+          >
+            {copy.routingStrategy.applySplit}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl bg-[#f8faf7] p-3.5 text-sm leading-relaxed text-[#17231d]">
+        {recommendationText}
+      </div>
+      {followUpText && (
+        <div className="mt-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3.5 text-sm leading-relaxed text-[#92441f]">
+          {followUpText}
+        </div>
+      )}
+    </Panel>
   );
 }
 
