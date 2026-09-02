@@ -134,7 +134,11 @@ export const translations = {
       title: "Tanker despatch planning",
       subtitle: "Plan which tanks to load after the current allocation (post-blend stock & FFA).",
       tankerLoad: "Tanker load",
-      tankerLoadHint: "Typical road tanker: 20–32 MT. Plans use projected stock after incoming CPO.",
+      tankerLoadHint: "Typical road tanker: 35–40 MT. Plans use projected stock after incoming CPO.",
+      loadsNeeded: (loads: number, totalMt: string) =>
+        loads === 0
+          ? "No dispatchable stock at this load size."
+          : `≈ ${loads} tanker load${loads === 1 ? "" : "s"} to clear ${totalMt} MT of dispatchable stock.`,
       topPlans: "Top 3 despatch options",
       planRank: (rank: number) => (rank === 1 ? "Option 1 (best)" : `Option ${rank}`),
       loadFfa: (pct: number) => `Blended load FFA: ${n(pct, 2)}%`,
@@ -408,7 +412,11 @@ export const translations = {
       title: "Perancangan despatch tanker",
       subtitle: "Rancang tangki mana untuk dimuatkan selepas peruntukan semasa (stok & FFA selepas campuran).",
       tankerLoad: "Muatan tanker",
-      tankerLoadHint: "Tanker jalan biasa: 20–32 MT. Pelan menggunakan stok unjuran selepas CPO masuk.",
+      tankerLoadHint: "Tanker jalan biasa: 35–40 MT. Pelan menggunakan stok unjuran selepas CPO masuk.",
+      loadsNeeded: (loads: number, totalMt: string) =>
+        loads === 0
+          ? "Tiada stok untuk didespatch pada saiz muatan ini."
+          : `≈ ${loads} muatan tanker untuk habiskan ${totalMt} MT stok boleh despatch.`,
       topPlans: "3 pilihan despatch terbaik",
       planRank: (rank: number) => (rank === 1 ? "Pilihan 1 (terbaik)" : `Pilihan ${rank}`),
       loadFfa: (pct: number) => `FFA campuran muatan: ${n(pct, 2)}%`,

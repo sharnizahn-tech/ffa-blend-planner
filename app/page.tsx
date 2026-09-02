@@ -339,7 +339,7 @@ export default function Home() {
   const [aiCooldown, setAiCooldown] = useState(0);
   const [aiQuestion, setAiQuestion] = useState("");
   const [lang, setLang] = useState<Lang>("en");
-  const [tankerLoadMt, setTankerLoadMt] = useState(28);
+  const [tankerLoadMt, setTankerLoadMt] = useState(38);
 
   const [buyerProfiles, setBuyerProfiles] = useState<BuyerProfile[]>(() => [
     createEmptyBuyerProfile("Buyer 1"),
@@ -994,6 +994,7 @@ export default function Home() {
         preferFewerTanks={preferFewerTanks}
         onPreferFewerTanksChange={setPreferFewerTanks}
         penaltyRm={activeProfile ? despatchPenaltyRm : null}
+        totalDespatchableMt={despatchTanks.reduce((s, t) => s + t.stockMt, 0)}
       />
       <LossOptimizerPanel
         copy={copy}
@@ -2341,6 +2342,7 @@ function TankerDespatchPlanner({
   preferFewerTanks,
   onPreferFewerTanksChange,
   penaltyRm,
+  totalDespatchableMt,
 }: {
   copy: Copy;
   tankerLoadMt: number;
@@ -2349,8 +2351,10 @@ function TankerDespatchPlanner({
   preferFewerTanks: boolean;
   onPreferFewerTanksChange: (value: boolean) => void;
   penaltyRm: number | null;
+  totalDespatchableMt: number;
 }) {
   const hasStock = topPlans.length > 0;
+  const loadsNeeded = tankerLoadMt > 0 ? Math.ceil(totalDespatchableMt / tankerLoadMt) : 0;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
@@ -2374,6 +2378,14 @@ function TankerDespatchPlanner({
             <span className="shrink-0 text-sm font-bold text-[#58665e]">MT</span>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[#758078]">{copy.despatch.tankerLoadHint}</p>
+          {totalDespatchableMt > 0 && tankerLoadMt > 0 && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#f6fae9] px-3 py-2.5">
+              <Truck size={16} className="shrink-0 text-[#00713a]" />
+              <p className="text-sm font-semibold text-[#173f30]">
+                {copy.despatch.loadsNeeded(loadsNeeded, n(totalDespatchableMt, 0))}
+              </p>
+            </div>
+          )}
         </div>
         <label className="mt-4 flex max-w-sm cursor-pointer items-start gap-2.5 rounded-xl border border-[#dce3dd] bg-white p-3">
           <input
