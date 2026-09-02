@@ -297,11 +297,13 @@ export const translations = {
     warnings: {
       title: "Warnings",
       overflowTitle: "Tank overflow",
-      overflowText: "Current allocation would overflow at least one tank — reduce its share below 100% capacity.",
+      overflowText: (names: string) =>
+        `${names} would overflow at this allocation — reduce its share below 100% capacity.`,
       highRiskTitle: "High FFA risk",
-      highRiskText: "Incoming CPO is above the good FFA limit — route it carefully.",
+      highRiskText: (incomingFfa: string, limit: string) =>
+        `Incoming CPO is at ${incomingFfa}% FFA, above your ${limit}% limit — route it carefully.`,
       breachTitle: "Projected breach",
-      breachText: "At least one tank is projected to cross the good FFA limit within the forecast window.",
+      breachText: (details: string) => `${details} projected to cross the good FFA limit if left untouched.`,
       allGood: "No warnings — everything is within limits.",
     },
     aiRecommendation: {
@@ -637,11 +639,13 @@ export const translations = {
     warnings: {
       title: "Amaran",
       overflowTitle: "Tangki melimpah",
-      overflowText: "Peruntukan semasa akan melimpahkan sekurang-kurangnya satu tangki — kurangkan bahagiannya di bawah 100% kapasiti.",
+      overflowText: (names: string) =>
+        `${names} akan melimpah pada peruntukan ini — kurangkan bahagiannya di bawah 100% kapasiti.`,
       highRiskTitle: "Risiko FFA tinggi",
-      highRiskText: "CPO masuk melebihi had FFA baik — agihkan dengan teliti.",
+      highRiskText: (incomingFfa: string, limit: string) =>
+        `CPO masuk pada ${incomingFfa}% FFA, melebihi had ${limit}% anda — agihkan dengan teliti.`,
       breachTitle: "Jangkaan pelanggaran had",
-      breachText: "Sekurang-kurangnya satu tangki dijangka melebihi had FFA baik dalam tempoh ramalan.",
+      breachText: (details: string) => `${details} dijangka melebihi had FFA baik jika tidak diuruskan.`,
       allGood: "Tiada amaran — semuanya dalam had.",
     },
     aiRecommendation: {

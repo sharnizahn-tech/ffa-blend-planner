@@ -1176,9 +1176,10 @@ export default function Home() {
               />
               <WarningsPanel
                 copy={copy}
-                hasOverflow={hasOverflow}
-                atRisk={blendAtRisk}
-                anyProjectedBreach={anyProjectedBreach}
+                results={results}
+                incomingFFA={incomingFFA}
+                target={target}
+                ffaProjections={ffaProjections}
               />
               <AiRecommendationCard
                 copy={copy}
@@ -2083,19 +2084,37 @@ function AlertBanner({ title, text }: { title: string; text: string }) {
 
 function WarningsPanel({
   copy,
-  hasOverflow,
-  atRisk,
-  anyProjectedBreach,
+  results,
+  incomingFFA,
+  target,
+  ffaProjections,
 }: {
   copy: Copy;
-  hasOverflow: boolean;
-  atRisk: boolean;
-  anyProjectedBreach: boolean;
+  results: Result[];
+  incomingFFA: number;
+  target: number;
+  ffaProjections: { name: string; daysToLimit: number | null }[];
 }) {
+  const overflowTanks = results.filter((r) => r.overflow).map((r) => r.name);
+  const atRisk = incomingFFA > target;
+  const breaching = ffaProjections.filter((p) => p.daysToLimit !== null);
+
   const items: { title: string; text: string }[] = [];
-  if (hasOverflow) items.push({ title: copy.warnings.overflowTitle, text: copy.warnings.overflowText });
-  if (atRisk) items.push({ title: copy.warnings.highRiskTitle, text: copy.warnings.highRiskText });
-  if (anyProjectedBreach) items.push({ title: copy.warnings.breachTitle, text: copy.warnings.breachText });
+  if (overflowTanks.length > 0) {
+    items.push({ title: copy.warnings.overflowTitle, text: copy.warnings.overflowText(overflowTanks.join(", ")) });
+  }
+  if (atRisk) {
+    items.push({
+      title: copy.warnings.highRiskTitle,
+      text: copy.warnings.highRiskText(n(incomingFFA, 2), n(target, 2)),
+    });
+  }
+  if (breaching.length > 0) {
+    const details = breaching
+      .map((p) => `${p.name} (${p.daysToLimit} day${p.daysToLimit === 1 ? "" : "s"})`)
+      .join(", ");
+    items.push({ title: copy.warnings.breachTitle, text: copy.warnings.breachText(details) });
+  }
 
   if (items.length === 0) {
     return (
