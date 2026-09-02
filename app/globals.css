@@ -185,22 +185,119 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .tank-unit__delete {
-  display: none;
+  display: grid;
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
   z-index: 2;
 }
 
+/* Collapse/expand applies at every width so mills with several tanks don't
+   have to scroll past fully-expanded cards for tanks they aren't editing. */
 .tank-unit__summary {
-  display: none;
+  display: block;
+}
+
+.tank-unit__summary-btn {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: none;
+  background: transparent;
+  padding: 1rem;
+  padding-right: 3rem;
+  text-align: left;
+  color: inherit;
+}
+
+.tank-unit__summary-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.tank-unit__summary-name {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tank-unit__summary-stats {
+  margin: 0.375rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #58665e;
+  overflow-wrap: anywhere;
 }
 
 .tank-unit__body {
-  display: grid;
+  display: none;
   min-width: 0;
   gap: 1rem;
   padding: 1rem;
+}
+
+.tank-unit.is-expanded .tank-unit__body {
+  display: grid;
+}
+
+.tank-unit.is-expanded .tank-unit__summary {
+  border-bottom: 1px solid #e8ede8;
+}
+
+/* One cylinder per tank: compact in collapsed summary, full in expanded body */
+.tank-unit.is-expanded .tank-unit__summary .tank-cylinder {
+  display: none;
+}
+
+.tank-unit:not(.is-expanded) .tank-unit__identity-head > .tank-cylinder {
+  display: none;
+}
+
+.tank-unit__number {
+  display: inline-flex;
+  height: 22px;
+  width: 22px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #123c2c;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.tank-unit__edit-icon {
+  display: inline-flex;
+  color: #708078;
+}
+
+.tank-unit__scale {
+  display: none;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 100%;
+  padding: 2px 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #9aa59f;
+}
+
+/* Only show the 0/50/100% scale once there's enough width for it not to
+   crowd the stat grid beside the cylinder. */
+@media (min-width: 420px) {
+  .tank-unit__scale {
+    display: flex;
+  }
 }
 
 .tank-unit__identity,
@@ -214,8 +311,21 @@ input[type="number"]::-webkit-outer-spin-button {
 .tank-unit__identity-head {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.tank-unit__identity-head > .tank-cylinder {
+  align-self: center;
+}
+
+@media (min-width: 420px) {
+  .tank-unit__identity-head {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 1rem;
+  }
 }
 
 .tank-unit__identity-side {
@@ -560,64 +670,8 @@ input[type="number"]::-webkit-outer-spin-button {
     width: 100%;
   }
 
-  .tank-unit__summary {
-    display: block;
-  }
-
-  .tank-unit__summary-btn {
-    display: flex;
-    width: 100%;
-    min-height: 44px;
-    align-items: flex-start;
-    gap: 0.75rem;
-    border: none;
-    background: transparent;
-    padding: 1rem;
-    text-align: left;
-    color: inherit;
-  }
-
-  .tank-unit__summary-main {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .tank-unit__summary-name {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 700;
-    line-height: 1.3;
-    overflow-wrap: anywhere;
-  }
-
-  .tank-unit__summary-stats {
-    margin: 0.375rem 0 0;
-    font-size: 0.875rem;
-    line-height: 1.45;
-    color: #58665e;
-    overflow-wrap: anywhere;
-  }
-
   .tank-unit__body {
-    display: none;
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .tank-unit.is-expanded .tank-unit__body {
-    display: grid;
-  }
-
-  .tank-unit.is-expanded .tank-unit__summary {
-    border-bottom: 1px solid #e8ede8;
-  }
-
-  /* One cylinder per tank: compact in collapsed summary, full in expanded body */
-  .tank-unit.is-expanded .tank-unit__summary .tank-cylinder {
-    display: none;
-  }
-
-  .tank-unit:not(.is-expanded) .tank-unit__identity-head > .tank-cylinder {
-    display: none;
   }
 
   .tank-unit__remove-mobile {
@@ -676,15 +730,21 @@ input[type="number"]::-webkit-outer-spin-button {
   .tank-unit__quickstats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .tank-unit__delete {
-    display: grid;
-  }
 }
 
 @media (min-width: 1024px) {
   .tank-unit__quickstats {
     max-width: 30rem;
+  }
+}
+
+/* Desktop: two tank cards per row when there's room, matching the rest of
+   the dashboard's 2-column layout. */
+@media (min-width: 1280px) {
+  .tank-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.875rem;
   }
 }
 

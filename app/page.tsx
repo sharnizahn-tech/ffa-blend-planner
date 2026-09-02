@@ -16,6 +16,7 @@ import {
   Info,
   LayoutDashboard,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   Scale,
@@ -260,6 +261,22 @@ function statusLabel(
   return copy.tanks.goodFfa;
 }
 
+/** Current-reading FFA badge (good / monitor / high), independent from the
+ *  final-blend state used for the card accent. Monitor is a half-percentage-
+ *  point buffer above the configured good FFA limit, giving a heads-up
+ *  before a tank is officially over limit. */
+function currentFfaTier(ffa: number, target: number): TankState {
+  if (ffa > target + 0.5) return "critical";
+  if (ffa > target) return "warning";
+  return "safe";
+}
+
+function currentFfaLabel(tier: TankState, copy: Copy) {
+  if (tier === "critical") return copy.tanks.highFfa;
+  if (tier === "warning") return copy.tanks.monitorFfa;
+  return copy.tanks.goodFfa;
+}
+
 function TankCylinder({
   fillPct,
   state,
@@ -313,9 +330,7 @@ export default function Home() {
   const [target, setTarget] = useState(4.8);
   const [allocation, setAllocation] = useState([0, 100]);
   const [mobileTab, setMobileTab] = useState<MobileTab>("overview");
-  const [expandedTanks, setExpandedTanks] = useState<Set<number>>(
-    () => new Set(initialTanks.map((_, i) => i)),
-  );
+  const [expandedTanks, setExpandedTanks] = useState<Set<number>>(() => new Set([0]));
   const [aiMessages, setAiMessages] = useState<
     { role: "user" | "assistant"; content: string; source?: "openai" | "offline"; kind?: "deep" }[]
   >([]);
@@ -1726,6 +1741,9 @@ function TankUnitCard({
 }) {
   const state = tankState(result, target);
   const status = statusLabel(state, result.overflow, result.finalFFA, target, copy);
+  const currentTier = currentFfaTier(tank.ffa, target);
+  const currentLabel = currentFfaLabel(currentTier, copy);
+  const availableSpace = Math.max(0, tank.capacity - tank.stock);
 
   return (
     <article
@@ -1752,17 +1770,20 @@ function TankUnitCard({
           aria-expanded={expanded}
           aria-controls={`tank-body-${index}`}
         >
-          <TankCylinder fillPct={result.utilisation} state={state} compact />
           <div className="tank-unit__summary-main">
-            <p className="tank-unit__summary-name">{tank.name}</p>
+            <p className="tank-unit__summary-name">
+              <span className="tank-unit__number">{index + 1}</span>
+              <span className="min-w-0 flex-1 truncate">{tank.name}</span>
+              <Pencil size={12} className="tank-unit__edit-icon shrink-0" aria-hidden />
+            </p>
             <p className="tank-unit__summary-stats">
               {copy.tanks.stock}: {n(tank.stock, 0)} MT · {copy.tanks.ffa}: {n(tank.ffa, 2)}% ·{" "}
               {copy.tanks.filledAfter(result.utilisation)}
             </p>
           </div>
-          <span className={`status-pill shrink-0 ${state}`}>
-            {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-            {status}
+          <span className={`status-pill shrink-0 ${currentTier}`}>
+            {currentTier === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+            {currentLabel}
           </span>
           <ChevronDown
             size={18}
@@ -1774,8 +1795,17 @@ function TankUnitCard({
       <div id={`tank-body-${index}`} className="tank-unit__body">
         <section className="tank-unit__identity">
           <div className="tank-unit__identity-head">
+            <span className="tank-unit__scale" aria-hidden>
+              <span>100%</span>
+              <span>50%</span>
+              <span>0%</span>
+            </span>
             <TankCylinder fillPct={result.utilisation} state={state} />
             <div className="tank-unit__identity-side">
+              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[#7a867f]">
+                <span className="tank-unit__number">{index + 1}</span>
+                {copy.tanks.name}
+              </p>
               <TankNameInput
                 value={tank.name}
                 onChange={(v) => onUpdate("name", v)}
@@ -1783,9 +1813,9 @@ function TankUnitCard({
                 ariaLabel={copy.tanks.name}
               />
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className={`status-pill ${state}`}>
-                  {state === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-                  {status}
+                <span className={`status-pill ${currentTier}`}>
+                  {currentTier === "safe" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                  {currentLabel}
                 </span>
                 <span className="text-xs font-semibold text-[#708078]">
                   {copy.tanks.filledAfter(result.utilisation)}
@@ -1810,6 +1840,7 @@ function TankUnitCard({
                   onChange={(v) => onUpdate("ffa", v)}
                   unit="%"
                 />
+                <QuickStat label={copy.tanks.availableSpace} value={`${n(availableSpace, 0)} MT`} />
                 <QuickStat label={copy.tanks.allocation} value={`${n(allocationPct, 0)}%`} />
                 <QuickStat
                   label={copy.tanks.finalStock}
