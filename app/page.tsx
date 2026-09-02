@@ -73,7 +73,9 @@ import {
   DEFAULT_MAX_TRANSFER_PER_DAY_MT,
   loadMaxTransferPerDay,
   saveMaxTransferPerDay,
+  simulateHoldToTarget,
   type HoldVsDespatch,
+  type HoldSimulation,
 } from "@/lib/lossOptimizer";
 import { planBatchBlend, type BatchBlendResult } from "@/lib/batchBlend";
 
@@ -232,6 +234,42 @@ function findBestSingleTankOption(
   }
   options.sort((a, b) => a.score - b.score);
   return options[0] ?? null;
+}
+
+/** Above this incoming FFA, don't spread the batch thin across tanks — send
+ *  it straight into whichever tank is already the highest FFA, then plan a
+ *  separate blend-down using a good-FFA tank as the diluter. Consolidating
+ *  keeps the damage in one place (and easy to record) instead of nudging
+ *  every tank's FFA up a little. */
+const HIGH_INCOMING_FFA_THRESHOLD = 5;
+
+/** Index of the tank with the highest CURRENT FFA reading (before today's
+ *  incoming CPO is added), or -1 if there are no tanks. */
+function findHighestFfaTankIndex(tanks: Tank[]): number {
+  let best = -1;
+  tanks.forEach((t, i) => {
+    if (best === -1 || t.ffa > tanks[best].ffa) best = i;
+  });
+  return best;
+}
+
+/** Route the whole incoming batch into one specific tank, no matter how it
+ *  scores against the alternatives — used for the "consolidate into the
+ *  already-high tank" rule, where the target tank is fixed by the rule
+ *  rather than chosen by the generic scorer. Returned even if it overflows,
+ *  so the UI can show exactly why the tank has no room for this batch. */
+function buildSingleTankPlan(
+  tanks: Tank[],
+  incomingCPO: number,
+  incomingFFA: number,
+  target: number,
+  tankIndex: number,
+): BlendPlan | null {
+  if (tankIndex < 0 || tankIndex >= tanks.length) return null;
+  const allocation = tanks.map((_, j) => (j === tankIndex ? 100 : 0));
+  const results = calculate(tanks, allocation, incomingCPO, incomingFFA);
+  const excess = results.reduce((s, r) => s + Math.max(0, r.finalFFA - target) * r.finalStock, 0);
+  return { allocation, results, score: excess };
 }
 
 function planToAdvisePayload(
@@ -494,10 +532,31 @@ export default function Home() {
     [tanks, incomingCPO, incomingFFA, target],
   );
   const best = topPlans[0] ?? null;
-  const bestSingleTank = useMemo(
+  // Consolidation rule: once incoming FFA is above the threshold, the plan is
+  // to send the whole batch into the tank that is ALREADY the highest FFA
+  // (deliberately, not by accident) and blend it down separately afterwards —
+  // rather than let the generic scorer nudge every tank's FFA up a little.
+  const highFfaTankIndex = useMemo(() => findHighestFfaTankIndex(tanks), [tanks]);
+  const consolidateRuleApplies =
+    incomingFFA > HIGH_INCOMING_FFA_THRESHOLD &&
+    highFfaTankIndex >= 0 &&
+    tanks[highFfaTankIndex].ffa > target;
+  const consolidatePlan = useMemo(
+    () =>
+      consolidateRuleApplies
+        ? buildSingleTankPlan(tanks, incomingCPO, incomingFFA, target, highFfaTankIndex)
+        : null,
+    [consolidateRuleApplies, tanks, incomingCPO, incomingFFA, target, highFfaTankIndex],
+  );
+  // If the high-FFA tank has no room left for today's batch, consolidating
+  // isn't an option at all — that's the "no option, split across tanks" case.
+  const consolidateOverflow = !!consolidatePlan?.results[highFfaTankIndex]?.overflow;
+  const genericSingleTank = useMemo(
     () => findBestSingleTankOption(tanks, incomingCPO, incomingFFA, target),
     [tanks, incomingCPO, incomingFFA, target],
   );
+  const bestSingleTank = consolidateRuleApplies ? consolidatePlan : genericSingleTank;
+  const forceSplitFallback = consolidateRuleApplies && consolidateOverflow;
   const allocationTotal = allocation.reduce((a, b) => a + b, 0);
   const currentStock = tanks.reduce((s, t) => s + t.stock, 0);
   const highFFAStock = tanks.filter((t) => t.ffa > target).reduce((s, t) => s + t.stock, 0);
@@ -580,7 +639,6 @@ export default function Home() {
       })),
     [results, incomingFFA, riseFactorPerDay, horizonDays, target],
   );
-  const anyProjectedBreach = ffaProjections.some((p) => p.daysToLimit !== null);
 
   const safeProduction = useMemo<SafeProductionSuggestion>(
     () => suggestSafeProduction(tanks, target, incomingFFA, millCapacity, hours, utilisation, oer),
@@ -632,6 +690,34 @@ export default function Home() {
       deadStockMt,
     );
   }, [bestSingleTank, tanks, target, incomingCPO, incomingFFA, riseFactorPerDay, maxTransferPerDayMt, activeProfile, deadStockMt]);
+
+  // The concrete "how much to blend and what FFA it lands on" plan for the
+  // single-tank route — available with or without a buyer profile, since it
+  // doesn't need pricing. Considers all three FFA readings the blend-later
+  // decision actually turns on: today's incoming FFA, the high-FFA tank being
+  // filled, and the good-FFA tank used to dilute it back down.
+  const singleTankBlendPlan = useMemo<{ hold: HoldSimulation; dilutionTankName: string | null } | null>(() => {
+    if (!bestSingleTank) return null;
+    const singleIndex = bestSingleTank.allocation.findIndex((v) => v === 100);
+    if (singleIndex < 0) return null;
+    const result = bestSingleTank.results[singleIndex];
+    if (result.finalFFA <= target) return null;
+    const resultingTank = { name: result.name, capacity: result.capacity, stock: result.finalStock, ffa: result.finalFFA };
+    const others = tanks.filter((_, j) => j !== singleIndex);
+    const dilutionTank = others.filter((t) => t.ffa < target).sort((a, b) => a.ffa - b.ffa)[0] ?? null;
+    const hold = simulateHoldToTarget(
+      resultingTank,
+      others,
+      target,
+      incomingCPO,
+      incomingFFA,
+      riseFactorPerDay,
+      maxTransferPerDayMt,
+      30,
+      deadStockMt,
+    );
+    return { hold, dilutionTankName: dilutionTank?.name ?? null };
+  }, [bestSingleTank, tanks, target, incomingCPO, incomingFFA, riseFactorPerDay, maxTransferPerDayMt, deadStockMt]);
 
   const batchBlendTanks = useMemo(
     () => tanks.filter((_, i) => batchSelected.has(i)),
@@ -1073,6 +1159,9 @@ export default function Home() {
         best={best}
         bestSingleTank={bestSingleTank}
         singleTankFollowUp={singleTankFollowUp}
+        singleTankBlendPlan={singleTankBlendPlan}
+        consolidateRuleApplies={consolidateRuleApplies}
+        forceSplitFallback={forceSplitFallback}
         hasProfile={!!activeProfile}
         onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
         onApplySplit={() => best && applyPlan(best)}
@@ -1235,7 +1324,6 @@ export default function Home() {
                 results={results}
                 incomingFFA={incomingFFA}
                 target={target}
-                ffaProjections={ffaProjections}
               />
             </>
           )}
@@ -2134,17 +2222,14 @@ function WarningsPanel({
   results,
   incomingFFA,
   target,
-  ffaProjections,
 }: {
   copy: Copy;
   results: Result[];
   incomingFFA: number;
   target: number;
-  ffaProjections: { name: string; daysToLimit: number | null }[];
 }) {
   const overflowTanks = results.filter((r) => r.overflow).map((r) => r.name);
   const atRisk = incomingFFA > target;
-  const breaching = ffaProjections.filter((p) => p.daysToLimit !== null);
 
   const items: { title: string; text: string }[] = [];
   if (overflowTanks.length > 0) {
@@ -2155,12 +2240,6 @@ function WarningsPanel({
       title: copy.warnings.highRiskTitle,
       text: copy.warnings.highRiskText(n(incomingFFA, 2), n(target, 2)),
     });
-  }
-  if (breaching.length > 0) {
-    const details = breaching
-      .map((p) => `${p.name} (${p.daysToLimit} day${p.daysToLimit === 1 ? "" : "s"})`)
-      .join(", ");
-    items.push({ title: copy.warnings.breachTitle, text: copy.warnings.breachText(details) });
   }
 
   if (items.length === 0) {
@@ -2537,6 +2616,9 @@ function RoutingStrategyCard({
   best,
   bestSingleTank,
   singleTankFollowUp,
+  singleTankBlendPlan,
+  consolidateRuleApplies,
+  forceSplitFallback,
   hasProfile,
   onApplySingle,
   onApplySplit,
@@ -2548,6 +2630,9 @@ function RoutingStrategyCard({
   best: BlendPlan | null;
   bestSingleTank: BlendPlan | null;
   singleTankFollowUp: HoldVsDespatch | null;
+  singleTankBlendPlan: { hold: HoldSimulation; dilutionTankName: string | null } | null;
+  consolidateRuleApplies: boolean;
+  forceSplitFallback: boolean;
   hasProfile: boolean;
   onApplySingle: () => void;
   onApplySplit: () => void;
@@ -2559,23 +2644,61 @@ function RoutingStrategyCard({
   const singleResult = bestSingleTank.results[singleIndex];
   const singleMeets = bestSingleTank.results.every((r) => r.finalFFA <= target);
   const splitMeets = best.results.every((r) => r.finalFFA <= target);
-  const recommendSingle = singleMeets || (!splitMeets && bestSingleTank.score <= best.score);
 
-  const recommendationText = singleMeets
-    ? copy.routingStrategy.recommendSingle(singleTank.name)
-    : splitMeets
-      ? copy.routingStrategy.recommendSplitOverSingle(singleTank.name, n(singleResult.finalFFA, 2))
-      : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
+  // The "incoming FFA above 5% → consolidate into the already-high tank"
+  // rule is a forced choice, not a score comparison — it only backs off to
+  // the generic scored comparison when that rule doesn't apply at all. If
+  // the high tank has no room for today's batch, split is the only option.
+  const recommendSingle = forceSplitFallback
+    ? false
+    : consolidateRuleApplies
+      ? true
+      : singleMeets || (!splitMeets && bestSingleTank.score <= best.score);
 
-  const followUpText = singleMeets
-    ? null
-    : !hasProfile
+  const recommendationText = forceSplitFallback
+    ? copy.routingStrategy.forceSplitText(singleTank.name)
+    : consolidateRuleApplies
+      ? copy.routingStrategy.consolidateRule(singleTank.name)
+      : singleMeets
+        ? copy.routingStrategy.recommendSingle(singleTank.name)
+        : splitMeets
+          ? copy.routingStrategy.recommendSplitOverSingle(singleTank.name, n(singleResult.finalFFA, 2))
+          : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
+
+  let followUpText: string | null = null;
+  if (forceSplitFallback) {
+    followUpText = null;
+  } else if (consolidateRuleApplies) {
+    if (singleResult.finalFFA > target && singleTankBlendPlan) {
+      if (!singleTankBlendPlan.dilutionTankName) {
+        followUpText = copy.routingStrategy.consolidateNoDilutionTank;
+      } else if (singleTankBlendPlan.hold.feasible && singleTankBlendPlan.hold.days !== null) {
+        followUpText = copy.routingStrategy.consolidateBlendPlan(
+          n(singleTankBlendPlan.hold.transferUsedMt, 0),
+          singleTankBlendPlan.dilutionTankName,
+          singleTankBlendPlan.hold.days,
+          n(singleTankBlendPlan.hold.finalFfaPct, 2),
+        );
+      } else {
+        followUpText = copy.routingStrategy.consolidateBlendInfeasible;
+      }
+    }
+  } else if (!singleMeets) {
+    followUpText = !hasProfile
       ? copy.routingStrategy.followUpNoProfile
       : singleTankFollowUp?.recommendation === "hold" && singleTankFollowUp.hold.days !== null
         ? copy.routingStrategy.followUpHold(singleTankFollowUp.hold.days, n(singleTankFollowUp.savingsRm, 0))
         : singleTankFollowUp
           ? copy.routingStrategy.followUpDespatchNow(n(singleTankFollowUp.despatchNowPenaltyRm, 0))
           : null;
+  }
+
+  const singleBadge = singleResult.overflow
+    ? copy.routingStrategy.noRoom
+    : singleMeets
+      ? copy.routingStrategy.meetsLimit
+      : copy.routingStrategy.overLimit;
+  const singleBadgeOk = !singleResult.overflow && singleMeets;
 
   return (
     <Panel
@@ -2592,9 +2715,9 @@ function RoutingStrategyCard({
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-bold text-[#173f30]">{copy.routingStrategy.singleLabel}</p>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              singleMeets ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
+              singleBadgeOk ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
             }`}>
-              {singleMeets ? copy.routingStrategy.meetsLimit : copy.routingStrategy.overLimit}
+              {singleBadge}
             </span>
           </div>
           <p className="mt-1 text-xs text-[#708078]">{copy.routingStrategy.singleHint}</p>
@@ -2604,7 +2727,8 @@ function RoutingStrategyCard({
           <button
             type="button"
             onClick={onApplySingle}
-            className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30]"
+            disabled={singleResult.overflow}
+            className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copy.routingStrategy.applySingle}
           </button>

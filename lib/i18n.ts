@@ -354,6 +354,17 @@ export const translations = {
       applySplit: "Use the split plan",
       meetsLimit: "Stays within limit",
       overLimit: "Over limit",
+      noRoom: "No room left",
+      consolidateRule: (tank: string) =>
+        `Incoming FFA is above 5% — send the whole batch straight into ${tank}, which is already the highest-FFA tank. Keeping the bad CPO in one place is easier to record and fix than nudging every tank's FFA up a little.`,
+      consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
+        `Blend-down plan: move about ${moveMt} MT from ${dilutionTank} (plus ongoing incoming CPO) over ${days} day${days === 1 ? "" : "s"} to bring it down to ${finalFfa}% FFA.`,
+      consolidateBlendInfeasible:
+        "There isn't enough good-FFA stock or transfer capacity to dilute it back down within 30 days. Despatch it instead (see Loss Optimizer) or free up a good-FFA tank first.",
+      consolidateNoDilutionTank:
+        "No good-FFA tank is available to dilute with right now — despatch this stock instead (see Loss Optimizer).",
+      forceSplitText: (tank: string) =>
+        `${tank} has no spare room for today's batch, so there's no single tank to consolidate into — splitting across tanks is the only way to take in this CPO without an overflow.`,
     },
     transferCalc: {
       title: "Transfer calculator",
@@ -720,6 +731,17 @@ export const translations = {
       applySplit: "Guna pelan pisahan",
       meetsLimit: "Kekal dalam had",
       overLimit: "Melebihi had",
+      noRoom: "Tiada ruang lagi",
+      consolidateRule: (tank: string) =>
+        `FFA masuk melebihi 5% — alirkan semua terus ke ${tank}, yang sudah pun tangki FFA tertinggi. Mengekalkan CPO buruk di satu tempat lebih mudah direkod dan dibaiki berbanding menaikkan sedikit FFA setiap tangki.`,
+      consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
+        `Pelan pencairan: pindah lebih kurang ${moveMt} MT dari ${dilutionTank} (bersama CPO masuk berterusan) selama ${days} hari untuk turunkannya ke ${finalFfa}% FFA.`,
+      consolidateBlendInfeasible:
+        "Tidak cukup stok FFA baik atau kapasiti pemindahan untuk mencairkannya dalam 30 hari. Despatch sahaja (lihat Loss Optimizer) atau kosongkan tangki FFA baik dahulu.",
+      consolidateNoDilutionTank:
+        "Tiada tangki FFA baik tersedia untuk mencairkan sekarang — despatch stok ini sahaja (lihat Loss Optimizer).",
+      forceSplitText: (tank: string) =>
+        `${tank} tiada ruang lagi untuk kelompok hari ini, jadi tiada satu tangki untuk digabungkan — pisahan merentasi tangki satu-satunya cara untuk terima CPO ini tanpa limpah.`,
     },
     transferCalc: {
       title: "Kalkulator pemindahan",
