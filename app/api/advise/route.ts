@@ -179,7 +179,6 @@ export async function POST(request: Request) {
           despatch: payload.despatch ?? null,
           flags: payload.flags,
           penalty: payload.penalty ?? null,
-          prediction: payload.prediction ?? null,
           productionSuggestion: payload.productionSuggestion ?? null,
           lossOptimizer: payload.lossOptimizer ?? [],
           batchBlend: payload.batchBlend ?? null,

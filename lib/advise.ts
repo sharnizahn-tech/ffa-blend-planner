@@ -93,16 +93,6 @@ export const adviseRequestSchema = z.object({
     })
     .nullable()
     .optional(),
-  prediction: z
-    .object({
-      riseFactorPerDay: z.number(),
-      horizonDays: z.number(),
-      tanks: z.array(
-        z.object({ name: z.string(), daysUntilLimit: z.number().nullable() }),
-      ),
-    })
-    .nullable()
-    .optional(),
   productionSuggestion: z
     .object({
       maxSafeIncomingCpoMt: z.number(),
@@ -172,7 +162,6 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
     currentPlan,
     tanks,
     penalty,
-    prediction,
     productionSuggestion,
     lossOptimizer,
     batchBlend,
@@ -313,27 +302,6 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
         `Anggaran potongan daripada ${penalty.buyerName ?? "pembeli dikonfigurasi"}: RM ${n(penalty.totalExposureRm, 0)} pada pelan semasa. ${parts}.`,
       ),
     );
-  }
-
-  if (prediction) {
-    const atRisk = prediction.tanks.filter((t) => t.daysUntilLimit !== null);
-    if (atRisk.length) {
-      const parts = atRisk
-        .map((t) => `${t.name}: ${t.daysUntilLimit} day(s)`)
-        .join("; ");
-      const partsBm = atRisk
-        .map((t) => `${t.name}: ${t.daysUntilLimit} hari`)
-        .join("; ");
-      sections.push(
-        section(
-          lang,
-          "FFA forecast",
-          "Ramalan FFA",
-          `At the configured rise rate, projected days until crossing the good FFA limit: ${parts}.`,
-          `Pada kadar kenaikan dikonfigurasi, hari dijangka sehingga melebihi had FFA baik: ${partsBm}.`,
-        ),
-      );
-    }
   }
 
   if (productionSuggestion && productionSuggestion.binding !== "none") {
@@ -529,7 +497,6 @@ Rules:
   - "recommendedPlan" (rank 1) is the mathematically best allocation the engine found; "alternativePlans" are ranks 2-3. Call this simply "the recommended plan" / "the best option" — treat it as correct unless the flags show it's infeasible. When alternatives are given, briefly say how they differ and when an engineer might pick one instead.
   - "despatch" covers which tanks to load onto a tanker after today's allocation — call it "the despatch plan". Name the tanks, the combined load's FFA, and any shortfall if the tanker can't be filled.
   - "penalty" is the RM deduction under the engineer's own configured buyer bands — call it "the penalty exposure" or "the estimated deduction". State the total and the worst tanks exactly as given; never estimate your own figure.
-  - "prediction" is a forward FFA projection using the engineer's own rise-rate assumption — call it "the forecast". State the number of days until a tank crosses the limit exactly as given.
   - "productionSuggestion" is the engine's calculated safe incoming CPO ceiling for today — call it "the safe production limit", and name whether tank capacity or the good FFA limit is the constraint holding it there.
   - "lossOptimizer" is a per-tank comparison of despatching a high-FFA tank now versus holding it to blend the FFA down first — call it "the sell-now-vs-hold comparison". Always state which one the engine recommends and the RM saved, exactly as given — this is a core decision, don't soften it into vague advice. A "hold" recommendation is not always a full fix: when the data marks it not fully compliant, the hold only moves the tank into a cheaper penalty band by the given number of days — it does NOT bring it under the good FFA limit — say that plainly (e.g. "still over the limit, but the deduction band drops"), never imply the tank becomes fully compliant when it doesn't.
   - "batchBlend" is a day-by-day tank-to-tank transfer plan to bring existing stock to good FFA with no new incoming CPO — call it "the blend-down plan". State whether it's feasible, over how many days, exactly as given.

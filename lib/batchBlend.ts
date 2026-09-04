@@ -33,6 +33,12 @@ export function planBatchBlend(
   maxTransferPerDayMt: number,
   maxDays = 30,
   deadStockMt = 0,
+  // Optional: a mill that IS processing today can also blend fresh incoming
+  // CPO into the high-FFA tank each day, not just stock already in other
+  // tanks. Left at 0 (the default) for the "not processing today" case this
+  // planner was originally built for.
+  incomingCpoPerDayMt = 0,
+  incomingFfaPct = 0,
 ): BatchBlendResult {
   const working = tanks.map((t) => ({ ...t }));
 
@@ -46,6 +52,22 @@ export function planBatchBlend(
     const high = working.filter((t) => t.ffa > target).sort((a, b) => b.ffa - a.ffa)[0];
     if (!high) {
       return { feasible: true, days: day - 1, steps, finalTanks: working, reason: null };
+    }
+
+    if (incomingCpoPerDayMt > 0 && incomingFfaPct < high.ffa) {
+      const spareForIncoming = high.capacity - high.stock;
+      const moveMt = Math.min(incomingCpoPerDayMt, spareForIncoming);
+      if (moveMt > 0.01) {
+        const newStock = high.stock + moveMt;
+        const newFfa = (high.stock * high.ffa + moveMt * incomingFfaPct) / newStock;
+        steps.push({ day, fromTank: "incoming", toTank: high.name, mt: moveMt, toTankFfaAfter: newFfa });
+        high.stock = newStock;
+        high.ffa = newFfa;
+      }
+    }
+
+    if (working.every((t) => t.ffa <= target)) {
+      return { feasible: true, days: day, steps, finalTanks: working, reason: null };
     }
 
     const spareNow = high.capacity - high.stock;

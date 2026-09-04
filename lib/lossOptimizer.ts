@@ -5,15 +5,15 @@
 // penalty.
 //
 // This exists because cherry-picking only the good-FFA tanks for despatch (and
-// leaving high-FFA stock sitting) both grows the FFA-penalty exposure over time
-// (the tank keeps ageing — see lib/prediction.ts) and never actually resolves the
-// high-FFA stock. The engine below simulates day-by-day blending so the engineer
-// gets a concrete number instead of a manual guess — including credit for a
-// PARTIAL blend that only moves the tank into a cheaper penalty band, not just a
-// full cure down to the limit.
+// leaving high-FFA stock sitting) never actually resolves the high-FFA stock. The
+// engine below simulates day-by-day blending, limited only by the real pump/valve
+// transfer rate (maxTransferPerDayMt), so the engineer gets a concrete number
+// instead of a manual guess — including credit for a PARTIAL blend that only moves
+// the tank into a cheaper penalty band, not just a full cure down to the limit.
+// Stock that is never touched stays at its last-known FFA — this does not assume
+// FFA keeps rising while a tank sits untouched.
 
 import { calcPenaltyExposure, type PenaltyBand } from "./penalty";
-import { estimateRisePerDay } from "./prediction";
 
 export type LossTank = { name: string; capacity: number; stock: number; ffa: number };
 
@@ -43,7 +43,6 @@ export function simulateHoldToTarget(
   target: number,
   incomingCpoPerDayMt: number,
   incomingFfaPct: number,
-  riseFactorPerDay: number,
   maxTransferPerDayMt: number,
   maxDays = 30,
   deadStockMt = 0,
@@ -64,11 +63,8 @@ export function simulateHoldToTarget(
 
   let incomingUsed = 0;
   let transferUsed = 0;
-  const ratePerDay = estimateRisePerDay(incomingFfaPct, riseFactorPerDay);
 
   for (let day = 1; day <= maxDays; day += 1) {
-    ffa += ratePerDay;
-
     let spare = tank.capacity - stock;
 
     if (spare > 0.01 && incomingCpoPerDayMt > 0 && incomingFfaPct < ffa) {
@@ -135,7 +131,6 @@ export function compareHoldVsDespatch(
   target: number,
   incomingCpoPerDayMt: number,
   incomingFfaPct: number,
-  riseFactorPerDay: number,
   maxTransferPerDayMt: number,
   bands: PenaltyBand[],
   deadStockMt = 0,
@@ -148,7 +143,6 @@ export function compareHoldVsDespatch(
     target,
     incomingCpoPerDayMt,
     incomingFfaPct,
-    riseFactorPerDay,
     maxTransferPerDayMt,
     30,
     deadStockMt,

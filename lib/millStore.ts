@@ -16,7 +16,6 @@ import {
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { createEmptyBuyerProfile, type BuyerProfile } from "./penalty";
-import { DEFAULT_RISE_FACTOR_PER_DAY, DEFAULT_HORIZON_DAYS } from "./prediction";
 import { DEFAULT_MAX_TRANSFER_PER_DAY_MT } from "./lossOptimizer";
 
 const millTankSchema = z.object({
@@ -54,8 +53,6 @@ export const millStateInputSchema = z.object({
   tankerLoadMt: z.number().finite().nonnegative(),
   buyerProfiles: z.array(buyerProfileSchema).max(20),
   activeProfileId: z.string(),
-  riseFactorPerDay: z.number().finite(),
-  horizonDays: z.number().finite().nonnegative(),
   preferFewerTanks: z.boolean(),
   scenarios: z
     .array(
@@ -106,8 +103,6 @@ export function defaultMillState(): MillState {
     tankerLoadMt: 38,
     buyerProfiles,
     activeProfileId: buyerProfiles[0].id,
-    riseFactorPerDay: DEFAULT_RISE_FACTOR_PER_DAY,
-    horizonDays: DEFAULT_HORIZON_DAYS,
     preferFewerTanks: true,
     scenarios: [
       { id: "b", millCapacity: 40, hours: 22, utilisation: 100, oer: 19, incomingFFA: 6.7 },
