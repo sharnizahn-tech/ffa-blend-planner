@@ -24,22 +24,11 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
-  TrendingUp,
   Truck,
   User,
   Wand2,
   X,
 } from "lucide-react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import type { AdviseRequest } from "@/lib/advise";
 import { findTopDespatchPlans, planToDespatchPayload, type DespatchPlan } from "@/lib/despatch";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
@@ -503,8 +492,6 @@ export default function Home() {
     setBuyerProfiles((prev) => updater(prev));
   };
   const setActiveProfile = (id: string) => setActiveProfileId(id);
-  const changeRiseFactor = (v: number) => setRiseFactorPerDay(v);
-  const changeHorizonDays = (v: number) => setHorizonDays(v);
   const changeDeadStockMt = (v: number) => setDeadStockMtState(Math.max(0, v));
   const changeMaxTransferPerDay = (v: number) => {
     setMaxTransferPerDayMtState(v);
@@ -1353,18 +1340,6 @@ export default function Home() {
     </Panel>
   );
 
-  const ffaForecastPanel = (
-    <FfaForecastPanel
-      copy={copy}
-      projections={ffaProjections}
-      target={target}
-      riseFactorPerDay={riseFactorPerDay}
-      onRiseFactorChange={changeRiseFactor}
-      horizonDays={horizonDays}
-      onHorizonChange={changeHorizonDays}
-    />
-  );
-
   const penaltyPanel = (
     <PenaltyPanel
       copy={copy}
@@ -1738,28 +1713,6 @@ function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
   );
 }
 
-/** Faint technical line-art watermark — a row of storage-tank silhouettes —
- *  used instead of a photo behind card text. Kept low-opacity and tucked into
- *  a corner so it reads as texture, never competes with the content on top. */
-function TankLineArtWatermark({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 200 120"
-      className={className}
-      style={{ stroke: "#123c2c", strokeWidth: 1.4, fill: "none", opacity: 0.05 }}
-    >
-      {[18, 62, 106, 150].map((x, i) => (
-        <g key={i}>
-          <path d={`M${x} 24 C ${x} 14, ${x + 36} 14, ${x + 36} 24`} />
-          <rect x={x} y="24" width="36" height="76" rx="7" />
-          <line x1={x + 18} y1="14" x2={x + 18} y2="6" />
-        </g>
-      ))}
-    </svg>
-  );
-}
-
 function RoutingRecommendationCard({
   copy,
   incomingCPO,
@@ -1785,31 +1738,42 @@ function RoutingRecommendationCard({
       : confidence === "medium"
         ? copy.blendSituation.confidenceMedium
         : copy.blendSituation.confidenceLow;
-  const confidenceColor =
-    confidence === "high" ? "#187449" : confidence === "medium" ? "#a64f24" : "#a4342c";
+  const confidenceColor = confidence === "high" ? "#8ff0bb" : confidence === "medium" ? "#ffd39c" : "#ffb4a8";
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-[#dde5df] bg-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
-      <TankLineArtWatermark className="pointer-events-none absolute -right-4 -top-2 h-28 w-48" />
+    <section className="relative overflow-hidden rounded-2xl border border-[#0d2e21] shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.4)]">
+      <div className="absolute inset-0">
+        <Image
+          src="/BST-Storage.png"
+          alt=""
+          fill
+          priority
+          sizes="(min-width: 1280px) 52vw, 100vw"
+          style={{ objectPosition: "68% 60%" }}
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0d2e21] via-[#0d2e21]/85 to-[#0d2e21]/35" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0d2e21]/85 via-[#0d2e21]/10 to-transparent" />
+      </div>
       <div className="relative p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e5faed] text-[#00713a]">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15 text-[#8ff0bb]">
               <Gauge size={18} />
             </span>
-            <h2 className="text-base font-extrabold tracking-tight text-[#123c2c] sm:text-lg">
+            <h2 className="text-base font-extrabold tracking-tight text-white sm:text-lg">
               {copy.blendSituation.title}
             </h2>
           </div>
           <span
             className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
-              atRisk ? "bg-[#fde8e6] text-[#a4342c]" : "bg-[#e3f3e8] text-[#187449]"
+              atRisk ? "bg-[#ffceb7] text-[#7c2d12]" : "bg-[#d4f7e2] text-[#00713a]"
             }`}
           >
             {atRisk ? copy.blendSituation.highRisk : copy.blendSituation.onTrack}
           </span>
         </div>
-        <p className="mt-3 max-w-md text-sm leading-relaxed text-[#58665e]">
+        <p className="mt-3 max-w-md text-sm leading-relaxed text-[#cfe0d5]">
           {atRisk ? copy.blendSituation.highRiskText : copy.blendSituation.onTrackText}
         </p>
 
@@ -1823,7 +1787,7 @@ function RoutingRecommendationCard({
           <RoutingStat
             label={copy.blendSituation.projectedAfterBlending}
             value={`${n(projectedFfa, 2)}%`}
-            valueStyle={{ color: projectedFfa > target ? "#a4342c" : "#187449" }}
+            valueStyle={{ color: projectedFfa > target ? "#ffb4a8" : "#8ff0bb" }}
           />
           <RoutingStat
             label={copy.blendSituation.confidence}
@@ -1832,7 +1796,7 @@ function RoutingRecommendationCard({
           />
         </div>
 
-        <p className="mt-4 flex items-start gap-1.5 text-xs leading-relaxed text-[#7a867f]">
+        <p className="mt-4 flex items-start gap-1.5 text-xs leading-relaxed text-[#b9d3c4]">
           <ShieldCheck size={14} className="mt-0.5 shrink-0" />
           {copy.blendSituation.verifyHint}
         </p>
@@ -1862,12 +1826,12 @@ function RoutingStat({
   valueStyle?: React.CSSProperties;
 }) {
   return (
-    <div className="rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7a867f]">{label}</p>
-      <p className="mt-1 text-base font-extrabold text-[#123c2c] sm:text-lg" style={valueStyle}>
+    <div className="rounded-xl bg-white/10 p-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#cfe0d5]">{label}</p>
+      <p className="mt-1 text-base font-extrabold text-white sm:text-lg" style={valueStyle}>
         {value}
       </p>
-      {sub && <p className="text-[10px] text-[#8a9690]">{sub}</p>}
+      {sub && <p className="text-[10px] text-[#a8c3b4]">{sub}</p>}
     </div>
   );
 }
@@ -4629,137 +4593,6 @@ function RefineryDespatchTable({
   );
 }
 
-const FORECAST_LINE_COLORS = ["#173f30", "#3d9b62", "#c9873f", "#b45839", "#00b14f", "#6c7971"];
-
-function FfaForecastPanel({
-  copy,
-  projections,
-  target,
-  riseFactorPerDay,
-  onRiseFactorChange,
-  horizonDays,
-  onHorizonChange,
-}: {
-  copy: Copy;
-  projections: { name: string; points: { day: number; ffaPct: number }[]; daysToLimit: number | null }[];
-  target: number;
-  riseFactorPerDay: number;
-  onRiseFactorChange: (v: number) => void;
-  horizonDays: number;
-  onHorizonChange: (v: number) => void;
-}) {
-  const chartData = useMemo(() => {
-    const rows: Record<string, number>[] = [];
-    for (let day = 0; day <= horizonDays; day += 1) {
-      const row: Record<string, number> = { day };
-      projections.forEach((p) => {
-        row[p.name] = p.points[day]?.ffaPct ?? p.points[p.points.length - 1]?.ffaPct ?? 0;
-      });
-      rows.push(row);
-    }
-    return rows;
-  }, [projections, horizonDays]);
-
-  return (
-    <Panel title={copy.prediction.title} subtitle={copy.prediction.subtitle} icon={<TrendingUp size={19} />}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <MiniField
-          label={copy.prediction.riseFactorLabel}
-          value={riseFactorPerDay * 100}
-          onChange={(v) => onRiseFactorChange(v / 100)}
-          unit="%"
-        />
-        <MiniField
-          label={copy.prediction.horizonLabel}
-          value={horizonDays}
-          onChange={(v) => onHorizonChange(Math.max(1, Math.round(v)))}
-          unit="days"
-        />
-      </div>
-
-      {chartData.length > 0 && (
-        <div className="mt-4 h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 12, left: 4, bottom: 22 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8ede8" />
-              <XAxis
-                dataKey="day"
-                tick={{ fontSize: 11, fill: "#4b5750" }}
-                tickMargin={8}
-                label={{
-                  value: copy.prediction.daysAxis,
-                  position: "bottom",
-                  offset: 0,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  fill: "#3f4c46",
-                }}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "#4b5750" }}
-                width={52}
-                tickMargin={6}
-                label={{
-                  value: copy.prediction.ffaAxis,
-                  angle: -90,
-                  position: "insideLeft",
-                  offset: 12,
-                  style: { textAnchor: "middle" },
-                  fontSize: 12,
-                  fontWeight: 700,
-                  fill: "#3f4c46",
-                }}
-              />
-              <Tooltip
-                formatter={(value) => `${n(Number(value), 2)}%`}
-                labelFormatter={(label) => `${copy.prediction.daysAxis} ${label}`}
-                contentStyle={{ borderRadius: 10, border: "1px solid #dfe5df", fontSize: 12 }}
-              />
-              <ReferenceLine
-                y={target}
-                stroke="#c9483e"
-                strokeDasharray="4 4"
-                label={{ value: `${n(target, 2)}%`, position: "right", fontSize: 10, fill: "#c9483e" }}
-              />
-              {projections.map((p, i) => (
-                <Line
-                  key={p.name}
-                  type="monotone"
-                  dataKey={p.name}
-                  stroke={FORECAST_LINE_COLORS[i % FORECAST_LINE_COLORS.length]}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      <div className="mt-4 space-y-2">
-        {projections.map((p) => (
-          <div
-            key={p.name}
-            className={`flex items-start gap-2 rounded-lg p-2.5 text-sm ${
-              p.daysToLimit !== null ? "bg-[#fff8f3] text-[#92441f]" : "bg-[#f8faf7] text-[#58665e]"
-            }`}
-          >
-            {p.daysToLimit !== null ? (
-              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-            ) : (
-              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#00b14f]" />
-            )}
-            <span>
-              {p.daysToLimit !== null
-                ? copy.prediction.willCross(p.name, p.daysToLimit)
-                : copy.prediction.staysWithin(p.name)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
 
 function ProductionOptimizer({
   copy,
