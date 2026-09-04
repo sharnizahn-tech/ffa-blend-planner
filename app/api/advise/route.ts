@@ -195,6 +195,7 @@ export async function POST(request: Request) {
       payload.userQuestion,
       payload.deepAnalysis,
       !!payload.conversationHistory?.length,
+      payload.currentTab,
     );
     const result = await requestOpenAiOpinion(apiKey, baseUrl, models, systemPrompt, userContent);
 

@@ -1004,6 +1004,7 @@ export default function Home() {
         userQuestion: question || undefined,
         language: lang,
         deepAnalysis,
+        currentTab: mobileTab,
       };
   };
 
@@ -4233,56 +4234,70 @@ function PenaltyPanel({
               <p className="text-sm text-[#58665e]">{copy.penalty.noBands}</p>
             )}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {activeProfile.bands.map((band, i) => (
-                <div key={band.id} className="rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="rounded-full bg-[#d4f7e2] px-2.5 py-1 text-[11px] font-bold text-[#00713a]">
-                      {copy.penalty.bandLevelLabel(i + 1)} ({n(band.minFfaPct, 1)}%
-                      {band.maxFfaPct === null ? "+" : ` - ${n(band.maxFfaPct, 1)}%`})
-                    </span>
-                    <span className="text-sm font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
-                      RM {n(band.deductionRmPerMt, 2)}/MT
-                    </span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <MiniField
-                      label={copy.penalty.minFfa}
-                      value={band.minFfaPct}
-                      onChange={(v) => updateBand(band.id, { minFfaPct: v })}
-                      unit="%"
-                    />
-                    <label className="block min-w-0 max-w-full">
-                      <span className="field-label">{copy.penalty.maxFfa}</span>
-                      <div className="field-shell">
-                        <NullableNumericInput
-                          label={copy.penalty.maxFfa}
-                          value={band.maxFfaPct}
-                          onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
-                          className="numeric-input"
-                        />
-                        <span className="shrink-0 text-sm text-[#7a867f]">%</span>
-                      </div>
-                    </label>
-                    <MiniField
-                      label={copy.penalty.deduction}
-                      value={band.deductionRmPerMt}
-                      onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
-                      unit="RM/MT"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeBand(band.id)}
-                      aria-label={copy.penalty.removeBand}
-                      title={copy.penalty.removeBand}
-                      className="remove-tank remove-tank--compact self-end justify-self-start"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {activeProfile.bands.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#6c7971]">
+                      <th className="py-2 pr-2">{copy.penalty.bandColumn}</th>
+                      <th className="py-2 pr-2">{copy.penalty.fromFfaColumn}</th>
+                      <th className="py-2 pr-2">{copy.penalty.toFfaColumn}</th>
+                      <th className="py-2 pr-2">{copy.penalty.deductionColumn}</th>
+                      <th className="py-2 pr-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeProfile.bands.map((band, i) => (
+                      <tr key={band.id} className="border-b border-[#f0f2ef] align-middle">
+                        <td className="whitespace-nowrap py-2 pr-2 font-bold text-[#173f30]">
+                          {copy.penalty.bandLevelLabel(i + 1)}
+                        </td>
+                        <td className="py-2 pr-2">
+                          <NumericInput
+                            label={copy.penalty.minFfa}
+                            value={band.minFfaPct}
+                            onChange={(v) => updateBand(band.id, { minFfaPct: v })}
+                            className="numeric-input w-16"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <NullableNumericInput
+                            label={copy.penalty.maxFfa}
+                            value={band.maxFfaPct}
+                            onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
+                            className="numeric-input w-16"
+                          />
+                        </td>
+                        <td className="py-2 pr-2 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
+                          <div className="flex items-center gap-1">
+                            RM
+                            <NumericInput
+                              label={copy.penalty.deduction}
+                              value={band.deductionRmPerMt}
+                              onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
+                              className="numeric-input w-16"
+                            />
+                            /MT
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removeBand(band.id)}
+                            aria-label={copy.penalty.removeBand}
+                            title={copy.penalty.removeBand}
+                            className="remove-tank remove-tank--compact"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-1.5 text-xs text-[#8a9690]">{copy.penalty.noCeilingHint}</p>
+              </div>
+            )}
 
             <button
               type="button"
