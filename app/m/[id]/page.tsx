@@ -645,26 +645,34 @@ export default function Home() {
   // If the high-FFA tank has no room left for today's batch, consolidating
   // isn't an option at all — that's the "no option, split across tanks" case.
   const consolidateOverflow = !!consolidatePlan?.results[highFfaTankIndex]?.overflow;
-  const genericSingleTank = useMemo(
-    () => findBestSingleTankOption(tanks, incomingCPO, incomingFFA, target),
-    [tanks, incomingCPO, incomingFFA, target],
-  );
+  // Tank with the most remaining capacity — the "best chance" single-tank
+  // target to show when NO single tank can actually fit today's batch
+  // without overflow, so there's still something concrete to point at
+  // ("this tank, and it's still X MT short") rather than an empty card.
+  const mostSpareCapacityIndex = useMemo(() => {
+    let bestIdx = -1;
+    tanks.forEach((t, i) => {
+      const spare = t.capacity - t.stock;
+      if (bestIdx === -1 || spare > tanks[bestIdx].capacity - tanks[bestIdx].stock) bestIdx = i;
+    });
+    return bestIdx;
+  }, [tanks]);
+  const genericSingleTank = useMemo(() => {
+    const scored = findBestSingleTankOption(tanks, incomingCPO, incomingFFA, target);
+    if (scored) return scored;
+    return buildSingleTankPlan(tanks, incomingCPO, incomingFFA, target, mostSpareCapacityIndex);
+  }, [tanks, incomingCPO, incomingFFA, target, mostSpareCapacityIndex]);
   const bestSingleTank = consolidateRuleApplies ? consolidatePlan : genericSingleTank;
-  const forceSplitFallback = consolidateRuleApplies && consolidateOverflow;
-  // Which ONE option Allocation strategy actually recommends — a forced
-  // choice when the consolidate rule applies (or is blocked by capacity),
-  // otherwise whichever scores better. Computed once here so the card and
-  // the auto-fired AI explanation below always agree on the same answer.
+  const genericSingleIndex = genericSingleTank?.allocation.findIndex((v) => v === 100) ?? -1;
+  const genericSingleOverflow = !!genericSingleTank?.results[genericSingleIndex]?.overflow;
+  // Mills here can't split incoming flow precisely between tanks — in
+  // practice everything goes into one tank, then gets blended down
+  // afterward. So single-tank routing is the default recommendation
+  // essentially always; splitting across tanks is only ever forced when
+  // there's genuinely no single tank with room for today's batch.
+  const forceSplitFallback = consolidateRuleApplies ? consolidateOverflow : genericSingleOverflow;
   const singleIndexForRecommendation = bestSingleTank?.allocation.findIndex((v) => v === 100) ?? -1;
-  const recommendSingle =
-    !best || !bestSingleTank
-      ? true
-      : forceSplitFallback
-        ? false
-        : consolidateRuleApplies
-          ? true
-          : bestSingleTank.results.every((r) => r.finalFFA <= target) ||
-            (!best.results.every((r) => r.finalFFA <= target) && bestSingleTank.score <= best.score);
+  const recommendSingle = !forceSplitFallback;
   const allocationTotal = allocation.reduce((a, b) => a + b, 0);
   const currentStock = tanks.reduce((s, t) => s + t.stock, 0);
   const highFFAStock = tanks.filter((t) => t.ffa > target).reduce((s, t) => s + t.stock, 0);
@@ -1199,11 +1207,12 @@ export default function Home() {
       subtitle={copy.forecast.subtitle}
       icon={<Gauge size={19} />}
     >
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
         <Field label={copy.forecast.capacity} value={millCapacity} onChange={setMillCapacity} unit="MT/hr" />
         <Field label={copy.forecast.operatingHours} value={hours} onChange={setHours} unit="hr" />
         <Field label={copy.forecast.utilisation} value={utilisation} onChange={setUtilisation} unit="%" />
         <Field label={copy.forecast.expectedOer} value={oer} onChange={setOer} unit="%" />
+        <ReadOnlyField label={copy.forecast.cpoProduced} value={n(incomingCPO, 2)} unit="MT" />
         <Field
           label={copy.forecast.incomingFfa}
           value={incomingFFA}
@@ -1384,6 +1393,9 @@ export default function Home() {
           singleTankFollowUp={singleTankFollowUp}
           hasProfile={!!activeProfile}
           onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
+          autoAiSuggestion={aiAllocationSuggestion}
+          autoAiLoading={aiAllocationLoading}
+          autoAiError={aiAllocationError}
         />
       </div>
     </>
@@ -1396,29 +1408,18 @@ export default function Home() {
         copy={copy}
         profiles={buyerProfiles}
         defaultFfaPct={topDespatchPlans[0]?.loadFfaPct ?? target}
+        tankerLoadMt={tankerLoadMt}
+        onTankerLoadChange={setTankerLoadMt}
       />
-      <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-        <TankerDespatchPlanner
-          copy={copy}
-          tankerLoadMt={tankerLoadMt}
-          onTankerLoadChange={setTankerLoadMt}
-          topPlans={topDespatchPlans}
-          preferFewerTanks={preferFewerTanks}
-          onPreferFewerTanksChange={setPreferFewerTanks}
-          penaltyRm={activeProfile ? despatchPenaltyRm : null}
-          totalDespatchableMt={despatchTanks.reduce((s, t) => s + t.stockMt, 0)}
-          penaltyBands={activeProfile?.bands}
-        />
-        <LossOptimizerPanel
-          copy={copy}
-          results={lossOptimizerResults}
-          hasProfile={!!activeProfile}
-          maxTransferPerDayMt={maxTransferPerDayMt}
-          onMaxTransferChange={changeMaxTransferPerDay}
-          autoTransfer={autoTransfer}
-          onUseAuto={useAutoTransfer}
-        />
-      </div>
+      <LossOptimizerPanel
+        copy={copy}
+        results={lossOptimizerResults}
+        hasProfile={!!activeProfile}
+        maxTransferPerDayMt={maxTransferPerDayMt}
+        onMaxTransferChange={changeMaxTransferPerDay}
+        autoTransfer={autoTransfer}
+        onUseAuto={useAutoTransfer}
+      />
     </>
   );
 
@@ -2239,10 +2240,10 @@ function Field({
   accent?: boolean;
 }) {
   return (
-    <label className="block w-full">
-      <span className="mb-1.5 block text-[11px] font-bold uppercase text-[#77837c]">{label}</span>
+    <label className="block min-w-0 w-full">
+      <span className="mb-1 block truncate text-[10px] font-bold uppercase text-[#77837c]">{label}</span>
       <div
-        className={`input-touch flex items-center gap-1.5 rounded-xl border px-3 ${
+        className={`flex min-h-[38px] items-center gap-1 rounded-lg border px-2 ${
           accent ? "border-[#e5b18f] bg-[#fff9f5]" : "border-[#dce3dd] bg-[#f9faf8]"
         }`}
       >
@@ -2250,11 +2251,25 @@ function Field({
           label={label}
           value={value}
           onChange={onChange}
-          className="numeric-input min-w-0 flex-1 bg-transparent py-2 text-base font-bold outline-none"
+          className="numeric-input min-w-0 flex-1 bg-transparent py-1.5 text-sm font-bold outline-none"
         />
-        <span className="shrink-0 text-[11px] text-[#7d8982]">{unit}</span>
+        <span className="shrink-0 text-[10px] text-[#7d8982]">{unit}</span>
       </div>
     </label>
+  );
+}
+
+/** Read-only companion to Field, for values the engine calculates rather
+ *  than the engineer types in — same compact sizing, no input. */
+function ReadOnlyField({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <div className="block min-w-0 w-full">
+      <span className="mb-1 block truncate text-[10px] font-bold uppercase text-[#77837c]">{label}</span>
+      <div className="flex min-h-[38px] items-center gap-1 rounded-lg border border-[#d4f7e2] bg-[#f6fae9] px-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-bold text-[#173f30]">{value}</span>
+        <span className="shrink-0 text-[10px] text-[#4d8f6b]">{unit}</span>
+      </div>
+    </div>
   );
 }
 
@@ -3029,15 +3044,17 @@ function RoutingStrategyCard({
   const singleMeets = bestSingleTank.results.every((r) => r.finalFFA <= target);
   const splitMeets = best.results.every((r) => r.finalFFA <= target);
 
+  // Mills here route incoming CPO into one tank at a time — precise flow
+  // splitting isn't practical — so single-tank is the default explanation
+  // essentially always; split only gets its own text when there's genuinely
+  // no single tank left with room.
   const calculatedText = forceSplitFallback
     ? copy.routingStrategy.forceSplitText(singleTank.name)
     : consolidateRuleApplies
       ? copy.routingStrategy.consolidateRule(singleTank.name, n(target, 2))
       : singleMeets
         ? copy.routingStrategy.recommendSingle(singleTank.name)
-        : splitMeets
-          ? copy.routingStrategy.recommendSplitOverSingle(singleTank.name, n(singleResult.finalFFA, 2))
-          : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
+        : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
   // Prefer the AI's written explanation once it's back; the calculated text
   // (always correct, always instant) is the fallback while it's loading, if
   // it failed, or before the first response ever arrives.
@@ -3110,8 +3127,8 @@ function RoutingStrategyCard({
         </button>
       </div>
 
-      <div className="mt-4 rounded-xl bg-[#f8faf7] p-3.5 text-sm leading-relaxed text-[#17231d]">
-        {recommendationText}
+      <div className="mt-4 rounded-xl bg-[#f8faf7] p-3.5">
+        <FormattedOpinion text={recommendationText} />
       </div>
       {aiLoading && !aiSuggestion && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-[#8a9690]">
@@ -3152,6 +3169,9 @@ function SmartRecommendation({
   singleTankFollowUp,
   hasProfile,
   onApplySingle,
+  autoAiSuggestion,
+  autoAiLoading,
+  autoAiError,
 }: {
   copy: Copy;
   topPlans: BlendPlan[];
@@ -3178,6 +3198,12 @@ function SmartRecommendation({
   singleTankFollowUp: HoldVsDespatch | null;
   hasProfile: boolean;
   onApplySingle: () => void;
+  // Same auto-fired AI explanation that Allocation strategy shows above —
+  // shared here too so the two panels always tell the same story instead of
+  // Smart Recommendation falling back to older, purely calculated wording.
+  autoAiSuggestion: string | null;
+  autoAiLoading: boolean;
+  autoAiError: boolean;
 }) {
   const best = topPlans[0];
   // Which view to show is driven by what's actually APPLIED right now — not
@@ -3250,6 +3276,18 @@ function SmartRecommendation({
       <div className="p-4 sm:p-5">
         {useConsolidate ? (
           <>
+            {autoAiSuggestion ? (
+              <div className="mb-4 rounded-xl bg-[#f8faf7] p-3.5">
+                <FormattedOpinion text={autoAiSuggestion} />
+              </div>
+            ) : autoAiLoading ? (
+              <p className="mb-4 flex items-center gap-1.5 text-xs text-[#8a9690]">
+                <Loader2 size={12} className="animate-spin" />
+                {copy.routingStrategy.aiThinking}
+              </p>
+            ) : autoAiError ? (
+              <p className="mb-4 text-xs text-[#8a9690]">{copy.routingStrategy.aiFallbackNote}</p>
+            ) : null}
             <p className="section-label">{copy.plan.recommendedAllocation}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {bestSingleTank!.allocation.map((x, i) => (
@@ -3286,15 +3324,6 @@ function SmartRecommendation({
               <RefreshCw size={16} />
               {copy.routingStrategy.applySingle}
             </button>
-            {best && (
-              <button
-                type="button"
-                onClick={() => onApplyPlan(best)}
-                className="btn-touch mt-2 flex w-full border border-[#dfe5df] bg-white text-[#3f4c46]"
-              >
-                {copy.plan.useSplitInstead}
-              </button>
-            )}
 
             <div className="mt-5 border-t border-[#e8ede8] pt-5">
               <AiAdvisorPanel
@@ -4245,10 +4274,10 @@ function PenaltyPanel({
                       type="button"
                       onClick={() => removeBand(band.id)}
                       aria-label={copy.penalty.removeBand}
+                      title={copy.penalty.removeBand}
                       className="remove-tank remove-tank--compact self-end justify-self-start"
                     >
                       <Trash2 size={14} />
-                      {copy.penalty.removeBand}
                     </button>
                   </div>
                 </div>
@@ -4300,10 +4329,14 @@ function RefineryDespatchTable({
   copy,
   profiles,
   defaultFfaPct,
+  tankerLoadMt,
+  onTankerLoadChange,
 }: {
   copy: Copy;
   profiles: BuyerProfile[];
   defaultFfaPct: number;
+  tankerLoadMt: number;
+  onTankerLoadChange: (v: number) => void;
 }) {
   const [achievedFfa, setAchievedFfa] = useState(defaultFfaPct);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -4315,11 +4348,12 @@ function RefineryDespatchTable({
     const lowestRate = p.bands.length
       ? Math.min(...p.bands.map((b) => b.deductionRmPerMt))
       : null;
-    return { profile: p, mt, exposure, lowestRate };
+    const lorries = mt > 0 && tankerLoadMt > 0 ? Math.ceil(mt / tankerLoadMt) : 0;
+    return { profile: p, mt, exposure, lowestRate, lorries };
   });
-  const totalPenaltyRm = rows
-    .filter((r) => selected.has(r.profile.id))
-    .reduce((s, r) => s + r.exposure.totalRm, 0);
+  const selectedRows = rows.filter((r) => selected.has(r.profile.id));
+  const totalPenaltyRm = selectedRows.reduce((s, r) => s + r.exposure.totalRm, 0);
+  const totalLorries = selectedRows.reduce((s, r) => s + r.lorries, 0);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -4342,8 +4376,8 @@ function RefineryDespatchTable({
           </div>
         </div>
 
-        <div className="mt-4 max-w-xs">
-          <label className="block">
+        <div className="mt-4 flex flex-wrap gap-3">
+          <label className="block w-40">
             <span className="field-label">{copy.refineryDespatch.achievedFfaLabel}</span>
             <div className="field-shell">
               <NumericInput
@@ -4355,26 +4389,39 @@ function RefineryDespatchTable({
               <span className="shrink-0 text-sm text-[#7a867f]">%</span>
             </div>
           </label>
+          <label className="block w-40">
+            <span className="field-label">{copy.refineryDespatch.tankerLoadLabel}</span>
+            <div className="field-shell">
+              <NumericInput
+                label={copy.refineryDespatch.tankerLoadLabel}
+                value={tankerLoadMt}
+                onChange={onTankerLoadChange}
+                className="numeric-input"
+              />
+              <span className="shrink-0 text-sm text-[#7a867f]">MT</span>
+            </div>
+          </label>
         </div>
 
         {profiles.length === 0 ? (
           <p className="mt-4 text-sm text-[#58665e]">{copy.refineryDespatch.noRefineries}</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#6c7971]">
                   <th className="py-2 pr-2"></th>
                   <th className="py-2 pr-2">{copy.refineryDespatch.refineryColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryDespatch.policyColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryDespatch.volumeColumn}</th>
+                  <th className="py-2 pr-2">{copy.refineryDespatch.lorriesColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryDespatch.ffaColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryDespatch.tieredPenaltyColumn}</th>
                   <th className="py-2 pr-2 text-right">{copy.refineryDespatch.totalColumn}</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ profile, mt, exposure, lowestRate }) => (
+                {rows.map(({ profile, mt, exposure, lowestRate, lorries }) => (
                   <tr key={profile.id} className="border-b border-[#f0f2ef] align-middle">
                     <td className="py-2 pr-2">
                       <input
@@ -4385,10 +4432,12 @@ function RefineryDespatchTable({
                         aria-label={profile.name}
                       />
                     </td>
-                    <td className="py-2 pr-2 font-bold text-[#173f30]">{profile.name}</td>
+                    <td className="max-w-[160px] truncate py-2 pr-2 font-bold text-[#173f30]" title={profile.name}>
+                      {profile.name}
+                    </td>
                     <td className="py-2 pr-2">
                       {lowestRate !== null ? (
-                        <span className="rounded-full bg-[#f4f6f2] px-2 py-0.5 text-[11px] font-bold text-[#6c7971]">
+                        <span className="inline-block whitespace-nowrap rounded-full bg-[#f4f6f2] px-2 py-0.5 text-[11px] font-bold text-[#6c7971]">
                           {copy.refineryDespatch.lowestRate(n(lowestRate, 2))}
                         </span>
                       ) : (
@@ -4400,14 +4449,17 @@ function RefineryDespatchTable({
                         label={copy.refineryDespatch.volumeColumn}
                         value={mt}
                         onChange={(v) => setVolumes((prev) => ({ ...prev, [profile.id]: Math.max(0, v) }))}
-                        className="numeric-input w-24"
+                        className="numeric-input w-20"
                       />
                     </td>
-                    <td className="py-2 pr-2 text-[#3f4c46]">{n(achievedFfa, 2)}%</td>
-                    <td className="py-2 pr-2 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
+                    <td className="whitespace-nowrap py-2 pr-2 text-[#3f4c46]">
+                      {lorries > 0 ? copy.refineryDespatch.lorryCount(lorries) : "—"}
+                    </td>
+                    <td className="whitespace-nowrap py-2 pr-2 text-[#3f4c46]">{n(achievedFfa, 2)}%</td>
+                    <td className="whitespace-nowrap py-2 pr-2 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
                       RM {n(exposure.rmPerMt, 2)}/MT
                     </td>
-                    <td className="py-2 pr-2 text-right font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
+                    <td className="whitespace-nowrap py-2 pr-2 text-right font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
                       RM {n(exposure.totalRm, 0)}
                     </td>
                   </tr>
@@ -4418,10 +4470,15 @@ function RefineryDespatchTable({
         )}
 
         {profiles.length > 0 && (
-          <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
             <span className="text-sm font-semibold text-[#7a4a32]">
               {copy.refineryDespatch.totalToday(n(totalPenaltyRm, 0))}
             </span>
+            {totalLorries > 0 && (
+              <span className="text-sm font-semibold text-[#7a4a32]">
+                {copy.refineryDespatch.lorryCount(totalLorries)}
+              </span>
+            )}
           </div>
         )}
       </div>
