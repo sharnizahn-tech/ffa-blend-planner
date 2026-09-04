@@ -21,7 +21,6 @@ import {
   Plus,
   RefreshCw,
   Scale,
-  Settings2,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -1393,6 +1392,11 @@ export default function Home() {
   const despatchPanel = (
     <>
       {penaltyPanel}
+      <RefineryDespatchTable
+        copy={copy}
+        profiles={buyerProfiles}
+        defaultFfaPct={topDespatchPlans[0]?.loadFfaPct ?? target}
+      />
       <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
         <TankerDespatchPlanner
           copy={copy}
@@ -4069,13 +4073,10 @@ function PenaltyPanel({
   penaltyPerTank: { name: string; rmPerMt: number; totalRm: number; band: PenaltyBand | null }[];
   totalExposureRm: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   const addProfile = () => {
     const fresh = createEmptyBuyerProfile(copy.penalty.newBuyer);
     onUpdateProfiles((prev) => [...prev, fresh]);
     onSelectProfile(fresh.id);
-    setExpanded(true);
   };
 
   const deleteProfile = (id: string) => {
@@ -4145,121 +4146,48 @@ function PenaltyPanel({
           </div>
           <button
             type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-full border border-[#dfe5df] bg-white px-2.5 py-1.5 text-xs font-bold text-[#173f30]"
-          >
-            <Settings2 size={13} />
-            {copy.penalty.manageBands}
-            <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
-          </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <select
-            value={activeProfile?.id ?? ""}
-            onChange={(e) => onSelectProfile(e.target.value)}
-            className="min-h-[40px] rounded-lg border border-[#dce3dd] bg-white px-3 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2"
-          >
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
             onClick={addProfile}
-            className="inline-flex items-center gap-1 rounded-full border border-[#b9c8bd] bg-white px-2.5 py-1.5 text-xs font-bold text-[#173f30]"
+            className="btn-touch shrink-0 bg-[#00713a] text-white"
           >
-            <Plus size={13} />
-            {copy.penalty.newBuyer}
+            <Plus size={16} />
+            {copy.penalty.addRefineryLabel}
           </button>
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
-          <span className="text-sm font-semibold text-[#7a4a32]">{copy.penalty.estimatedExposure}</span>
-          <span className="text-lg font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
-            RM {n(totalExposureRm, 0)}
-          </span>
-        </div>
-
-        {exposedTanks.length > 0 ? (
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {exposedTanks.map((t) => (
-              <div key={t.name} className="rounded-lg bg-[#f9fbf8] p-2 text-center">
-                <p className="truncate text-[10px] text-[#708078]">{t.name}</p>
-                <p className="text-sm font-extrabold text-[#7a4a32]">RM {n(t.totalRm, 0)}</p>
-              </div>
+        <p className="mt-4 text-xs font-bold uppercase tracking-wide text-[#6c7971]">
+          {copy.penalty.selectClientLabel}
+        </p>
+        {profiles.length === 0 ? (
+          <p className="mt-2 text-sm text-[#58665e]">{copy.penalty.noRefineries}</p>
+        ) : (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {profiles.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onSelectProfile(p.id)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-bold transition-colors ${
+                  activeProfile?.id === p.id
+                    ? "border-[#00713a] bg-[#00713a] text-white"
+                    : "border-[#dce3dd] bg-white text-[#173f30] hover:bg-[#f4f6f2]"
+                }`}
+              >
+                <Coins size={14} />
+                {p.name}
+              </button>
             ))}
           </div>
-        ) : (
-          <p className="mt-3 text-sm text-[#58665e]">{copy.penalty.noExposure}</p>
         )}
 
-        {expanded && activeProfile && (
+        {activeProfile && (
           <div className="mt-4 space-y-3 border-t border-[#e8ede8] pt-4">
-            <TextField
-              label={copy.penalty.renameBuyer}
-              value={activeProfile.name}
-              onChange={renameActive}
-              compact
-            />
-
-            {activeProfile.bands.length === 0 && (
-              <p className="text-sm text-[#58665e]">{copy.penalty.noBands}</p>
-            )}
-
-            <div className="space-y-2">
-              {activeProfile.bands.map((band) => (
-                <div
-                  key={band.id}
-                  className="grid grid-cols-2 gap-2 rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-2.5 sm:grid-cols-[1fr_1fr_1fr_auto]"
-                >
-                  <MiniField
-                    label={copy.penalty.minFfa}
-                    value={band.minFfaPct}
-                    onChange={(v) => updateBand(band.id, { minFfaPct: v })}
-                    unit="%"
-                  />
-                  <label className="block min-w-0 max-w-full">
-                    <span className="field-label">{copy.penalty.maxFfa}</span>
-                    <div className="field-shell">
-                      <NullableNumericInput
-                        label={copy.penalty.maxFfa}
-                        value={band.maxFfaPct}
-                        onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
-                        className="numeric-input"
-                      />
-                      <span className="shrink-0 text-sm text-[#7a867f]">%</span>
-                    </div>
-                  </label>
-                  <MiniField
-                    label={copy.penalty.deduction}
-                    value={band.deductionRmPerMt}
-                    onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
-                    unit="RM/MT"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeBand(band.id)}
-                    aria-label={copy.penalty.removeBand}
-                    className="remove-tank remove-tank--compact self-end justify-self-start sm:self-center"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={addBand}
-                className="btn-touch border border-[#b9c8bd] bg-white text-[#173f30]"
-              >
-                <Plus size={16} />
-                {copy.penalty.addBand}
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <TextField
+                label={copy.penalty.renameBuyer}
+                value={activeProfile.name}
+                onChange={renameActive}
+                compact
+              />
               {profiles.length > 1 && (
                 <button
                   type="button"
@@ -4271,6 +4199,229 @@ function PenaltyPanel({
                 </button>
               )}
             </div>
+
+            {activeProfile.bands.length === 0 && (
+              <p className="text-sm text-[#58665e]">{copy.penalty.noBands}</p>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {activeProfile.bands.map((band, i) => (
+                <div key={band.id} className="rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded-full bg-[#d4f7e2] px-2.5 py-1 text-[11px] font-bold text-[#00713a]">
+                      {copy.penalty.bandLevelLabel(i + 1)} ({n(band.minFfaPct, 1)}%
+                      {band.maxFfaPct === null ? "+" : ` - ${n(band.maxFfaPct, 1)}%`})
+                    </span>
+                    <span className="text-sm font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
+                      RM {n(band.deductionRmPerMt, 2)}/MT
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <MiniField
+                      label={copy.penalty.minFfa}
+                      value={band.minFfaPct}
+                      onChange={(v) => updateBand(band.id, { minFfaPct: v })}
+                      unit="%"
+                    />
+                    <label className="block min-w-0 max-w-full">
+                      <span className="field-label">{copy.penalty.maxFfa}</span>
+                      <div className="field-shell">
+                        <NullableNumericInput
+                          label={copy.penalty.maxFfa}
+                          value={band.maxFfaPct}
+                          onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
+                          className="numeric-input"
+                        />
+                        <span className="shrink-0 text-sm text-[#7a867f]">%</span>
+                      </div>
+                    </label>
+                    <MiniField
+                      label={copy.penalty.deduction}
+                      value={band.deductionRmPerMt}
+                      onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
+                      unit="RM/MT"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeBand(band.id)}
+                      aria-label={copy.penalty.removeBand}
+                      className="remove-tank remove-tank--compact self-end justify-self-start"
+                    >
+                      <Trash2 size={14} />
+                      {copy.penalty.removeBand}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={addBand}
+              className="btn-touch border border-[#b9c8bd] bg-white text-[#173f30]"
+            >
+              <Plus size={16} />
+              {copy.penalty.addBand}
+            </button>
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
+              <span className="text-sm font-semibold text-[#7a4a32]">{copy.penalty.estimatedExposure}</span>
+              <span className="text-lg font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
+                RM {n(totalExposureRm, 0)}
+              </span>
+            </div>
+
+            {exposedTanks.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {exposedTanks.map((t) => (
+                  <div key={t.name} className="rounded-lg bg-[#f9fbf8] p-2 text-center">
+                    <p className="truncate text-[10px] text-[#708078]">{t.name}</p>
+                    <p className="text-sm font-extrabold text-[#7a4a32]">RM {n(t.totalRm, 0)}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[#58665e]">{copy.penalty.noExposure}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Plan how much of today's despatch goes to which refinery client — each
+ *  refinery has its own tiered penalty bands (set up above), and the same
+ *  blend FFA can cost a very different amount depending on who's buying it.
+ *  This is a same-day planning scratchpad (which refineries, how much MT
+ *  each) — it isn't saved to the mill's record, since it's re-entered fresh
+ *  each despatch day rather than being part of the mill's ongoing state. */
+function RefineryDespatchTable({
+  copy,
+  profiles,
+  defaultFfaPct,
+}: {
+  copy: Copy;
+  profiles: BuyerProfile[];
+  defaultFfaPct: number;
+}) {
+  const [achievedFfa, setAchievedFfa] = useState(defaultFfaPct);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [volumes, setVolumes] = useState<Record<string, number>>({});
+
+  const rows = profiles.map((p) => {
+    const mt = volumes[p.id] ?? 0;
+    const exposure = calcPenaltyExposure(achievedFfa, mt, p.bands);
+    const lowestRate = p.bands.length
+      ? Math.min(...p.bands.map((b) => b.deductionRmPerMt))
+      : null;
+    return { profile: p, mt, exposure, lowestRate };
+  });
+  const totalPenaltyRm = rows
+    .filter((r) => selected.has(r.profile.id))
+    .reduce((s, r) => s + r.exposure.totalRm, 0);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
+      <div className="p-4 sm:p-5">
+        <div className="flex min-w-0 gap-3">
+          <span className="mt-0.5 shrink-0 text-[#287451]">
+            <Truck size={19} />
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-bold">{copy.refineryDespatch.title}</h2>
+            <p className="mt-0.5 text-xs leading-relaxed text-[#758078]">{copy.refineryDespatch.subtitle}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 max-w-xs">
+          <label className="block">
+            <span className="field-label">{copy.refineryDespatch.achievedFfaLabel}</span>
+            <div className="field-shell">
+              <NumericInput
+                label={copy.refineryDespatch.achievedFfaLabel}
+                value={achievedFfa}
+                onChange={setAchievedFfa}
+                className="numeric-input"
+              />
+              <span className="shrink-0 text-sm text-[#7a867f]">%</span>
+            </div>
+          </label>
+        </div>
+
+        {profiles.length === 0 ? (
+          <p className="mt-4 text-sm text-[#58665e]">{copy.refineryDespatch.noRefineries}</p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#6c7971]">
+                  <th className="py-2 pr-2"></th>
+                  <th className="py-2 pr-2">{copy.refineryDespatch.refineryColumn}</th>
+                  <th className="py-2 pr-2">{copy.refineryDespatch.policyColumn}</th>
+                  <th className="py-2 pr-2">{copy.refineryDespatch.volumeColumn}</th>
+                  <th className="py-2 pr-2">{copy.refineryDespatch.ffaColumn}</th>
+                  <th className="py-2 pr-2">{copy.refineryDespatch.tieredPenaltyColumn}</th>
+                  <th className="py-2 pr-2 text-right">{copy.refineryDespatch.totalColumn}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ profile, mt, exposure, lowestRate }) => (
+                  <tr key={profile.id} className="border-b border-[#f0f2ef] align-middle">
+                    <td className="py-2 pr-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(profile.id)}
+                        onChange={() => toggle(profile.id)}
+                        className="h-4 w-4 accent-[#00713a]"
+                        aria-label={profile.name}
+                      />
+                    </td>
+                    <td className="py-2 pr-2 font-bold text-[#173f30]">{profile.name}</td>
+                    <td className="py-2 pr-2">
+                      {lowestRate !== null ? (
+                        <span className="rounded-full bg-[#f4f6f2] px-2 py-0.5 text-[11px] font-bold text-[#6c7971]">
+                          {copy.refineryDespatch.lowestRate(n(lowestRate, 2))}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-[#8a9690]">{copy.penalty.noBands}</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2">
+                      <NumericInput
+                        label={copy.refineryDespatch.volumeColumn}
+                        value={mt}
+                        onChange={(v) => setVolumes((prev) => ({ ...prev, [profile.id]: Math.max(0, v) }))}
+                        className="numeric-input w-24"
+                      />
+                    </td>
+                    <td className="py-2 pr-2 text-[#3f4c46]">{n(achievedFfa, 2)}%</td>
+                    <td className="py-2 pr-2 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
+                      RM {n(exposure.rmPerMt, 2)}/MT
+                    </td>
+                    <td className="py-2 pr-2 text-right font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
+                      RM {n(exposure.totalRm, 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {profiles.length > 0 && (
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
+            <span className="text-sm font-semibold text-[#7a4a32]">
+              {copy.refineryDespatch.totalToday(n(totalPenaltyRm, 0))}
+            </span>
           </div>
         )}
       </div>
