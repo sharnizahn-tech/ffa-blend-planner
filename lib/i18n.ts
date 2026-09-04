@@ -29,7 +29,7 @@ export const translations = {
       ffaLimitNote: (limit: number) => `Limit ≤ ${n(limit, 2)}% · lower is better`,
     },
     blendSituation: {
-      title: "Today's stock situation",
+      title: "Routing recommendation",
       highRisk: "High FFA risk",
       onTrack: "On track",
       highRiskText: "Incoming CPO is high in FFA. Careful routing is recommended to meet the target quality.",
@@ -42,8 +42,15 @@ export const translations = {
       confidenceHigh: "High",
       confidenceMedium: "Medium",
       confidenceLow: "Low",
-      viewRecommendedBlend: "View recommended plan",
+      viewRecommendedBlend: "Review recommended plan",
       generateBestPlan: "Generate best stock plan",
+      verifyHint: "Verify current dipping and latest laboratory FFA before transfer.",
+    },
+    tankStatus: {
+      title: "Tank status",
+      subtitle: "Current tank levels and FFA",
+      viewAll: "View all tank details",
+      filled: (pct: number) => `${n(pct, 0)}% filled`,
     },
     forecast: {
       title: "Production forecast",
@@ -518,7 +525,7 @@ export const translations = {
       ffaLimitNote: (limit: number) => `Had ≤ ${n(limit, 2)}% · lebih rendah lebih baik`,
     },
     blendSituation: {
-      title: "Situasi stok hari ini",
+      title: "Cadangan peruntukan",
       highRisk: "Risiko FFA tinggi",
       onTrack: "Mengikut landasan",
       highRiskText: "CPO masuk tinggi FFA. Peruntukan teliti disyorkan untuk penuhi kualiti sasaran.",
@@ -531,8 +538,15 @@ export const translations = {
       confidenceHigh: "Tinggi",
       confidenceMedium: "Sederhana",
       confidenceLow: "Rendah",
-      viewRecommendedBlend: "Lihat pelan disyorkan",
+      viewRecommendedBlend: "Semak pelan disyorkan",
       generateBestPlan: "Jana pelan stok terbaik",
+      verifyHint: "Sahkan dipping semasa dan FFA makmal terkini sebelum pemindahan.",
+    },
+    tankStatus: {
+      title: "Status tangki",
+      subtitle: "Paras tangki semasa dan FFA",
+      viewAll: "Lihat semua butiran tangki",
+      filled: (pct: number) => `${n(pct, 0)}% penuh`,
     },
     forecast: {
       title: "Ramalan pengeluaran",

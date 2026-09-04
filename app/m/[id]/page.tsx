@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import {
@@ -359,6 +359,9 @@ function currentFfaLabel(tier: TankState, copy: Copy) {
   return copy.tanks.goodFfa;
 }
 
+/** A simplified, technical line-art vertical storage-tank gauge — flat fill
+ *  colour carries the FFA/status semantics, the outline stays neutral, so the
+ *  same icon reads correctly at both card scale and the compact list scale. */
 function TankCylinder({
   fillPct,
   state,
@@ -369,16 +372,40 @@ function TankCylinder({
   compact?: boolean;
 }) {
   const clamped = Math.min(100, Math.max(0, fillPct));
+  const rawId = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const clipId = `tank-clip-${rawId}`;
+  const liquidTop = 10 + (86 * (100 - clamped)) / 100;
+  const width = compact ? 40 : 68;
+  const height = compact ? 68 : 122;
   return (
     <div
       className={`tank-cylinder tank-cylinder--${state}${compact ? " tank-cylinder--compact" : ""}`}
       aria-hidden
     >
-      <div className="tank-cylinder__cap" />
-      <div className="tank-cylinder__shell">
-        <div className="tank-cylinder__fill" style={{ height: `${clamped}%` }} />
-        <span className="tank-cylinder__pct">{Math.round(clamped)}%</span>
-      </div>
+      <svg width={width} height={height} viewBox="0 0 60 104">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x="6" y="10" width="48" height="86" rx="9" />
+          </clipPath>
+        </defs>
+        <path d="M8 13 C 8 6, 52 6, 52 13" className="tank-cylinder__roof" />
+        <line x1="30" y1="6" x2="30" y2="1" className="tank-cylinder__vent" />
+        <g clipPath={`url(#${clipId})`}>
+          <rect x="6" y="10" width="48" height="86" className="tank-cylinder__empty" />
+          <rect x="6" y={liquidTop} width="48" height={Math.max(0, 96 - liquidTop)} className="tank-cylinder__liquid" />
+          {clamped > 3 && clamped < 98 && (
+            <line x1="6" y1={liquidTop} x2="54" y2={liquidTop} className="tank-cylinder__meniscus" />
+          )}
+        </g>
+        <rect x="6" y="10" width="48" height="86" rx="9" className="tank-cylinder__outline" />
+        <line x1="17" y1="96" x2="17" y2="101" className="tank-cylinder__foot" />
+        <line x1="43" y1="96" x2="43" y2="101" className="tank-cylinder__foot" />
+        {!compact && (
+          <text x="30" y="56" textAnchor="middle" className="tank-cylinder__pct">
+            {Math.round(clamped)}%
+          </text>
+        )}
+      </svg>
     </div>
   );
 }
@@ -1575,19 +1602,24 @@ export default function Home() {
           {mobileTab === "overview" && (
             <>
               {metrics}
-              <BlendSituationCard
-                copy={copy}
-                tanks={tanks}
-                incomingCPO={incomingCPO}
-                incomingFFA={incomingFFA}
-                highFFAStock={highFFAStock}
-                highFfaTankNames={highFfaTankNames}
-                target={target}
-                projectedFfa={projectedBlendFfa}
-                atRisk={blendAtRisk}
-                confidence={blendConfidence}
-                onViewBlend={() => setMobileTab("production")}
-              />
+              <div className="grid gap-4 xl:grid-cols-[13fr_12fr] xl:items-start">
+                <RoutingRecommendationCard
+                  copy={copy}
+                  incomingCPO={incomingCPO}
+                  incomingFFA={incomingFFA}
+                  target={target}
+                  projectedFfa={projectedBlendFfa}
+                  atRisk={blendAtRisk}
+                  confidence={blendConfidence}
+                  onViewBlend={() => setMobileTab("production")}
+                />
+                <TankStatusCard
+                  copy={copy}
+                  tanks={tanks}
+                  target={target}
+                  onViewAll={() => setMobileTab("production")}
+                />
+              </div>
               <WarningsPanel
                 copy={copy}
                 results={results}
@@ -1706,13 +1738,32 @@ function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
   );
 }
 
-function BlendSituationCard({
+/** Faint technical line-art watermark — a row of storage-tank silhouettes —
+ *  used instead of a photo behind card text. Kept low-opacity and tucked into
+ *  a corner so it reads as texture, never competes with the content on top. */
+function TankLineArtWatermark({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 200 120"
+      className={className}
+      style={{ stroke: "#123c2c", strokeWidth: 1.4, fill: "none", opacity: 0.05 }}
+    >
+      {[18, 62, 106, 150].map((x, i) => (
+        <g key={i}>
+          <path d={`M${x} 24 C ${x} 14, ${x + 36} 14, ${x + 36} 24`} />
+          <rect x={x} y="24" width="36" height="76" rx="7" />
+          <line x1={x + 18} y1="14" x2={x + 18} y2="6" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function RoutingRecommendationCard({
   copy,
-  tanks,
   incomingCPO,
   incomingFFA,
-  highFFAStock,
-  highFfaTankNames,
   target,
   projectedFfa,
   atRisk,
@@ -1720,11 +1771,8 @@ function BlendSituationCard({
   onViewBlend,
 }: {
   copy: Copy;
-  tanks: Tank[];
   incomingCPO: number;
   incomingFFA: number;
-  highFFAStock: number;
-  highFfaTankNames: string;
   target: number;
   projectedFfa: number;
   atRisk: boolean;
@@ -1738,97 +1786,61 @@ function BlendSituationCard({
         ? copy.blendSituation.confidenceMedium
         : copy.blendSituation.confidenceLow;
   const confidenceColor =
-    confidence === "high" ? "#00713a" : confidence === "medium" ? "#a64f24" : "#a4342c";
+    confidence === "high" ? "#187449" : confidence === "medium" ? "#a64f24" : "#a4342c";
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-[#d9e2da] bg-[#123c2c] text-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_8px_24px_-16px_rgba(15,45,32,0.3)]">
-      <div className="absolute inset-0">
-        <Image
-          src="/BST.webp"
-          alt=""
-          fill
-          priority
-          sizes="(min-width: 1024px) 60vw, 100vw"
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#123c2c] via-[#123c2c]/90 to-[#123c2c]/30" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#123c2c]/70 via-transparent to-transparent" />
-      </div>
-      <div className="relative z-10 p-4 sm:p-6">
+    <section className="relative overflow-hidden rounded-2xl border border-[#dde5df] bg-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
+      <TankLineArtWatermark className="pointer-events-none absolute -right-4 -top-2 h-28 w-48" />
+      <div className="relative p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-bold sm:text-lg">{copy.blendSituation.title}</h2>
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e5faed] text-[#00713a]">
+              <Gauge size={18} />
+            </span>
+            <h2 className="text-base font-extrabold tracking-tight text-[#123c2c] sm:text-lg">
+              {copy.blendSituation.title}
+            </h2>
+          </div>
           <span
             className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
-              atRisk ? "bg-[#ffceb7] text-[#7c2d12]" : "bg-[#d4f7e2] text-[#00713a]"
+              atRisk ? "bg-[#fde8e6] text-[#a4342c]" : "bg-[#e3f3e8] text-[#187449]"
             }`}
           >
             {atRisk ? copy.blendSituation.highRisk : copy.blendSituation.onTrack}
           </span>
         </div>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-[#cfe0d5]">
+        <p className="mt-3 max-w-md text-sm leading-relaxed text-[#58665e]">
           {atRisk ? copy.blendSituation.highRiskText : copy.blendSituation.onTrackText}
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-3 lg:gap-3">
-          <BlendStat
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <RoutingStat
             label={copy.blendSituation.incomingCpo}
             value={`${n(incomingCPO, 0)} MT`}
             sub={`@ ${n(incomingFFA, 2)}% FFA`}
           />
-          <BlendStat
-            label={copy.blendSituation.highFfaStock}
-            value={`${n(highFFAStock, 0)} MT`}
-            sub={highFfaTankNames || undefined}
-          />
-          <BlendStat label={copy.blendSituation.targetDispatchFfa} value={`≤ ${n(target, 2)}%`} />
-          <BlendStat
+          <RoutingStat label={copy.blendSituation.targetDispatchFfa} value={`≤ ${n(target, 2)}%`} />
+          <RoutingStat
             label={copy.blendSituation.projectedAfterBlending}
             value={`${n(projectedFfa, 2)}%`}
-            highlight
+            valueStyle={{ color: projectedFfa > target ? "#a4342c" : "#187449" }}
           />
-          <BlendStat
+          <RoutingStat
             label={copy.blendSituation.confidence}
             value={confidenceLabel}
             valueStyle={{ color: confidenceColor }}
           />
         </div>
 
-        <div className="mt-5 border-t border-white/15 pt-4">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[#9fc3ae]">
-            {copy.tankSummary.title}
-          </p>
-          <div className="mt-2 space-y-1.5">
-            {tanks.map((tank, i) => {
-              const tier = currentFfaTier(tank.ffa, target);
-              const label = currentFfaLabel(tier, copy);
-              const badgeClass =
-                tier === "safe"
-                  ? "bg-[#d4f7e2] text-[#00713a]"
-                  : tier === "warning"
-                    ? "bg-[#ffe3c2] text-[#7a4a1f]"
-                    : "bg-[#ffceb7] text-[#7c2d12]";
-              return (
-                <div
-                  key={i}
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-white/10 px-3 py-2 text-sm"
-                >
-                  <span className="font-semibold">{tank.name}</span>
-                  <span className="text-[#cfe0d5]">
-                    {n(tank.stock, 0)} MT · {n(tank.ffa, 2)}%
-                  </span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
-                    {label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <p className="mt-4 flex items-start gap-1.5 text-xs leading-relaxed text-[#7a867f]">
+          <ShieldCheck size={14} className="mt-0.5 shrink-0" />
+          {copy.blendSituation.verifyHint}
+        </p>
 
         <button
           type="button"
           onClick={onViewBlend}
-          className="btn-touch mt-5 w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] sm:w-auto"
+          className="btn-touch mt-4 w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] sm:w-auto"
         >
           {copy.blendSituation.viewRecommendedBlend}
           <ChevronRight size={16} />
@@ -1838,29 +1850,96 @@ function BlendSituationCard({
   );
 }
 
-function BlendStat({
+function RoutingStat({
   label,
   value,
   sub,
-  highlight = false,
   valueStyle,
 }: {
   label: string;
   value: string;
   sub?: string;
-  highlight?: boolean;
   valueStyle?: React.CSSProperties;
 }) {
   return (
-    <div
-      className={`rounded-xl p-2.5 ${highlight ? "bg-[#00b14f]/20 ring-1 ring-[#00b14f]/40" : "bg-white/10"}`}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#cfe0d5]">{label}</p>
-      <p className="mt-1 text-base font-extrabold text-white sm:text-lg" style={valueStyle}>
+    <div className="rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7a867f]">{label}</p>
+      <p className="mt-1 text-base font-extrabold text-[#123c2c] sm:text-lg" style={valueStyle}>
         {value}
       </p>
-      {sub && <p className="text-[10px] text-[#cfe0d5]">{sub}</p>}
+      {sub && <p className="text-[10px] text-[#8a9690]">{sub}</p>}
     </div>
+  );
+}
+
+function TankStatusCard({
+  copy,
+  tanks,
+  target,
+  onViewAll,
+}: {
+  copy: Copy;
+  tanks: Tank[];
+  target: number;
+  onViewAll: () => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-[#dde5df] bg-white p-4 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)] sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e5faed] text-[#00713a]">
+            <Droplets size={18} />
+          </span>
+          <div>
+            <h2 className="text-base font-extrabold tracking-tight text-[#123c2c] sm:text-lg">
+              {copy.tankStatus.title}
+            </h2>
+            <p className="text-xs text-[#8a9690]">{copy.tankStatus.subtitle}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="shrink-0 text-xs font-bold text-[#00713a] hover:underline"
+        >
+          {copy.tankStatus.viewAll}
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-2.5">
+        {tanks.map((tank, i) => {
+          const tier = currentFfaTier(tank.ffa, target);
+          const label = currentFfaLabel(tier, copy);
+          const fillPct = tank.capacity > 0 ? (tank.stock / tank.capacity) * 100 : 0;
+          const badgeClass =
+            tier === "safe"
+              ? "bg-[#e3f3e8] text-[#187449]"
+              : tier === "warning"
+                ? "bg-[#fff0e4] text-[#a64f24]"
+                : "bg-[#fde8e6] text-[#a4342c]";
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3"
+            >
+              <TankCylinder fillPct={fillPct} state={tier} compact />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <span className="font-bold text-[#123c2c]">{tank.name}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
+                    {label}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-[#7a867f]">
+                  {n(tank.stock, 0)} MT · {n(tank.ffa, 2)}% FFA
+                </p>
+                <p className="text-[10px] text-[#a2ada4]">{copy.tankStatus.filled(fillPct)}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
