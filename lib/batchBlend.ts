@@ -18,7 +18,13 @@ export type BatchBlendResult = {
   days: number | null;
   steps: DailyTransferStep[];
   finalTanks: BlendTank[];
-  reason: "already-good" | "no-spare-capacity" | "no-low-ffa-source" | "max-days-exceeded" | null;
+  reason:
+    | "already-good"
+    | "no-spare-capacity"
+    | "no-low-ffa-source"
+    | "source-exhausted"
+    | "max-days-exceeded"
+    | null;
 };
 
 export function planBatchBlend(
@@ -53,7 +59,18 @@ export function planBatchBlend(
       .filter((t) => t !== high && t.ffa < target && t.stock - deadStockMt > 0)
       .sort((a, b) => a.ffa - b.ffa);
     if (!sources.length) {
-      return { feasible: false, days: null, steps, finalTanks: working, reason: "no-low-ffa-source" };
+      // Day 1 with nothing eligible means no low-FFA tank was ever available;
+      // a later day means one WAS helping and has now been drawn down to its
+      // dead stock reserve — a different, more useful thing to tell the
+      // engineer than a flat "none available" (steps still hold the real
+      // progress made before it ran dry).
+      return {
+        feasible: false,
+        days: null,
+        steps,
+        finalTanks: working,
+        reason: steps.length > 0 ? "source-exhausted" : "no-low-ffa-source",
+      };
     }
 
     let budget = maxTransferPerDayMt;
@@ -77,7 +94,13 @@ export function planBatchBlend(
     }
 
     if (!movedToday) {
-      return { feasible: false, days: null, steps, finalTanks: working, reason: "no-low-ffa-source" };
+      return {
+        feasible: false,
+        days: null,
+        steps,
+        finalTanks: working,
+        reason: steps.length > 0 ? "source-exhausted" : "no-low-ffa-source",
+      };
     }
 
     if (working.every((t) => t.ffa <= target)) {

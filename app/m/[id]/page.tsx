@@ -270,15 +270,18 @@ function buildPenaltyDecisionText(
 ): string | null {
   if (!hasProfile) return copy.routingStrategy.followUpNoProfile;
   if (!singleTankFollowUp) return null;
-  if (singleTankFollowUp.recommendation === "hold" && singleTankFollowUp.hold.days !== null) {
-    return copy.routingStrategy.followUpHold({
-      days: singleTankFollowUp.hold.days,
-      transferMt: singleTankFollowUp.hold.transferUsedMt,
+  if (singleTankFollowUp.recommendation === "hold" && singleTankFollowUp.bestDay > 0) {
+    const info = {
+      days: singleTankFollowUp.bestDay,
+      transferMt: singleTankFollowUp.bestDayTransferMt,
       dilutionTank: singleTankBlendPlan?.dilutionTankName ?? copy.routingStrategy.unnamedTank,
-      incomingMt: singleTankFollowUp.hold.incomingUsedMt,
-      finalFfaPct: singleTankFollowUp.hold.finalFfaPct,
+      incomingMt: singleTankFollowUp.bestDayIncomingMt,
+      finalFfaPct: singleTankFollowUp.bestDayFfaPct,
       rm: singleTankFollowUp.savingsRm,
-    });
+    };
+    return singleTankFollowUp.bestDayFullyCompliant
+      ? copy.routingStrategy.followUpHold(info)
+      : copy.routingStrategy.followUpHoldPartial(info);
   }
   return copy.routingStrategy.followUpDespatchNow({
     tonnageMt: singleTankFollowUp.tankStockMt,
@@ -986,6 +989,9 @@ export default function Home() {
           holdPenaltyRm: r.holdPenaltyRm,
           savingsRm: r.savingsRm,
           recommendation: r.recommendation,
+          bestDay: r.bestDay,
+          bestDayFfaPct: r.bestDayFfaPct,
+          bestDayFullyCompliant: r.bestDayFullyCompliant,
         })),
         batchBlend: batchBlendResult
           ? {
@@ -3873,15 +3879,17 @@ function LossOptimizerPanel({
                     </span>
                   </div>
                   <p className="mt-1.5 text-sm leading-relaxed text-[#53625a]">
-                    {hold && r.hold.days !== null
-                      ? copy.lossOptimizer.holdRecommendation(r.hold.days)
+                    {hold
+                      ? r.bestDayFullyCompliant
+                        ? copy.lossOptimizer.holdRecommendation(r.bestDay)
+                        : copy.lossOptimizer.holdPartialRecommendation(r.bestDay, n(r.bestDayFfaPct, 2))
                       : copy.lossOptimizer.despatchNowRecommendation}
                   </p>
-                  {hold && r.hold.days !== null && (
+                  {hold && (
                     <p className="mt-1 text-xs text-[#708078]">
                       {copy.lossOptimizer.usingSources(
-                        n(r.hold.incomingUsedMt, 0),
-                        n(r.hold.transferUsedMt, 0),
+                        n(r.bestDayIncomingMt, 0),
+                        n(r.bestDayTransferMt, 0),
                       )}
                     </p>
                   )}
@@ -3941,6 +3949,8 @@ function BatchBlendPlanner({
         return copy.batchBlend.reasonNoSpareCapacity;
       case "no-low-ffa-source":
         return copy.batchBlend.reasonNoLowFfaSource;
+      case "source-exhausted":
+        return copy.batchBlend.reasonSourceExhausted;
       case "max-days-exceeded":
         return copy.batchBlend.reasonMaxDaysExceeded;
       default:
@@ -4012,16 +4022,32 @@ function BatchBlendPlanner({
             )}
           </>
         ) : (
-          <div className="flex items-start gap-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3 text-sm text-[#92441f]">
-            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-            <span>
-              {copy.batchBlend.notFeasible}
-              {reasonText(result.reason) ? ` ${reasonText(result.reason)}` : ""}
-            </span>
-          </div>
+          <>
+            <div className="flex items-start gap-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3 text-sm text-[#92441f]">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <span>
+                {result.steps.length > 0
+                  ? copy.batchBlend.partialProgress(result.steps[result.steps.length - 1].day)
+                  : copy.batchBlend.notFeasible}
+                {reasonText(result.reason) ? ` ${reasonText(result.reason)}` : ""}
+              </span>
+            </div>
+            {result.steps.length > 0 && (
+              <div className="mt-3">
+                <p className="section-label">{copy.batchBlend.stepsTitle}</p>
+                <div className="mt-2 space-y-1.5">
+                  {result.steps.map((s, i) => (
+                    <div key={i} className="rounded-lg bg-[#f9fbf8] px-3 py-2 text-xs text-[#53625a]">
+                      {copy.batchBlend.step(s.day, s.fromTank, s.toTank, n(s.mt, 0), n(s.toTankFfaAfter, 2))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
-        {result && result.feasible && result.finalTanks.length > 0 && (
+        {result && result.steps.length > 0 && result.finalTanks.length > 0 && (
           <div className="mt-4">
             <p className="section-label">{copy.batchBlend.finalTitle}</p>
             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">

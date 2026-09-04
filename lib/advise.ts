@@ -122,6 +122,9 @@ export const adviseRequestSchema = z.object({
         holdPenaltyRm: z.number(),
         savingsRm: z.number(),
         recommendation: z.enum(["hold", "despatchNow"]),
+        bestDay: z.number().optional(),
+        bestDayFfaPct: z.number().optional(),
+        bestDayFullyCompliant: z.boolean().optional(),
       }),
     )
     .optional(),
@@ -351,18 +354,26 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
 
   if (lossOptimizer && lossOptimizer.length) {
     const parts = lossOptimizer
-      .map((t) =>
-        t.recommendation === "hold"
-          ? `${t.tankName}: hold ${t.holdDays} day(s), avoid RM ${n(t.savingsRm, 0)} (would be RM ${n(t.despatchNowPenaltyRm, 0)} if despatched now)`
-          : `${t.tankName}: despatch now — no feasible dilution avoids the RM ${n(t.despatchNowPenaltyRm, 0)} penalty in time`,
-      )
+      .map((t) => {
+        if (t.recommendation !== "hold") {
+          return `${t.tankName}: despatch now — no feasible blend avoids or reduces the RM ${n(t.despatchNowPenaltyRm, 0)} penalty in time`;
+        }
+        const day = t.bestDay ?? t.holdDays ?? 0;
+        return t.bestDayFullyCompliant === false
+          ? `${t.tankName}: hold ${day} day(s) to reach a cheaper penalty band (still above the limit at ${n(t.bestDayFfaPct ?? 0, 2)}% FFA), saving RM ${n(t.savingsRm, 0)} versus despatching now (RM ${n(t.despatchNowPenaltyRm, 0)})`
+          : `${t.tankName}: hold ${day} day(s), avoid RM ${n(t.savingsRm, 0)} (would be RM ${n(t.despatchNowPenaltyRm, 0)} if despatched now)`;
+      })
       .join("; ");
     const partsBm = lossOptimizer
-      .map((t) =>
-        t.recommendation === "hold"
-          ? `${t.tankName}: tahan ${t.holdDays} hari, elak RM ${n(t.savingsRm, 0)} (akan jadi RM ${n(t.despatchNowPenaltyRm, 0)} jika despatch sekarang)`
-          : `${t.tankName}: despatch sekarang — tiada pencairan munasabah dalam masa untuk elak penalti RM ${n(t.despatchNowPenaltyRm, 0)}`,
-      )
+      .map((t) => {
+        if (t.recommendation !== "hold") {
+          return `${t.tankName}: despatch sekarang — tiada blend munasabah dalam masa untuk elak atau kurangkan penalti RM ${n(t.despatchNowPenaltyRm, 0)}`;
+        }
+        const day = t.bestDay ?? t.holdDays ?? 0;
+        return t.bestDayFullyCompliant === false
+          ? `${t.tankName}: tahan ${day} hari untuk capai band penalti lebih murah (masih melebihi had pada ${n(t.bestDayFfaPct ?? 0, 2)}% FFA), jimat RM ${n(t.savingsRm, 0)} berbanding despatch sekarang (RM ${n(t.despatchNowPenaltyRm, 0)})`
+          : `${t.tankName}: tahan ${day} hari, elak RM ${n(t.savingsRm, 0)} (akan jadi RM ${n(t.despatchNowPenaltyRm, 0)} jika despatch sekarang)`;
+      })
       .join("; ");
     const totalSavings = lossOptimizer.reduce((s, t) => s + (t.recommendation === "hold" ? t.savingsRm : 0), 0);
     sections.push(
@@ -520,7 +531,7 @@ Rules:
   - "penalty" is the RM deduction under the engineer's own configured buyer bands — call it "the penalty exposure" or "the estimated deduction". State the total and the worst tanks exactly as given; never estimate your own figure.
   - "prediction" is a forward FFA projection using the engineer's own rise-rate assumption — call it "the forecast". State the number of days until a tank crosses the limit exactly as given.
   - "productionSuggestion" is the engine's calculated safe incoming CPO ceiling for today — call it "the safe production limit", and name whether tank capacity or the good FFA limit is the constraint holding it there.
-  - "lossOptimizer" is a per-tank comparison of despatching a high-FFA tank now versus holding it to blend the FFA down first — call it "the sell-now-vs-hold comparison". Always state which one the engine recommends and the RM saved, exactly as given — this is a core decision, don't soften it into vague advice.
+  - "lossOptimizer" is a per-tank comparison of despatching a high-FFA tank now versus holding it to blend the FFA down first — call it "the sell-now-vs-hold comparison". Always state which one the engine recommends and the RM saved, exactly as given — this is a core decision, don't soften it into vague advice. A "hold" recommendation is not always a full fix: when the data marks it not fully compliant, the hold only moves the tank into a cheaper penalty band by the given number of days — it does NOT bring it under the good FFA limit — say that plainly (e.g. "still over the limit, but the deduction band drops"), never imply the tank becomes fully compliant when it doesn't.
   - "batchBlend" is a day-by-day tank-to-tank transfer plan to bring existing stock to good FFA with no new incoming CPO — call it "the blend-down plan". State whether it's feasible, over how many days, exactly as given.
   - "allocationValid" / "hasOverflow" / "currentPlanValid" are pass/fail flags on the CURRENT allocation — never name them; just say plainly whether the current plan is workable and why (adds to 100%, no tank overflowing) if it isn't.
   - Every plan may carry its own penalty figure — when comparing plans, mention the RM difference between them, not just the FFA difference, but call it "the penalty for this option".

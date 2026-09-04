@@ -1,18 +1,32 @@
 // Loss optimiser: for a tank that is currently above the good FFA limit, work out
 // whether it is cheaper to despatch it now (and take the refinery's penalty) or to
-// hold it and dilute the FFA down first — using whatever incoming daily CPO and/or
-// lower-FFA tanks are actually available — then despatch penalty-free.
+// hold it and blend the FFA down first — using whatever incoming daily CPO and/or
+// lower-FFA tanks are actually available — then despatch at a lower (or zero)
+// penalty.
 //
 // This exists because cherry-picking only the good-FFA tanks for despatch (and
 // leaving high-FFA stock sitting) both grows the FFA-penalty exposure over time
 // (the tank keeps ageing — see lib/prediction.ts) and never actually resolves the
-// high-FFA stock. The engine below simulates day-by-day dilution so the engineer
-// gets a concrete number instead of a manual guess.
+// high-FFA stock. The engine below simulates day-by-day blending so the engineer
+// gets a concrete number instead of a manual guess — including credit for a
+// PARTIAL blend that only moves the tank into a cheaper penalty band, not just a
+// full cure down to the limit.
 
 import { calcPenaltyExposure, type PenaltyBand } from "./penalty";
 import { estimateRisePerDay } from "./prediction";
 
 export type LossTank = { name: string; capacity: number; stock: number; ffa: number };
+
+/** One day's snapshot while simulating a hold — cumulative MT blended in by
+ *  that day, so a caller can price a penalty at ANY day, not just the day
+ *  the tank finally clears the limit. */
+export type HoldDayPoint = {
+  day: number;
+  ffaPct: number;
+  stockMt: number;
+  incomingUsedMt: number;
+  transferUsedMt: number;
+};
 
 export type HoldSimulation = {
   feasible: boolean;
@@ -20,6 +34,7 @@ export type HoldSimulation = {
   finalFfaPct: number;
   incomingUsedMt: number;
   transferUsedMt: number;
+  trace: HoldDayPoint[];
 };
 
 export function simulateHoldToTarget(
@@ -35,8 +50,11 @@ export function simulateHoldToTarget(
 ): HoldSimulation {
   let stock = tank.stock;
   let ffa = tank.ffa;
+  const trace: HoldDayPoint[] = [
+    { day: 0, ffaPct: ffa, stockMt: stock, incomingUsedMt: 0, transferUsedMt: 0 },
+  ];
   if (ffa <= target) {
-    return { feasible: true, days: 0, finalFfaPct: ffa, incomingUsedMt: 0, transferUsedMt: 0 };
+    return { feasible: true, days: 0, finalFfaPct: ffa, incomingUsedMt: 0, transferUsedMt: 0, trace };
   }
 
   const sources = otherTanks
@@ -78,12 +96,14 @@ export function simulateHoldToTarget(
       }
     }
 
+    trace.push({ day, ffaPct: ffa, stockMt: stock, incomingUsedMt: incomingUsed, transferUsedMt: transferUsed });
+
     if (ffa <= target) {
-      return { feasible: true, days: day, finalFfaPct: ffa, incomingUsedMt: incomingUsed, transferUsedMt: transferUsed };
+      return { feasible: true, days: day, finalFfaPct: ffa, incomingUsedMt: incomingUsed, transferUsedMt: transferUsed, trace };
     }
   }
 
-  return { feasible: false, days: null, finalFfaPct: ffa, incomingUsedMt: incomingUsed, transferUsedMt: transferUsed };
+  return { feasible: false, days: null, finalFfaPct: ffa, incomingUsedMt: incomingUsed, transferUsedMt: transferUsed, trace };
 }
 
 export type HoldVsDespatch = {
@@ -96,6 +116,17 @@ export type HoldVsDespatch = {
   holdPenaltyRm: number;
   savingsRm: number;
   recommendation: "hold" | "despatchNow";
+  /** The cheapest day to despatch found anywhere in the hold trace — 0 means
+   *  despatch now. This may land on a day the tank is STILL over the good
+   *  FFA limit but has moved into a cheaper penalty band; it is not the same
+   *  thing as `hold.days` (the day it becomes fully compliant), which can be
+   *  null even when a genuinely cheaper partial hold exists. */
+  bestDay: number;
+  bestDayFfaPct: number;
+  bestDayPenaltyRm: number;
+  bestDayIncomingMt: number;
+  bestDayTransferMt: number;
+  bestDayFullyCompliant: boolean;
 };
 
 export function compareHoldVsDespatch(
@@ -122,16 +153,24 @@ export function compareHoldVsDespatch(
     30,
     deadStockMt,
   );
-  // Only a *feasible* hold (tank actually reaches the good FFA limit in
-  // time) can ever show savings. An infeasible hold must show zero savings
-  // even if the simulation happened to end just above the limit but below
-  // the buyer's lowest penalty band threshold — that band gap is real
-  // (nothing charged there) but the tank is still non-compliant, so citing
-  // "savings" would be presenting a number the plan never actually achieves.
-  const holdPenaltyRm = hold.feasible ? 0 : despatchNowPenaltyRm;
-  const savingsRm = hold.feasible ? Math.max(0, despatchNowPenaltyRm - holdPenaltyRm) : 0;
-  const recommendation: "hold" | "despatchNow" =
-    hold.feasible && savingsRm > 0 ? "hold" : "despatchNow";
+
+  // Walk the full day-by-day trace — not just whether the tank eventually
+  // becomes fully compliant — so a hold that only moves the tank into a
+  // CHEAPER penalty band (without curing it outright) still gets credit.
+  // Day 0 (despatch now) always starts as the baseline, so "hold" only wins
+  // when some later day is genuinely cheaper.
+  let best = { ...hold.trace[0], penaltyRm: despatchNowPenaltyRm };
+  for (const point of hold.trace) {
+    const penaltyRm = calcPenaltyExposure(point.ffaPct, point.stockMt, bands).totalRm;
+    if (penaltyRm < best.penaltyRm - 0.01) {
+      best = { ...point, penaltyRm };
+    }
+  }
+
+  const bestDay = best.day;
+  const bestDayPenaltyRm = best.penaltyRm;
+  const savingsRm = Math.max(0, despatchNowPenaltyRm - bestDayPenaltyRm);
+  const recommendation: "hold" | "despatchNow" = bestDay > 0 && savingsRm > 0.01 ? "hold" : "despatchNow";
 
   return {
     tankName: tank.name,
@@ -140,9 +179,15 @@ export function compareHoldVsDespatch(
     despatchNowPenaltyRm,
     despatchNowRmPerMt: despatchNowExposure.rmPerMt,
     hold,
-    holdPenaltyRm,
+    holdPenaltyRm: bestDayPenaltyRm,
     savingsRm,
     recommendation,
+    bestDay,
+    bestDayFfaPct: best.ffaPct,
+    bestDayPenaltyRm,
+    bestDayIncomingMt: best.incomingUsedMt,
+    bestDayTransferMt: best.transferUsedMt,
+    bestDayFullyCompliant: best.ffaPct <= target,
   };
 }
 

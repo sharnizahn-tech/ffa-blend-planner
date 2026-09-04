@@ -309,6 +309,8 @@ export const translations = {
       despatchNow: "Despatch now",
       holdRecommendation: (days: number) =>
         `Hold ${days} day${days === 1 ? "" : "s"}, then despatch penalty-free`,
+      holdPartialRecommendation: (days: number, ffa: string) =>
+        `Hold ${days} day${days === 1 ? "" : "s"} — drops to ${ffa}% FFA, still above the limit but into a cheaper penalty band`,
       despatchNowRecommendation: "No feasible blend-down in time — despatch now and accept the penalty",
       despatchNowPenalty: "Penalty if despatched now",
       savingsIfHold: "Saved by holding",
@@ -330,8 +332,12 @@ export const translations = {
           ? "Ready to dispatch now."
           : `Ready to dispatch after ${days} day${days === 1 ? "" : "s"} of transfers.`,
       notFeasible: "Not feasible within 30 days with the current tanks and transfer rate.",
+      partialProgress: (days: number) =>
+        `Blending gets partway there over ${days} day${days === 1 ? "" : "s"}, but doesn't reach the good FFA limit within 30 days with the current tanks and transfer rate.`,
       reasonNoSpareCapacity: "The high-FFA tank has no spare capacity to receive transferred stock.",
       reasonNoLowFfaSource: "No lower-FFA tank is available to transfer in.",
+      reasonSourceExhausted:
+        "The low-FFA tank's usable stock (above its dead-stock reserve) ran out partway through — see how far it got below.",
       reasonMaxDaysExceeded: "Even with continuous transfers, this doesn't reach the limit within 30 days.",
       stepsTitle: "Transfer schedule",
       step: (day: number, from: string, to: string, mt: string, ffa: string) =>
@@ -412,6 +418,17 @@ export const translations = {
         `What to do about it: hold and blend it down — move ${n(info.transferMt, 0)} MT from ${info.dilutionTank}${
           info.incomingMt > 0.5 ? ` and let in ${n(info.incomingMt, 0)} MT of incoming CPO` : ""
         } over ${info.days} day${info.days === 1 ? "" : "s"} to bring it to ${n(info.finalFfaPct, 2)}% FFA — within the good FFA limit. That avoids RM ${n(info.rm, 0)} in penalty versus despatching it today.`,
+      followUpHoldPartial: (info: {
+        days: number;
+        transferMt: number;
+        dilutionTank: string;
+        incomingMt: number;
+        finalFfaPct: number;
+        rm: number;
+      }) =>
+        `What to do about it: hold and blend it down for ${info.days} day${info.days === 1 ? "" : "s"} — move ${n(info.transferMt, 0)} MT from ${info.dilutionTank}${
+          info.incomingMt > 0.5 ? ` and let in ${n(info.incomingMt, 0)} MT of incoming CPO` : ""
+        } to bring it to ${n(info.finalFfaPct, 2)}% FFA. That's still above the good FFA limit, but it drops into a cheaper penalty band, saving RM ${n(info.rm, 0)} versus despatching it as-is today — keep blending toward full compliance if there's time before the tanker arrives.`,
       followUpNoProfile:
         "Set up a buyer penalty profile on the Despatch tab to get a concrete despatch-now-vs-hold recommendation for this tank.",
       applySingle: "Route into this tank",
@@ -767,6 +784,8 @@ export const translations = {
       hold: "Tahan & blend",
       despatchNow: "Despatch sekarang",
       holdRecommendation: (days: number) => `Tahan ${days} hari, kemudian despatch tanpa penalti`,
+      holdPartialRecommendation: (days: number, ffa: string) =>
+        `Tahan ${days} hari — turun ke ${ffa}% FFA, masih melebihi had tetapi masuk band penalti lebih murah`,
       despatchNowRecommendation: "Tiada blend munasabah dalam masa — despatch sekarang dan terima penalti",
       despatchNowPenalty: "Penalti jika didespatch sekarang",
       savingsIfHold: "Jimat dengan menahan",
@@ -786,8 +805,12 @@ export const translations = {
       readyAfter: (days: number) =>
         days === 0 ? "Sedia untuk despatch sekarang." : `Sedia untuk despatch selepas ${days} hari pemindahan.`,
       notFeasible: "Tidak munasabah dalam 30 hari dengan tangki dan kadar pemindahan semasa.",
+      partialProgress: (days: number) =>
+        `Blending memberi kemajuan separuh jalan selama ${days} hari, tetapi tidak mencapai had FFA baik dalam 30 hari dengan tangki dan kadar pemindahan semasa.`,
       reasonNoSpareCapacity: "Tangki FFA tinggi tiada ruang kosong untuk terima stok dipindah.",
       reasonNoLowFfaSource: "Tiada tangki FFA lebih rendah available untuk dipindah.",
+      reasonSourceExhausted:
+        "Stok boleh guna tangki FFA rendah (di atas rizab stok mati) habis separuh jalan — lihat sejauh mana ia sampai di bawah.",
       reasonMaxDaysExceeded: "Walaupun pemindahan berterusan, ini tidak mencapai had dalam 30 hari.",
       stepsTitle: "Jadual pemindahan",
       step: (day: number, from: string, to: string, mt: string, ffa: string) =>
@@ -868,6 +891,17 @@ export const translations = {
         `Apa nak buat: tahan dan blend turunkan — pindah ${n(info.transferMt, 0)} MT dari ${info.dilutionTank}${
           info.incomingMt > 0.5 ? ` dan biarkan masuk ${n(info.incomingMt, 0)} MT CPO masuk` : ""
         } selama ${info.days} hari untuk turunkannya ke ${n(info.finalFfaPct, 2)}% FFA — dalam had FFA baik. Ini jimat RM ${n(info.rm, 0)} penalti berbanding despatch hari ini.`,
+      followUpHoldPartial: (info: {
+        days: number;
+        transferMt: number;
+        dilutionTank: string;
+        incomingMt: number;
+        finalFfaPct: number;
+        rm: number;
+      }) =>
+        `Apa nak buat: tahan dan blend turunkan selama ${info.days} hari — pindah ${n(info.transferMt, 0)} MT dari ${info.dilutionTank}${
+          info.incomingMt > 0.5 ? ` dan biarkan masuk ${n(info.incomingMt, 0)} MT CPO masuk` : ""
+        } untuk turunkannya ke ${n(info.finalFfaPct, 2)}% FFA. Ini masih melebihi had FFA baik, tetapi masuk band penalti lebih murah, menjimatkan RM ${n(info.rm, 0)} berbanding despatch hari ini seadanya — teruskan blending ke arah pematuhan penuh jika ada masa sebelum tangki dimuatkan.`,
       followUpNoProfile:
         "Tetapkan profil penalti pembeli di tab Despatch untuk dapatkan cadangan despatch-vs-tahan yang konkrit untuk tangki ini.",
       applySingle: "Alirkan ke tangki ini",
