@@ -93,6 +93,18 @@ export const translations = {
       expandTank: (name: string) => `Expand ${name}`,
       collapseTank: (name: string) => `Collapse ${name}`,
     },
+    setup: {
+      title: "Let's set up your mill",
+      subtitle:
+        "Enter your storage tanks — name, capacity, and today's stock and FFA reading for each. You can add, remove, or edit these anytime after.",
+      tankLabel: (n: number) => `Tank ${n}`,
+      capacityLabel: "Capacity (MT)",
+      stockLabel: "Current stock (MT)",
+      ffaLabel: "Current FFA (%)",
+      addTank: "+ Add another tank",
+      finish: "Get started",
+      needsName: "Every tank needs a name before you can continue.",
+    },
     alerts: {
       overflowTitle: "Tank overflow detected",
       overflowText:
@@ -105,8 +117,8 @@ export const translations = {
       safeAllocation: "A safe allocation is available",
       limitNotAchievable: "Good FFA limit cannot be met for all tanks",
       consolidateTitle: (tank: string) => `Consolidate into ${tank}, then blend it down`,
-      consolidateBasis:
-        "Incoming FFA is above 5% — this batch goes to the highest-FFA tank on purpose, then gets diluted back down separately. See the blend-down plan below.",
+      consolidateBasis: (target: string) =>
+        `Incoming FFA is above your ${target}% good FFA limit — this batch goes to the highest-FFA tank on purpose, then gets diluted back down separately. See the blend-down plan below.`,
       planBasis:
         "Based on tank capacity, current stock, and the good FFA limit (lower FFA is better; 4.8% is the maximum for good quality).",
       recommendedAllocation: "Recommended allocation",
@@ -338,7 +350,7 @@ export const translations = {
     },
     routingStrategy: {
       title: "Allocation strategy",
-      subtitle: "Compare routing everything into one tank against splitting the incoming flow across several.",
+      subtitle: "Where today's incoming CPO should go, based on your production forecast.",
       singleLabel: "Single tank (simple to execute)",
       splitLabel: "Split across tanks (current method)",
       singleHint: "One valve, one number to record — no flow-splitting needed.",
@@ -379,8 +391,8 @@ export const translations = {
       meetsLimit: "Stays within limit",
       overLimit: "Over limit",
       noRoom: "No room left",
-      consolidateRule: (tank: string) =>
-        `Incoming FFA is above 5% — send the whole batch straight into ${tank}, which is already the highest-FFA tank. Keeping the bad CPO in one place is easier to record and fix than nudging every tank's FFA up a little.`,
+      consolidateRule: (tank: string, target: string) =>
+        `Incoming FFA is above your ${target}% good FFA limit — send the whole batch straight into ${tank}, which is already the highest-FFA tank. Keeping the bad CPO in one place is easier to record and fix than nudging every tank's FFA up a little.`,
       consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
         `Blend-down plan: move about ${moveMt} MT from ${dilutionTank} (plus ongoing incoming CPO) over ${days} day${days === 1 ? "" : "s"} to bring it down to ${finalFfa}% FFA.`,
       consolidateBlendInfeasible:
@@ -394,6 +406,12 @@ export const translations = {
       alreadyCompliant: (ffa: string) =>
         `Already within limit after this batch — lands at ${ffa}% FFA, no blending needed before despatch.`,
       unnamedTank: "another tank",
+      aiQuestionSingle: (tank: string) =>
+        `Should today's incoming CPO be routed into ${tank} as a single tank, or split across tanks instead? Give a direct 2-3 sentence recommendation using the provided plan data — say which one and why.`,
+      aiQuestionSplit:
+        "Should today's incoming CPO be split across tanks, or routed into a single tank instead? Give a direct 2-3 sentence recommendation using the provided plan data — say which one and why.",
+      aiThinking: "Working out the best move for today's batch…",
+      aiFallbackNote: "AI explanation unavailable right now — showing the calculated recommendation instead.",
     },
     transferCalc: {
       title: "Transfer calculator",
@@ -502,6 +520,18 @@ export const translations = {
       expandTank: (name: string) => `Kembang ${name}`,
       collapseTank: (name: string) => `Runtuhkan ${name}`,
     },
+    setup: {
+      title: "Mari sediakan kilang anda",
+      subtitle:
+        "Masukkan tangki simpanan anda — nama, kapasiti, dan bacaan stok serta FFA hari ini untuk setiap satu. Anda boleh tambah, buang, atau edit ini bila-bila masa selepas ini.",
+      tankLabel: (n: number) => `Tangki ${n}`,
+      capacityLabel: "Kapasiti (MT)",
+      stockLabel: "Stok semasa (MT)",
+      ffaLabel: "FFA semasa (%)",
+      addTank: "+ Tambah tangki lain",
+      finish: "Mula",
+      needsName: "Setiap tangki perlukan nama sebelum anda boleh teruskan.",
+    },
     alerts: {
       overflowTitle: "Limpahan tangki dikesan",
       overflowText:
@@ -514,8 +544,8 @@ export const translations = {
       safeAllocation: "Peruntukan selamat tersedia",
       limitNotAchievable: "Had FFA baik tidak boleh dicapai untuk semua tangki",
       consolidateTitle: (tank: string) => `Gabungkan ke ${tank}, kemudian cairkan`,
-      consolidateBasis:
-        "FFA masuk melebihi 5% — kelompok ini sengaja pergi ke tangki FFA tertinggi, kemudian dicairkan semula secara berasingan. Lihat pelan pencairan di bawah.",
+      consolidateBasis: (target: string) =>
+        `FFA masuk melebihi had FFA baik ${target}% anda — kelompok ini sengaja pergi ke tangki FFA tertinggi, kemudian dicairkan semula secara berasingan. Lihat pelan pencairan di bawah.`,
       planBasis:
         "Berdasarkan kapasiti tangki, stok semasa, dan had FFA baik (FFA lebih rendah lebih baik; 4.8% ialah maksimum untuk kualiti baik).",
       recommendedAllocation: "Peruntukan disyorkan",
@@ -744,7 +774,7 @@ export const translations = {
     },
     routingStrategy: {
       title: "Strategi peruntukan",
-      subtitle: "Banding alirkan semua ke satu tangki dengan pisahkan aliran masuk merentasi beberapa tangki.",
+      subtitle: "Ke mana CPO masuk hari ini patut pergi, berdasarkan ramalan pengeluaran anda.",
       singleLabel: "Satu tangki (mudah dilaksana)",
       splitLabel: "Pisah merentasi tangki (kaedah semasa)",
       singleHint: "Satu injap, satu nombor untuk direkod — tiada pemisahan aliran diperlukan.",
@@ -785,8 +815,8 @@ export const translations = {
       meetsLimit: "Kekal dalam had",
       overLimit: "Melebihi had",
       noRoom: "Tiada ruang lagi",
-      consolidateRule: (tank: string) =>
-        `FFA masuk melebihi 5% — alirkan semua terus ke ${tank}, yang sudah pun tangki FFA tertinggi. Mengekalkan CPO buruk di satu tempat lebih mudah direkod dan dibaiki berbanding menaikkan sedikit FFA setiap tangki.`,
+      consolidateRule: (tank: string, target: string) =>
+        `FFA masuk melebihi had FFA baik ${target}% anda — alirkan semua terus ke ${tank}, yang sudah pun tangki FFA tertinggi. Mengekalkan CPO buruk di satu tempat lebih mudah direkod dan dibaiki berbanding menaikkan sedikit FFA setiap tangki.`,
       consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
         `Pelan pencairan: pindah lebih kurang ${moveMt} MT dari ${dilutionTank} (bersama CPO masuk berterusan) selama ${days} hari untuk turunkannya ke ${finalFfa}% FFA.`,
       consolidateBlendInfeasible:
@@ -800,6 +830,12 @@ export const translations = {
       alreadyCompliant: (ffa: string) =>
         `Sudah dalam had selepas kelompok ini — berada pada ${ffa}% FFA, tiada pencairan diperlukan sebelum despatch.`,
       unnamedTank: "tangki lain",
+      aiQuestionSingle: (tank: string) =>
+        `Patutkah CPO masuk hari ini dialirkan ke ${tank} sebagai satu tangki, atau dipisahkan merentasi tangki? Berikan cadangan langsung 2-3 ayat menggunakan data pelan yang diberikan — nyatakan pilihan yang mana dan sebabnya.`,
+      aiQuestionSplit:
+        "Patutkah CPO masuk hari ini dipisahkan merentasi tangki, atau dialirkan ke satu tangki sahaja? Berikan cadangan langsung 2-3 ayat menggunakan data pelan yang diberikan — nyatakan pilihan yang mana dan sebabnya.",
+      aiThinking: "Mengira langkah terbaik untuk kelompok hari ini…",
+      aiFallbackNote: "Penjelasan AI tidak tersedia sekarang — menunjukkan cadangan yang dikira sebagai gantinya.",
     },
     transferCalc: {
       title: "Kalkulator pemindahan",

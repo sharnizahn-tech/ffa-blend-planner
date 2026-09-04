@@ -72,6 +72,10 @@ export const millStateInputSchema = z.object({
   manualMaxTransferPerDayMt: z.number().finite().nonnegative(),
   autoTransfer: z.boolean(),
   lang: z.enum(["en", "bm"]),
+  // Optional (not required) so mills saved before this field existed still
+  // validate — missing/undefined is treated as "already set up" wherever
+  // this is read, never as "needs onboarding".
+  setupComplete: z.boolean().optional(),
 });
 
 export type MillTank = { name: string; capacity: number; stock: number; ffa: number };
@@ -112,6 +116,7 @@ export function defaultMillState(): MillState {
     manualMaxTransferPerDayMt: DEFAULT_MAX_TRANSFER_PER_DAY_MT,
     autoTransfer: true,
     lang: "en",
+    setupComplete: false,
     updatedAt: new Date().toISOString(),
   };
 }

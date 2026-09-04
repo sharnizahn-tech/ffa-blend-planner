@@ -228,13 +228,6 @@ function findBestSingleTankOption(
   return options[0] ?? null;
 }
 
-/** Above this incoming FFA, don't spread the batch thin across tanks — send
- *  it straight into whichever tank is already the highest FFA, then plan a
- *  separate blend-down using a good-FFA tank as the diluter. Consolidating
- *  keeps the damage in one place (and easy to record) instead of nudging
- *  every tank's FFA up a little. */
-const HIGH_INCOMING_FFA_THRESHOLD = 5;
-
 /** Index of the tank with the highest CURRENT FFA reading (before today's
  *  incoming CPO is added), or -1 if there are no tanks. */
 function findHighestFfaTankIndex(tanks: Tank[]): number {
@@ -437,6 +430,13 @@ export default function Home() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiCooldown, setAiCooldown] = useState(0);
   const [aiQuestion, setAiQuestion] = useState("");
+  // Auto-fired AI explanation for Allocation strategy — separate from the
+  // manual "Ask AI" chat above (own loading/error state, never touches
+  // aiMessages/aiCooldown) so the two features can't interfere with each
+  // other.
+  const [aiAllocationSuggestion, setAiAllocationSuggestion] = useState<string | null>(null);
+  const [aiAllocationLoading, setAiAllocationLoading] = useState(false);
+  const [aiAllocationError, setAiAllocationError] = useState(false);
   const [lang, setLang] = useState<Lang>("en");
   const [tankerLoadMt, setTankerLoadMt] = useState(38);
 
@@ -454,6 +454,10 @@ export default function Home() {
   ]);
   const [manualMaxTransferPerDayMt, setMaxTransferPerDayMtState] = useState(DEFAULT_MAX_TRANSFER_PER_DAY_MT);
   const [autoTransfer, setAutoTransfer] = useState(true);
+  // Whether THIS mill has been through first-time tank setup. Defaults to
+  // true so an existing mill (or one still loading) never flashes the
+  // onboarding screen — only a freshly created mill starts false.
+  const [setupComplete, setSetupComplete] = useState(true);
   const [batchSelected, setBatchSelected] = useState<Set<number>>(
     () => new Set(initialTanks.map((_, i) => i)),
   );
@@ -522,6 +526,7 @@ export default function Home() {
         setMaxTransferPerDayMtState(state.manualMaxTransferPerDayMt);
         setAutoTransfer(state.autoTransfer);
         setLang(state.lang);
+        setSetupComplete(state.setupComplete ?? true);
         // Marks hydration complete on the NEXT tick, after all the setters
         // above have committed — otherwise the save effect (which watches
         // these same fields) would fire once with stale pre-load values
@@ -568,6 +573,7 @@ export default function Home() {
       manualMaxTransferPerDayMt,
       autoTransfer,
       lang,
+      setupComplete,
     };
     const timer = setTimeout(() => {
       fetch(`/api/mills/${millId}`, {
@@ -604,6 +610,7 @@ export default function Home() {
     manualMaxTransferPerDayMt,
     autoTransfer,
     lang,
+    setupComplete,
   ]);
 
   const estimatedFFB = (millCapacity * hours * utilisation) / 100;
@@ -617,13 +624,16 @@ export default function Home() {
     [tanks, incomingCPO, incomingFFA, target],
   );
   const best = topPlans[0] ?? null;
-  // Consolidation rule: once incoming FFA is above the threshold, the plan is
-  // to send the whole batch into the tank that is ALREADY the highest FFA
-  // (deliberately, not by accident) and blend it down separately afterwards —
-  // rather than let the generic scorer nudge every tank's FFA up a little.
+  // Consolidation rule: once incoming FFA is above THIS MILL'S OWN good FFA
+  // limit (target) — not a fixed number — the plan is to send the whole
+  // batch into the tank that is ALREADY the highest FFA (deliberately, not
+  // by accident) and blend it down separately afterwards, rather than let
+  // the generic scorer nudge every tank's FFA up a little. Tied to target
+  // because "high FFA" only means anything relative to the limit a mill has
+  // actually set for itself.
   const highFfaTankIndex = useMemo(() => findHighestFfaTankIndex(tanks), [tanks]);
   const consolidateRuleApplies =
-    incomingFFA > HIGH_INCOMING_FFA_THRESHOLD &&
+    incomingFFA > target &&
     highFfaTankIndex >= 0 &&
     tanks[highFfaTankIndex].ffa > target;
   const consolidatePlan = useMemo(
@@ -642,6 +652,20 @@ export default function Home() {
   );
   const bestSingleTank = consolidateRuleApplies ? consolidatePlan : genericSingleTank;
   const forceSplitFallback = consolidateRuleApplies && consolidateOverflow;
+  // Which ONE option Allocation strategy actually recommends — a forced
+  // choice when the consolidate rule applies (or is blocked by capacity),
+  // otherwise whichever scores better. Computed once here so the card and
+  // the auto-fired AI explanation below always agree on the same answer.
+  const singleIndexForRecommendation = bestSingleTank?.allocation.findIndex((v) => v === 100) ?? -1;
+  const recommendSingle =
+    !best || !bestSingleTank
+      ? true
+      : forceSplitFallback
+        ? false
+        : consolidateRuleApplies
+          ? true
+          : bestSingleTank.results.every((r) => r.finalFFA <= target) ||
+            (!best.results.every((r) => r.finalFFA <= target) && bestSingleTank.score <= best.score);
   const allocationTotal = allocation.reduce((a, b) => a + b, 0);
   const currentStock = tanks.reduce((s, t) => s + t.stock, 0);
   const highFFAStock = tanks.filter((t) => t.ffa > target).reduce((s, t) => s + t.stock, 0);
@@ -862,19 +886,15 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [aiCooldown]);
 
-  const fetchAiOpinion = async (opts: { deepAnalysis?: boolean } = {}) => {
-    if (aiLoading || aiCooldown > 0) return;
-    const question = aiQuestion.trim();
-    const historyForRequest = aiMessages.map((m) => ({ role: m.role, content: m.content }));
-    if (question) {
-      setAiMessages((prev) => [...prev, { role: "user", content: question }]);
-    }
-    setAiQuestion("");
-    setAiLoading(true);
-    setAiError(null);
-    setAiCooldown(60);
-    try {
-      const payload: AdviseRequest = {
+  /** Everything the AI advisor needs to reason about the current situation —
+   *  shared by the manual "Ask AI" chat and the auto-fired Allocation
+   *  strategy explanation below, so the two never see a different picture. */
+  const buildAdvisePayload = (
+    question: string | undefined,
+    history: { role: "user" | "assistant"; content: string }[],
+    deepAnalysis?: boolean,
+  ): AdviseRequest => {
+    return {
         production: {
           millCapacityMtHr: millCapacity,
           operatingHours: hours,
@@ -961,12 +981,26 @@ export default function Home() {
               })),
             }
           : null,
-        conversationHistory: historyForRequest,
+        conversationHistory: history,
         userQuestion: question || undefined,
         language: lang,
-        deepAnalysis: opts.deepAnalysis,
+        deepAnalysis,
       };
+  };
 
+  const fetchAiOpinion = async (opts: { deepAnalysis?: boolean } = {}) => {
+    if (aiLoading || aiCooldown > 0) return;
+    const question = aiQuestion.trim();
+    const historyForRequest = aiMessages.map((m) => ({ role: m.role, content: m.content }));
+    if (question) {
+      setAiMessages((prev) => [...prev, { role: "user", content: question }]);
+    }
+    setAiQuestion("");
+    setAiLoading(true);
+    setAiError(null);
+    setAiCooldown(60);
+    try {
+      const payload = buildAdvisePayload(question, historyForRequest, opts.deepAnalysis);
       const response = await fetch("/api/advise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -997,6 +1031,50 @@ export default function Home() {
       setAiLoading(false);
     }
   };
+
+  // Auto-fire an AI explanation for the Allocation strategy recommendation
+  // whenever the underlying situation actually changes — debounced so
+  // typing in the production forecast doesn't spam the AI service. The
+  // deterministic recommendation (recommendSingle, recommendationText) is
+  // computed instantly either way; this only replaces the wording shown
+  // with the AI's explanation once it's back, and falls back cleanly if the
+  // AI call fails.
+  useEffect(() => {
+    if (!best || !bestSingleTank || incomingCPO <= 0) {
+      setAiAllocationSuggestion(null);
+      setAiAllocationLoading(false);
+      setAiAllocationError(false);
+      return;
+    }
+    setAiAllocationLoading(true);
+    setAiAllocationError(false);
+    const timer = setTimeout(() => {
+      const singleTank = tanks[singleIndexForRecommendation];
+      const question = recommendSingle
+        ? copy.routingStrategy.aiQuestionSingle(singleTank?.name ?? "")
+        : copy.routingStrategy.aiQuestionSplit;
+      const payload = buildAdvisePayload(question, [], false);
+      fetch("/api/advise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(roundDeep(payload, 2)),
+      })
+        .then(async (res) => {
+          const data = (await res.json()) as { opinion?: string; error?: string; source?: "openai" | "offline" };
+          if (!res.ok || !data.opinion || data.source === "offline") {
+            throw new Error(data.error ?? "unavailable");
+          }
+          setAiAllocationSuggestion(data.opinion);
+        })
+        .catch(() => {
+          setAiAllocationError(true);
+          setAiAllocationSuggestion(null);
+        })
+        .finally(() => setAiAllocationLoading(false));
+    }, 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tanks, incomingCPO, incomingFFA, target, recommendSingle, singleIndexForRecommendation, lang]);
 
   const updateTank = (i: number, key: keyof Tank, value: string | number) =>
     setTanks((p) =>
@@ -1245,6 +1323,10 @@ export default function Home() {
         bestSingleTank={bestSingleTank}
         consolidateRuleApplies={consolidateRuleApplies}
         forceSplitFallback={forceSplitFallback}
+        recommendSingle={recommendSingle}
+        aiSuggestion={aiAllocationSuggestion}
+        aiLoading={aiAllocationLoading}
+        aiError={aiAllocationError}
         onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
         onApplySplit={() => best && applyPlan(best)}
       />
@@ -1397,6 +1479,19 @@ export default function Home() {
           </button>
         </div>
       </main>
+    );
+  }
+
+  if (!setupComplete) {
+    return (
+      <MillSetupScreen
+        copy={copy}
+        tanks={tanks}
+        onUpdateTank={updateTank}
+        onAddTank={addTank}
+        onRemoveTank={removeTank}
+        onFinish={() => setSetupComplete(true)}
+      />
     );
   }
 
@@ -1894,6 +1989,126 @@ function NullableNumericInput({
       }}
       className={className}
     />
+  );
+}
+
+/** First-time setup for a brand-new mill — replaces the demo tank data
+ *  (BST 1 / BST 2 with pre-filled numbers) with the mill's actual tanks
+ *  before the real app is shown. Reuses the same tanks/allocation state and
+ *  add/remove logic as the normal Production tab, so nothing here is a
+ *  separate draft that needs merging in later. */
+function MillSetupScreen({
+  copy,
+  tanks,
+  onUpdateTank,
+  onAddTank,
+  onRemoveTank,
+  onFinish,
+}: {
+  copy: Copy;
+  tanks: Tank[];
+  onUpdateTank: (index: number, key: keyof Tank, value: string | number) => void;
+  onAddTank: () => void;
+  onRemoveTank: (index: number) => void;
+  onFinish: () => void;
+}) {
+  const [touched, setTouched] = useState(false);
+  const allNamed = tanks.every((t) => t.name.trim().length > 0);
+
+  return (
+    <main className="min-h-screen bg-[#f4f6f2] px-4 py-10 text-[#17231d] sm:px-6">
+      <div className="mx-auto max-w-2xl">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.45)]">
+          <Droplets size={22} />
+        </div>
+        <h1 className="mt-4 text-2xl font-bold">{copy.setup.title}</h1>
+        <p className="mt-2 text-sm text-[#58665e]">{copy.setup.subtitle}</p>
+
+        <div className="mt-6 space-y-3">
+          {tanks.map((tank, i) => (
+            <div key={i} className="rounded-2xl border border-[#dfe5dc] bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-[#6c7971]">
+                  {copy.setup.tankLabel(i + 1)}
+                </span>
+                {tanks.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveTank(i)}
+                    className="inline-flex items-center gap-1 rounded-full border border-[#f0cfb9] bg-[#fff8f3] px-2.5 py-1 text-[11px] font-bold text-[#a4342c]"
+                  >
+                    <Trash2 size={12} />
+                    {copy.tanks.remove(tank.name)}
+                  </button>
+                )}
+              </div>
+              <div className="mt-3">
+                <TankNameInput
+                  value={tank.name}
+                  onChange={(v) => onUpdateTank(i, "name", v)}
+                  placeholder={copy.tanks.namePlaceholder}
+                  ariaLabel={copy.tanks.name}
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="text-xs font-bold text-[#6c7971]">{copy.setup.capacityLabel}</span>
+                  <NumericInput
+                    label={copy.setup.capacityLabel}
+                    value={tank.capacity}
+                    onChange={(v) => onUpdateTank(i, "capacity", v)}
+                    className="mt-1 w-full rounded-xl border border-[#dfe5dc] bg-white px-3 py-2.5 text-sm font-semibold"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-bold text-[#6c7971]">{copy.setup.stockLabel}</span>
+                  <NumericInput
+                    label={copy.setup.stockLabel}
+                    value={tank.stock}
+                    onChange={(v) => onUpdateTank(i, "stock", v)}
+                    className="mt-1 w-full rounded-xl border border-[#dfe5dc] bg-white px-3 py-2.5 text-sm font-semibold"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-bold text-[#6c7971]">{copy.setup.ffaLabel}</span>
+                  <NumericInput
+                    label={copy.setup.ffaLabel}
+                    value={tank.ffa}
+                    onChange={(v) => onUpdateTank(i, "ffa", v)}
+                    className="mt-1 w-full rounded-xl border border-[#dfe5dc] bg-white px-3 py-2.5 text-sm font-semibold"
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onAddTank}
+          className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30]"
+        >
+          <Plus size={16} />
+          {copy.setup.addTank}
+        </button>
+
+        {touched && !allNamed && (
+          <p className="mt-3 text-sm font-semibold text-[#a4342c]">{copy.setup.needsName}</p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            setTouched(true);
+            if (allNamed) onFinish();
+          }}
+          className="btn-touch mt-6 w-full bg-[#00713a] text-base text-white"
+        >
+          <CheckCircle2 size={18} />
+          {copy.setup.finish}
+        </button>
+      </div>
+    </main>
   );
 }
 
@@ -2756,6 +2971,10 @@ function RoutingStrategyCard({
   bestSingleTank,
   consolidateRuleApplies,
   forceSplitFallback,
+  recommendSingle,
+  aiSuggestion,
+  aiLoading,
+  aiError,
   onApplySingle,
   onApplySplit,
 }: {
@@ -2767,6 +2986,10 @@ function RoutingStrategyCard({
   bestSingleTank: BlendPlan | null;
   consolidateRuleApplies: boolean;
   forceSplitFallback: boolean;
+  recommendSingle: boolean;
+  aiSuggestion: string | null;
+  aiLoading: boolean;
+  aiError: boolean;
   onApplySingle: () => void;
   onApplySplit: () => void;
 }) {
@@ -2778,29 +3001,26 @@ function RoutingStrategyCard({
   const singleMeets = bestSingleTank.results.every((r) => r.finalFFA <= target);
   const splitMeets = best.results.every((r) => r.finalFFA <= target);
 
-  // The "incoming FFA above 5% → consolidate into the already-high tank"
-  // rule is a forced choice, not a score comparison — it only backs off to
-  // the generic scored comparison when that rule doesn't apply at all. If
-  // the high tank has no room for today's batch, split is the only option.
-  const recommendSingle = forceSplitFallback
-    ? false
-    : consolidateRuleApplies
-      ? true
-      : singleMeets || (!splitMeets && bestSingleTank.score <= best.score);
-
-  const recommendationText = forceSplitFallback
+  const calculatedText = forceSplitFallback
     ? copy.routingStrategy.forceSplitText(singleTank.name)
     : consolidateRuleApplies
-      ? copy.routingStrategy.consolidateRule(singleTank.name)
+      ? copy.routingStrategy.consolidateRule(singleTank.name, n(target, 2))
       : singleMeets
         ? copy.routingStrategy.recommendSingle(singleTank.name)
         : splitMeets
           ? copy.routingStrategy.recommendSplitOverSingle(singleTank.name, n(singleResult.finalFFA, 2))
           : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
+  // Prefer the AI's written explanation once it's back; the calculated text
+  // (always correct, always instant) is the fallback while it's loading, if
+  // it failed, or before the first response ever arrives.
+  const recommendationText = aiSuggestion ?? calculatedText;
 
-  // The full blend-down / penalty-price plan lives in Smart Recommendation
-  // once a route is actually picked, not here — this card is just the
-  // before-you-choose comparison, kept short on purpose.
+  // One decisive recommendation, not a side-by-side comparison to pick from —
+  // recommendSingle already says which route is correct for this situation
+  // (forced single-tank consolidation, forced split when there's no room, or
+  // whichever scores better in the ordinary case), so that's the only card
+  // shown. The split plan is still one click away via Smart Recommendation
+  // below if an engineer wants to override it.
   const singleBadge = singleResult.overflow
     ? copy.routingStrategy.noRoom
     : singleMeets
@@ -2808,73 +3028,72 @@ function RoutingStrategyCard({
       : copy.routingStrategy.overLimit;
   const singleBadgeOk = !singleResult.overflow && singleMeets;
 
+  const recommended = recommendSingle
+    ? {
+        label: copy.routingStrategy.singleLabel,
+        hint: copy.routingStrategy.singleHint,
+        detail: `${n(incomingCPO, 0)} MT → ${singleTank.name} · ${n(singleResult.finalFFA, 2)}% FFA`,
+        badge: singleBadge,
+        badgeOk: singleBadgeOk,
+        onApply: onApplySingle,
+        disabled: singleResult.overflow,
+        applyLabel: copy.routingStrategy.applySingle,
+      }
+    : {
+        label: copy.routingStrategy.splitLabel,
+        hint: copy.routingStrategy.splitHint,
+        detail: best.allocation
+          .map((pct, i) => (pct > 0 ? `${pct}%→${tanks[i].name}` : null))
+          .filter(Boolean)
+          .join(", "),
+        badge: splitMeets ? copy.routingStrategy.meetsLimit : copy.routingStrategy.overLimit,
+        badgeOk: splitMeets,
+        onApply: onApplySplit,
+        disabled: false,
+        applyLabel: copy.routingStrategy.applySplit,
+      };
+
   return (
     <Panel
       title={copy.routingStrategy.title}
       subtitle={copy.routingStrategy.subtitle}
       icon={<ArrowRightLeft size={19} />}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div
-          className={`rounded-xl border p-3.5 ${
-            recommendSingle ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
-          }`}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-bold text-[#173f30]">{copy.routingStrategy.singleLabel}</p>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              singleBadgeOk ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
-            }`}>
-              {singleBadge}
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-[#708078]">{copy.routingStrategy.singleHint}</p>
-          <p className="mt-2 text-sm text-[#3f4c46]">
-            {n(incomingCPO, 0)} MT → {singleTank.name} · {n(singleResult.finalFFA, 2)}% FFA
-          </p>
-          <button
-            type="button"
-            onClick={onApplySingle}
-            disabled={singleResult.overflow}
-            className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:cursor-not-allowed disabled:opacity-50"
+      <div className="rounded-xl border border-[#00b14f] bg-[#f6fae9] p-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-bold text-[#173f30]">{recommended.label}</p>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              recommended.badgeOk ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
+            }`}
           >
-            {copy.routingStrategy.applySingle}
-          </button>
+            {recommended.badge}
+          </span>
         </div>
-
-        <div
-          className={`rounded-xl border p-3.5 ${
-            !recommendSingle ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#dfe5dc] bg-[#f9fbf8]"
-          }`}
+        <p className="mt-1 text-xs text-[#708078]">{recommended.hint}</p>
+        <p className="mt-2 text-sm text-[#3f4c46]">{recommended.detail}</p>
+        <button
+          type="button"
+          onClick={recommended.onApply}
+          disabled={recommended.disabled}
+          className="btn-touch mt-3 w-full bg-[#00713a] text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-bold text-[#173f30]">{copy.routingStrategy.splitLabel}</p>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              splitMeets ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
-            }`}>
-              {splitMeets ? copy.routingStrategy.meetsLimit : copy.routingStrategy.overLimit}
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-[#708078]">{copy.routingStrategy.splitHint}</p>
-          <p className="mt-2 text-sm text-[#3f4c46]">
-            {best.allocation
-              .map((pct, i) => (pct > 0 ? `${pct}%→${tanks[i].name}` : null))
-              .filter(Boolean)
-              .join(", ")}
-          </p>
-          <button
-            type="button"
-            onClick={onApplySplit}
-            className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30]"
-          >
-            {copy.routingStrategy.applySplit}
-          </button>
-        </div>
+          {recommended.applyLabel}
+        </button>
       </div>
 
       <div className="mt-4 rounded-xl bg-[#f8faf7] p-3.5 text-sm leading-relaxed text-[#17231d]">
         {recommendationText}
       </div>
+      {aiLoading && !aiSuggestion && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-[#8a9690]">
+          <Loader2 size={12} className="animate-spin" />
+          {copy.routingStrategy.aiThinking}
+        </p>
+      )}
+      {aiError && (
+        <p className="mt-2 text-xs text-[#8a9690]">{copy.routingStrategy.aiFallbackNote}</p>
+      )}
     </Panel>
   );
 }
@@ -2996,7 +3215,7 @@ function SmartRecommendation({
                 : copy.plan.limitNotAchievable}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-[#c9dbd1]">
-            {useConsolidate ? copy.plan.consolidateBasis : copy.plan.planBasis}
+            {useConsolidate ? copy.plan.consolidateBasis(n(target, 2)) : copy.plan.planBasis}
           </p>
         </div>
       </div>
