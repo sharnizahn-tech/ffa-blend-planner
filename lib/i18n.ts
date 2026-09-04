@@ -410,6 +410,10 @@ export const translations = {
         `Should today's incoming CPO be routed into ${tank} as a single tank, or split across tanks instead? Give a direct 2-3 sentence recommendation using the provided plan data — say which one and why.`,
       aiQuestionSplit:
         "Should today's incoming CPO be split across tanks, or routed into a single tank instead? Give a direct 2-3 sentence recommendation using the provided plan data — say which one and why.",
+      aiQuestionConsolidate: (tank: string) =>
+        `Incoming FFA is above the good FFA limit, so the mill's policy is to route the whole batch into ${tank} — the tank that's already the highest FFA — on purpose, even though that leaves it over the limit, rather than spread the bad CPO thin across every tank. This is recommendedPlan. Explain in 2-3 sentences why this is the right call here (name the actual FFA/MT numbers), and what needs to happen next (blend it down before despatch).`,
+      aiQuestionForceSplit: (tank: string) =>
+        `${tank} — the tank that's already the highest FFA — has no spare capacity left for today's incoming batch, so consolidating into it isn't possible right now. This is why recommendedPlan splits the batch across tanks instead. Explain in 2-3 sentences why splitting is the only option here (name the actual capacity/FFA numbers).`,
       aiThinking: "Working out the best move for today's batch…",
       aiFallbackNote: "AI explanation unavailable right now — showing the calculated recommendation instead.",
     },
@@ -834,6 +838,10 @@ export const translations = {
         `Patutkah CPO masuk hari ini dialirkan ke ${tank} sebagai satu tangki, atau dipisahkan merentasi tangki? Berikan cadangan langsung 2-3 ayat menggunakan data pelan yang diberikan — nyatakan pilihan yang mana dan sebabnya.`,
       aiQuestionSplit:
         "Patutkah CPO masuk hari ini dipisahkan merentasi tangki, atau dialirkan ke satu tangki sahaja? Berikan cadangan langsung 2-3 ayat menggunakan data pelan yang diberikan — nyatakan pilihan yang mana dan sebabnya.",
+      aiQuestionConsolidate: (tank: string) =>
+        `FFA masuk melebihi had FFA baik, jadi polisi kilang ialah alirkan semua kelompok ke ${tank} — tangki yang sudah pun tertinggi FFA — dengan sengaja, walaupun ia meninggalkannya melebihi had, berbanding menyebarkan CPO buruk nipis ke setiap tangki. Ini ialah recommendedPlan. Terangkan dalam 2-3 ayat kenapa ini pilihan tepat di sini (nyatakan nombor FFA/MT sebenar), dan apa yang perlu berlaku seterusnya (cairkan sebelum despatch).`,
+      aiQuestionForceSplit: (tank: string) =>
+        `${tank} — tangki yang sudah pun tertinggi FFA — tiada kapasiti lagi untuk kelompok masuk hari ini, jadi menggabungkan ke situ tidak mungkin sekarang. Ini sebab recommendedPlan memisahkan kelompok merentasi tangki sebaliknya. Terangkan dalam 2-3 ayat kenapa pisahan satu-satunya pilihan di sini (nyatakan nombor kapasiti/FFA sebenar).`,
       aiThinking: "Mengira langkah terbaik untuk kelompok hari ini…",
       aiFallbackNote: "Penjelasan AI tidak tersedia sekarang — menunjukkan cadangan yang dikira sebagai gantinya.",
     },

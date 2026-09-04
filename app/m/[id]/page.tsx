@@ -893,7 +893,19 @@ export default function Home() {
     question: string | undefined,
     history: { role: "user" | "assistant"; content: string }[],
     deepAnalysis?: boolean,
+    // When given, this plan is sent as "the recommended plan" instead of
+    // `best` (the split-scored plan) — used for the Allocation strategy
+    // auto-suggestion so the AI is told the SAME thing the card is
+    // actually showing, and can't reason its way to a contradictory
+    // answer. `best` is still included as an alternative either way.
+    recommendedPlanOverride?: BlendPlan,
   ): AdviseRequest => {
+    const recommended = recommendedPlanOverride ?? best;
+    const alternatives = recommendedPlanOverride
+      ? [best, ...topPlans.slice(1)].filter(
+          (p): p is BlendPlan => !!p && !sameAllocation(p.allocation, recommendedPlanOverride.allocation),
+        )
+      : topPlans.slice(1);
     return {
         production: {
           millCapacityMtHr: millCapacity,
@@ -921,10 +933,10 @@ export default function Home() {
           utilisationPct: r.utilisation,
           overflow: r.overflow,
         })),
-        recommendedPlan: best ? planToAdvisePayload(best, 1, target, activeProfile?.bands) : null,
-        alternativePlans: topPlans
-          .slice(1)
-          .map((plan, i) => planToAdvisePayload(plan, i + 2, target, activeProfile?.bands)),
+        recommendedPlan: recommended ? planToAdvisePayload(recommended, 1, target, activeProfile?.bands) : null,
+        alternativePlans: alternatives.map((plan, i) =>
+          planToAdvisePayload(plan, i + 2, target, activeProfile?.bands),
+        ),
         despatch: {
           tankerLoadMt: tankerLoadMt,
           recommendedPlan: topDespatchPlans[0]
@@ -1050,10 +1062,22 @@ export default function Home() {
     setAiAllocationError(false);
     const timer = setTimeout(() => {
       const singleTank = tanks[singleIndexForRecommendation];
-      const question = recommendSingle
-        ? copy.routingStrategy.aiQuestionSingle(singleTank?.name ?? "")
-        : copy.routingStrategy.aiQuestionSplit;
-      const payload = buildAdvisePayload(question, [], false);
+      const question = forceSplitFallback
+        ? copy.routingStrategy.aiQuestionForceSplit(singleTank?.name ?? "")
+        : consolidateRuleApplies
+          ? copy.routingStrategy.aiQuestionConsolidate(singleTank?.name ?? "")
+          : recommendSingle
+            ? copy.routingStrategy.aiQuestionSingle(singleTank?.name ?? "")
+            : copy.routingStrategy.aiQuestionSplit;
+      // Tell the AI the SAME plan the card is actually showing as
+      // recommended — otherwise it reasons from the generic split-scored
+      // plan and can contradict the card it's meant to be explaining.
+      const payload = buildAdvisePayload(
+        question,
+        [],
+        false,
+        recommendSingle ? (bestSingleTank ?? undefined) : (best ?? undefined),
+      );
       fetch("/api/advise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
