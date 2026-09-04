@@ -349,10 +349,29 @@ export const translations = {
         `Recommended: split across tanks. Routing 100% into ${tank} alone would leave it at ${ffa}% FFA — over the limit. Splitting keeps every tank compliant, though it needs careful flow control to execute accurately.`,
       recommendSingleWithFollowUp: (tank: string, ffa: string) =>
         `Neither option keeps every tank compliant today. Routing 100% into ${tank} (ending at ${ffa}%) is simpler to execute — see below for exactly what to do about it.`,
-      followUpDespatchNow: (rm: string) =>
-        `What to do about it: despatch it now. Diluting it with other tanks or incoming CPO won't get it compliant in time, so holding would only cost more — the penalty is RM ${rm}.`,
-      followUpHold: (days: number, rm: string) =>
-        `What to do about it: hold and dilute it — using other tanks and incoming CPO, it reaches the good FFA limit in ${days} day${days === 1 ? "" : "s"}. That saves RM ${rm} versus despatching it now.`,
+      followUpDespatchNow: (info: {
+        tonnageMt: number;
+        ffaPct: number;
+        rmPerMt: number;
+        rm: number;
+        triedMt: number;
+        bestFfaPct: number;
+      }) =>
+        `What to do about it: despatch it now — ${n(info.tonnageMt, 0)} MT at ${n(info.ffaPct, 2)}% FFA falls in the RM ${n(info.rmPerMt, 0)}/MT band, so the penalty is RM ${n(info.rmPerMt, 0)} × ${n(info.tonnageMt, 0)} MT = RM ${n(info.rm, 0)}.` +
+        (info.triedMt > 0.5
+          ? ` Diluting first was checked — moving ${n(info.triedMt, 0)} MT in from other tanks and/or incoming CPO over 30 days only gets it to ${n(info.bestFfaPct, 2)}% FFA, still above the limit, so holding would just delay the same penalty.`
+          : ` There's no good-FFA tank or usable incoming CPO to dilute it with right now, so there's no way to avoid this penalty by holding.`),
+      followUpHold: (info: {
+        days: number;
+        transferMt: number;
+        dilutionTank: string;
+        incomingMt: number;
+        finalFfaPct: number;
+        rm: number;
+      }) =>
+        `What to do about it: hold and dilute it — move ${n(info.transferMt, 0)} MT from ${info.dilutionTank}${
+          info.incomingMt > 0.5 ? ` and let in ${n(info.incomingMt, 0)} MT of incoming CPO` : ""
+        } over ${info.days} day${info.days === 1 ? "" : "s"} to bring it to ${n(info.finalFfaPct, 2)}% FFA — within the good FFA limit. That avoids RM ${n(info.rm, 0)} in penalty versus despatching it today.`,
       followUpNoProfile:
         "Set up a buyer penalty profile on the Despatch tab to get a concrete despatch-now-vs-hold recommendation for this tank.",
       applySingle: "Route into this tank",
@@ -374,6 +393,7 @@ export const translations = {
       penaltyExposure: "Penalty exposure",
       alreadyCompliant: (ffa: string) =>
         `Already within limit after this batch — lands at ${ffa}% FFA, no blending needed before despatch.`,
+      unnamedTank: "another tank",
     },
     transferCalc: {
       title: "Transfer calculator",
@@ -735,10 +755,29 @@ export const translations = {
         `Disyorkan: pisah merentasi tangki. Mengalirkan 100% ke ${tank} sahaja akan tinggalkannya pada ${ffa}% FFA — melebihi had. Pisahan mengekalkan setiap tangki patuh, walaupun ia perlukan kawalan aliran teliti untuk dilaksanakan dengan tepat.`,
       recommendSingleWithFollowUp: (tank: string, ffa: string) =>
         `Tiada pilihan yang mengekalkan setiap tangki patuh hari ini. Mengalirkan 100% ke ${tank} (berakhir pada ${ffa}%) lebih mudah dilaksanakan — lihat di bawah untuk tindakan sebenar.`,
-      followUpDespatchNow: (rm: string) =>
-        `Apa nak buat: despatch sekarang. Mencairkan dengan tangki lain atau CPO masuk tidak akan patuh dalam masa, jadi menahan hanya akan kos lebih — penalti ialah RM ${rm}.`,
-      followUpHold: (days: number, rm: string) =>
-        `Apa nak buat: tahan dan cairkan — menggunakan tangki lain dan CPO masuk, ia capai had FFA baik dalam ${days} hari. Ini jimat RM ${rm} berbanding despatch sekarang.`,
+      followUpDespatchNow: (info: {
+        tonnageMt: number;
+        ffaPct: number;
+        rmPerMt: number;
+        rm: number;
+        triedMt: number;
+        bestFfaPct: number;
+      }) =>
+        `Apa nak buat: despatch sekarang — ${n(info.tonnageMt, 0)} MT pada ${n(info.ffaPct, 2)}% FFA jatuh dalam band RM ${n(info.rmPerMt, 0)}/MT, jadi penalti ialah RM ${n(info.rmPerMt, 0)} × ${n(info.tonnageMt, 0)} MT = RM ${n(info.rm, 0)}.` +
+        (info.triedMt > 0.5
+          ? ` Pencairan telah disemak — memindah masuk ${n(info.triedMt, 0)} MT dari tangki lain dan/atau CPO masuk selama 30 hari hanya capai ${n(info.bestFfaPct, 2)}% FFA, masih melebihi had, jadi menahan hanya akan menangguhkan penalti yang sama.`
+          : ` Tiada tangki FFA baik atau CPO masuk yang boleh digunakan untuk mencairkan sekarang, jadi tiada cara untuk elak penalti ini dengan menahan.`),
+      followUpHold: (info: {
+        days: number;
+        transferMt: number;
+        dilutionTank: string;
+        incomingMt: number;
+        finalFfaPct: number;
+        rm: number;
+      }) =>
+        `Apa nak buat: tahan dan cairkan — pindah ${n(info.transferMt, 0)} MT dari ${info.dilutionTank}${
+          info.incomingMt > 0.5 ? ` dan biarkan masuk ${n(info.incomingMt, 0)} MT CPO masuk` : ""
+        } selama ${info.days} hari untuk turunkannya ke ${n(info.finalFfaPct, 2)}% FFA — dalam had FFA baik. Ini jimat RM ${n(info.rm, 0)} penalti berbanding despatch hari ini.`,
       followUpNoProfile:
         "Tetapkan profil penalti pembeli di tab Despatch untuk dapatkan cadangan despatch-vs-tahan yang konkrit untuk tangki ini.",
       applySingle: "Alirkan ke tangki ini",
@@ -760,6 +799,7 @@ export const translations = {
       penaltyExposure: "Pendedahan penalti",
       alreadyCompliant: (ffa: string) =>
         `Sudah dalam had selepas kelompok ini — berada pada ${ffa}% FFA, tiada pencairan diperlukan sebelum despatch.`,
+      unnamedTank: "tangki lain",
     },
     transferCalc: {
       title: "Kalkulator pemindahan",

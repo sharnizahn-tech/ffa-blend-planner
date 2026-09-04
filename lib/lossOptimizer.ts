@@ -88,7 +88,10 @@ export function simulateHoldToTarget(
 
 export type HoldVsDespatch = {
   tankName: string;
+  tankStockMt: number;
+  tankFfaPct: number;
   despatchNowPenaltyRm: number;
+  despatchNowRmPerMt: number;
   hold: HoldSimulation;
   holdPenaltyRm: number;
   savingsRm: number;
@@ -106,7 +109,8 @@ export function compareHoldVsDespatch(
   bands: PenaltyBand[],
   deadStockMt = 0,
 ): HoldVsDespatch {
-  const despatchNowPenaltyRm = calcPenaltyExposure(tank.ffa, tank.stock, bands).totalRm;
+  const despatchNowExposure = calcPenaltyExposure(tank.ffa, tank.stock, bands);
+  const despatchNowPenaltyRm = despatchNowExposure.totalRm;
   const hold = simulateHoldToTarget(
     tank,
     otherTanks,
@@ -131,7 +135,10 @@ export function compareHoldVsDespatch(
 
   return {
     tankName: tank.name,
+    tankStockMt: tank.stock,
+    tankFfaPct: tank.ffa,
     despatchNowPenaltyRm,
+    despatchNowRmPerMt: despatchNowExposure.rmPerMt,
     hold,
     holdPenaltyRm,
     savingsRm,
