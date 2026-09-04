@@ -469,10 +469,6 @@ export const translations = {
         `Day ${day}: move ${mt} MT from ${from} to ${to} → ${to} FFA becomes ${ffa}%`,
       finalTitle: "Final transfer result",
       needAtLeastTwo: "Select at least two tanks — one to receive, one lower-FFA source to transfer from.",
-      incomingCpoLabel: "Incoming CPO",
-      includeIncoming: "Include incoming CPO",
-      includeIncomingHint:
-        "Ticked: the mill is processing today, so today's incoming CPO is also blended in, alongside tank-to-tank transfers. Unticked: no new CPO — only existing stock in other tanks is used.",
     },
     warnings: {
       title: "Warnings",
@@ -607,6 +603,11 @@ export const translations = {
       availableToTransfer: (available: string, deadStock: string) =>
         `${available} MT available to move (keeps ${deadStock} MT dead stock reserve in the tank).`,
       advanced: "Advanced: full multi-day transfer schedule",
+      includeIncoming: "Include incoming CPO as a source",
+      includeIncomingHint:
+        "Ticked: today's incoming CPO becomes a selectable source below, so you can route some of it straight into a tank. Unticked: only tank-to-tank transfers are offered.",
+      incomingCpoOption: (mt: string, ffa: string) => `Incoming CPO — ${mt} MT @ ${ffa}%`,
+      availableFromIncoming: (available: string) => `${available} MT of today's incoming CPO available.`,
     },
   },
   bm: {
@@ -1071,10 +1072,6 @@ export const translations = {
         `Hari ${day}: pindah ${mt} MT daripada ${from} ke ${to} → FFA ${to} menjadi ${ffa}%`,
       finalTitle: "Hasil pemindahan akhir",
       needAtLeastTwo: "Pilih sekurang-kurangnya dua tangki — satu untuk terima, satu sumber FFA rendah untuk dipindah.",
-      incomingCpoLabel: "CPO masuk",
-      includeIncoming: "Sertakan CPO masuk",
-      includeIncomingHint:
-        "Ditanda: kilang beroperasi hari ini, jadi CPO masuk hari ini turut di-blend, bersama pemindahan tangki-ke-tangki. Tidak ditanda: tiada CPO baru — hanya stok sedia ada di tangki lain digunakan.",
     },
     warnings: {
       title: "Amaran",
@@ -1209,6 +1206,11 @@ export const translations = {
       availableToTransfer: (available: string, deadStock: string) =>
         `${available} MT available untuk dipindah (kekalkan rizab stok mati ${deadStock} MT dalam tangki).`,
       advanced: "Lanjutan: jadual pemindahan berbilang hari penuh",
+      includeIncoming: "Sertakan CPO masuk sebagai sumber",
+      includeIncomingHint:
+        "Ditanda: CPO masuk hari ini menjadi sumber boleh pilih di bawah, supaya anda boleh alirkan sebahagiannya terus ke tangki. Tidak ditanda: hanya pemindahan tangki-ke-tangki ditawarkan.",
+      incomingCpoOption: (mt: string, ffa: string) => `CPO masuk — ${mt} MT @ ${ffa}%`,
+      availableFromIncoming: (available: string) => `${available} MT CPO masuk hari ini available.`,
     },
   },
 } as const;

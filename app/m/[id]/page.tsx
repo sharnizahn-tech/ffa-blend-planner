@@ -475,12 +475,11 @@ export default function Home() {
   const [batchSelected, setBatchSelected] = useState<Set<number>>(
     () => new Set(initialTanks.map((_, i) => i)),
   );
-  // Whether the batch/multi-day blend-down planner also draws on today's
-  // incoming CPO, not just stock already sitting in other tanks. Defaults to
-  // off — this planner exists specifically for the "not processing today"
-  // case, so it should not assume a fresh CPO stream unless the engineer
-  // says so.
-  const [includeIncomingInBatchBlend, setIncludeIncomingInBatchBlend] = useState(false);
+  // Whether the simple Transfer calculator offers "Incoming CPO" as a source
+  // option (alongside real tanks) for a quick one-off blend, using today's
+  // incoming CPO reading. Defaults to off — matches "the mill isn't
+  // necessarily processing right now" until the engineer says otherwise.
+  const [includeIncomingAsSource, setIncludeIncomingAsSource] = useState(false);
   // Despatch page redesign: whether the "Manage Penalty Bands" editor is
   // expanded (it must not permanently occupy the main planning view), and a
   // lightweight "last calculated" timestamp for the Refresh affordance — set
@@ -805,14 +804,7 @@ export default function Home() {
   const cheapestRefineryRow = configuredRefineryRows.length
     ? configuredRefineryRows.reduce((a, b) => (b.totalRm < a.totalRm ? b : a))
     : null;
-  const mostExpensiveRefineryRow = configuredRefineryRows.length
-    ? configuredRefineryRows.reduce((a, b) => (b.totalRm > a.totalRm ? b : a))
-    : null;
   const selectedRefineryRow = refineryRows.find((r) => r.profile.id === activeProfileId) ?? refineryRows[0] ?? null;
-  const potentialSavingRm =
-    selectedRefineryRow && mostExpensiveRefineryRow && configuredRefineryRows.length > 1
-      ? Math.max(0, mostExpensiveRefineryRow.totalRm - selectedRefineryRow.totalRm)
-      : null;
 
   const safeProduction = useMemo<SafeProductionSuggestion>(
     () => suggestSafeProduction(tanks, target, incomingFFA, millCapacity, hours, utilisation, oer),
@@ -954,23 +946,12 @@ export default function Home() {
   );
   const batchBlendResult = useMemo<BatchBlendResult | null>(() => {
     if (batchBlendTanks.length < 2) return null;
-    return planBatchBlend(
-      batchBlendTanks,
-      target,
-      maxTransferPerDayMt,
-      30,
-      deadStockMt,
-      includeIncomingInBatchBlend ? incomingCPO : 0,
-      includeIncomingInBatchBlend ? incomingFFA : 0,
-    );
+    return planBatchBlend(batchBlendTanks, target, maxTransferPerDayMt, 30, deadStockMt);
   }, [
     batchBlendTanks,
     target,
     maxTransferPerDayMt,
     deadStockMt,
-    includeIncomingInBatchBlend,
-    incomingCPO,
-    incomingFFA,
   ]);
 
   const scenarioResults = useMemo(
@@ -1266,6 +1247,18 @@ export default function Home() {
       });
     });
   };
+  // Quick one-off "route some of today's incoming CPO straight into a tank"
+  // from the Transfer calculator — separate from the Production tab's
+  // percentage-based allocation, so it doesn't touch incomingCPO itself.
+  const transferFromIncoming = (destIndex: number, amountMt: number) => {
+    setTanks((prev) => {
+      const dest = prev[destIndex];
+      if (!dest || amountMt <= 0) return prev;
+      const destNewStock = dest.stock + amountMt;
+      const destNewFfa = (dest.stock * dest.ffa + amountMt * incomingFFA) / destNewStock;
+      return prev.map((t, i) => (i === destIndex ? { ...t, stock: destNewStock, ffa: destNewFfa } : t));
+    });
+  };
   const addTank = () => {
     setTanks((p) => [...p, { name: suggestTankName(p), capacity: 2000, stock: 0, ffa: 0 }]);
     setAllocation((p) => [...p, 0]);
@@ -1554,8 +1547,6 @@ export default function Home() {
         <RefineryComparison
           copy={copy}
           rows={refineryRows}
-          activeProfileId={activeProfileId}
-          onSelectProfile={setActiveProfile}
           onAddProfile={() => {
             const fresh = createEmptyBuyerProfile(copy.penalty.newBuyer);
             updateBuyerProfiles((prev) => [...prev, fresh]);
@@ -1564,9 +1555,9 @@ export default function Home() {
           showPenaltyEditor={showPenaltyEditor}
           onTogglePenaltyEditor={() => setShowPenaltyEditor((v) => !v)}
           cheapestId={cheapestRefineryRow?.profile.id ?? null}
-          plannedDespatchMt={plannedDespatchMt}
-          achievedFfaPct={achievedFfaPct}
-          potentialSavingRm={potentialSavingRm}
+          defaultAchievedFfaPct={achievedFfaPct}
+          tankerLoadMt={tankerLoadMt}
+          onTankerLoadChange={setTankerLoadMt}
           penaltyEditor={penaltyPanel}
         />
         </div>
@@ -1620,7 +1611,17 @@ export default function Home() {
 
   const transferPanel = (
     <>
-      <SimpleTransferCalculator copy={copy} tanks={tanks} deadStockMt={deadStockMt} onTransfer={transferStock} />
+      <SimpleTransferCalculator
+        copy={copy}
+        tanks={tanks}
+        deadStockMt={deadStockMt}
+        onTransfer={transferStock}
+        includeIncoming={includeIncomingAsSource}
+        onIncludeIncomingChange={setIncludeIncomingAsSource}
+        incomingCPO={incomingCPO}
+        incomingFFA={incomingFFA}
+        onTransferFromIncoming={transferFromIncoming}
+      />
       <details className="advanced-disclosure">
         <summary>{copy.transferCalc.advanced}</summary>
         <div className="mt-4">
@@ -1642,10 +1643,6 @@ export default function Home() {
             autoTransfer={autoTransfer}
             onUseAuto={useAutoTransfer}
             result={batchBlendResult}
-            includeIncoming={includeIncomingInBatchBlend}
-            onIncludeIncomingChange={setIncludeIncomingInBatchBlend}
-            incomingCPO={incomingCPO}
-            incomingFFA={incomingFFA}
           />
         </div>
       </details>
@@ -3028,37 +3025,73 @@ function TankSummaryTable({ copy, tanks, target }: { copy: Copy; tanks: Tank[]; 
   );
 }
 
+const INCOMING_SOURCE = -1;
+
 function SimpleTransferCalculator({
   copy,
   tanks,
   deadStockMt,
   onTransfer,
+  includeIncoming,
+  onIncludeIncomingChange,
+  incomingCPO,
+  incomingFFA,
+  onTransferFromIncoming,
 }: {
   copy: Copy;
   tanks: Tank[];
   deadStockMt: number;
   onTransfer: (sourceIndex: number, destIndex: number, amountMt: number) => void;
+  includeIncoming: boolean;
+  onIncludeIncomingChange: (v: boolean) => void;
+  incomingCPO: number;
+  incomingFFA: number;
+  onTransferFromIncoming: (destIndex: number, amountMt: number) => void;
 }) {
-  const [sourceIndex, setSourceIndex] = useState(0);
+  const [sourceIndex, setSourceIndex] = useState<number>(0);
   const [destIndex, setDestIndex] = useState(tanks.length > 1 ? 1 : 0);
   const [amount, setAmount] = useState(0);
 
-  const source = tanks[sourceIndex];
+  useEffect(() => {
+    if (!includeIncoming && sourceIndex === INCOMING_SOURCE) setSourceIndex(0);
+  }, [includeIncoming, sourceIndex]);
+
+  const isIncomingSource = includeIncoming && sourceIndex === INCOMING_SOURCE;
+  const source = isIncomingSource ? null : tanks[sourceIndex];
   const dest = tanks[destIndex];
-  const sameTank = sourceIndex === destIndex;
-  const sourceAvailable = source ? Math.max(0, source.stock - deadStockMt) : 0;
-  const notEnoughStock = !sameTank && source ? amount > sourceAvailable : false;
+  const sameTank = !isIncomingSource && sourceIndex === destIndex;
+  const sourceAvailable = isIncomingSource ? incomingCPO : source ? Math.max(0, source.stock - deadStockMt) : 0;
+  const sourceFfa = isIncomingSource ? incomingFFA : (source?.ffa ?? 0);
+  const notEnoughStock = !sameTank && (isIncomingSource || source) ? amount > sourceAvailable : false;
   const destNewStock = dest ? dest.stock + amount : 0;
   const wouldOverflow = !sameTank && dest ? destNewStock > dest.capacity : false;
   const destNewFfa =
-    !sameTank && dest && source && destNewStock > 0
-      ? (dest.stock * dest.ffa + amount * source.ffa) / destNewStock
-      : dest?.ffa ?? 0;
+    !sameTank && dest && destNewStock > 0
+      ? (dest.stock * dest.ffa + amount * sourceFfa) / destNewStock
+      : (dest?.ffa ?? 0);
   const sourceNewStock = source ? source.stock - amount : 0;
   const canApply = !sameTank && amount > 0 && !notEnoughStock && !wouldOverflow;
 
   return (
     <Panel title={copy.transferCalc.title} subtitle={copy.transferCalc.subtitle} icon={<ArrowRightLeft size={19} />}>
+      <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-[#dfe5dc] bg-[#f9fbf8] p-3">
+        <input
+          type="checkbox"
+          checked={includeIncoming}
+          onChange={(e) => onIncludeIncomingChange(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[#173f30]"
+        />
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-[#173f30]">
+            {copy.transferCalc.includeIncoming}
+            {includeIncoming ? ` — ${n(incomingCPO, 0)} MT @ ${n(incomingFFA, 2)}% FFA` : ""}
+          </span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-[#708078]">
+            {copy.transferCalc.includeIncomingHint}
+          </span>
+        </span>
+      </label>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block min-w-0">
           <span className="field-label">{copy.transferCalc.source}</span>
@@ -3067,6 +3100,11 @@ function SimpleTransferCalculator({
             onChange={(e) => setSourceIndex(Number(e.target.value))}
             className="min-h-[44px] w-full rounded-lg border border-[#dce3dd] bg-white px-3 text-sm font-semibold text-[#173f30] outline-none ring-[#00b14f] focus:ring-2"
           >
+            {includeIncoming && (
+              <option value={INCOMING_SOURCE}>
+                {copy.transferCalc.incomingCpoOption(n(incomingCPO, 0), n(incomingFFA, 2))}
+              </option>
+            )}
             {tanks.map((t, i) => (
               <option key={i} value={i}>
                 {t.name} — {n(t.stock, 0)} MT · {n(t.ffa, 2)}%
@@ -3092,9 +3130,11 @@ function SimpleTransferCalculator({
 
       <div className="mt-3 max-w-xs">
         <MiniField label={copy.transferCalc.amount} value={amount} onChange={(v) => setAmount(Math.max(0, v))} unit="MT" />
-        {!sameTank && source && (
+        {!sameTank && (isIncomingSource || source) && (
           <p className="mt-1.5 text-xs text-[#708078]">
-            {copy.transferCalc.availableToTransfer(n(sourceAvailable, 0), n(deadStockMt, 0))}
+            {isIncomingSource
+              ? copy.transferCalc.availableFromIncoming(n(sourceAvailable, 0))
+              : copy.transferCalc.availableToTransfer(n(sourceAvailable, 0), n(deadStockMt, 0))}
           </p>
         )}
       </div>
@@ -3112,12 +3152,14 @@ function SimpleTransferCalculator({
       {!sameTank && amount > 0 && !notEnoughStock && !wouldOverflow && (
         <div className="mt-4">
           <p className="section-label">{copy.transferCalc.preview}</p>
-          <div className="mt-2 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-[#f9fbf8] p-3">
-              <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.transferCalc.sourceAfter}</p>
-              <p className="mt-1 text-lg font-extrabold text-[#173f30]">{n(sourceNewStock, 0)} MT</p>
-              <p className="text-xs text-[#708078]">{n(source.ffa, 2)}% FFA</p>
-            </div>
+          <div className={`mt-2 grid gap-3 ${isIncomingSource ? "grid-cols-1" : "grid-cols-2"}`}>
+            {!isIncomingSource && source && (
+              <div className="rounded-xl bg-[#f9fbf8] p-3">
+                <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.transferCalc.sourceAfter}</p>
+                <p className="mt-1 text-lg font-extrabold text-[#173f30]">{n(sourceNewStock, 0)} MT</p>
+                <p className="text-xs text-[#708078]">{n(source.ffa, 2)}% FFA</p>
+              </div>
+            )}
             <div className="rounded-xl bg-[#f6fae9] p-3">
               <p className="text-[11px] font-bold uppercase text-[#58665e]">{copy.transferCalc.destAfter}</p>
               <p className="mt-1 text-lg font-extrabold text-[#173f30]">{n(destNewStock, 0)} MT</p>
@@ -3131,7 +3173,11 @@ function SimpleTransferCalculator({
         type="button"
         disabled={!canApply}
         onClick={() => {
-          onTransfer(sourceIndex, destIndex, amount);
+          if (isIncomingSource) {
+            onTransferFromIncoming(destIndex, amount);
+          } else {
+            onTransfer(sourceIndex, destIndex, amount);
+          }
           setAmount(0);
         }}
         className="btn-touch mt-4 w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] disabled:opacity-40"
@@ -4177,95 +4223,141 @@ function DespatchSummaryCards({
 function RefineryMobileCard({
   copy,
   row,
-  isSelected,
+  isChecked,
   isCheapest,
-  plannedDespatchMt,
+  volumeMt,
+  onVolumeChange,
+  lorries,
   achievedFfaPct,
-  onSelect,
+  bandLabel,
+  exposure,
+  onToggle,
 }: {
   copy: Copy;
   row: RefineryRow;
-  isSelected: boolean;
+  isChecked: boolean;
   isCheapest: boolean;
-  plannedDespatchMt: number;
+  volumeMt: number;
+  onVolumeChange: (v: number) => void;
+  lorries: number;
   achievedFfaPct: number;
-  onSelect: () => void;
+  bandLabel: string;
+  exposure: { rmPerMt: number; totalRm: number };
+  onToggle: () => void;
 }) {
-  const bandLabel =
-    row.bandIndex >= 0 ? copy.penalty.bandLevelLabel(row.bandIndex + 1) : copy.despatchSummary.belowThreshold;
   return (
-    <label
-      className={`block rounded-xl border p-3.5 ${
-        isSelected ? "border-[#00b14f] bg-[#f6fae9]" : isCheapest ? "border-[#bfe3cc] bg-[#f0faf3]" : "border-[#e8ede8] bg-white"
+    <div
+      className={`rounded-xl border p-3.5 ${
+        isChecked ? "border-[#00b14f] bg-[#f6fae9]" : isCheapest ? "border-[#bfe3cc] bg-[#f0faf3]" : "border-[#e8ede8] bg-white"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="flex items-center gap-2">
+        <label className="flex items-center gap-2">
           <input
-            type="radio"
-            name="refinery-select-mobile"
-            checked={isSelected}
-            onChange={onSelect}
+            type="checkbox"
+            checked={isChecked}
+            onChange={onToggle}
             className="h-4 w-4 accent-[#00713a]"
           />
           <span className="font-bold text-[#173f30]">{row.profile.name}</span>
-        </span>
+        </label>
         {isCheapest && (
           <span className="shrink-0 rounded-full bg-[#d4f7e2] px-2 py-0.5 text-[10px] font-bold text-[#00713a]">
             {copy.refineryComparison.lowestCostBadge}
           </span>
         )}
       </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+      <div className="mt-2.5 grid grid-cols-2 items-center gap-x-3 gap-y-1.5 text-xs">
         <span className="text-[#7a867f]">{copy.refineryComparison.bandColumn}</span>
         <span className="text-right font-semibold text-[#3f4c46]">{bandLabel}</span>
         <span className="text-[#7a867f]">{copy.refineryComparison.despatchColumn}</span>
-        <span className="text-right font-semibold text-[#3f4c46]">{n(plannedDespatchMt, 0)} MT</span>
+        <span className="flex items-center justify-end gap-1">
+          <NumericInput
+            label={copy.refineryComparison.despatchColumn}
+            value={volumeMt}
+            onChange={(v) => onVolumeChange(Math.max(0, v))}
+            className="numeric-input w-16"
+          />
+          MT
+        </span>
+        <span className="text-[#7a867f]">{copy.refineryDespatch.lorriesColumn}</span>
+        <span className="text-right font-semibold text-[#3f4c46]">
+          {lorries > 0 ? copy.refineryDespatch.lorryCount(lorries) : "—"}
+        </span>
         <span className="text-[#7a867f]">{copy.refineryComparison.ffaColumn}</span>
         <span className="text-right font-semibold text-[#3f4c46]">{n(achievedFfaPct, 2)}%</span>
         <span className="text-[#7a867f]">{copy.refineryComparison.rateColumn}</span>
         <span className="text-right font-semibold text-[#3f4c46]">
-          {row.profile.bands.length ? `RM ${n(row.displayExposure.rmPerMt, 2)}/MT` : "—"}
+          {row.profile.bands.length ? `RM ${n(exposure.rmPerMt, 2)}/MT` : "—"}
         </span>
       </div>
       <div className="mt-2.5 flex items-center justify-between border-t border-black/5 pt-2.5">
         <span className="text-xs font-bold text-[#7a867f]">{copy.refineryComparison.penaltyColumn}</span>
         <span className="text-base font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
-          RM {n(row.totalRm, 0)}
+          RM {n(exposure.totalRm, 0)}
         </span>
       </div>
-    </label>
+    </div>
   );
 }
 
 function RefineryComparison({
   copy,
   rows,
-  activeProfileId,
-  onSelectProfile,
   onAddProfile,
   showPenaltyEditor,
   onTogglePenaltyEditor,
   cheapestId,
-  plannedDespatchMt,
-  achievedFfaPct,
-  potentialSavingRm,
+  defaultAchievedFfaPct,
+  tankerLoadMt,
+  onTankerLoadChange,
   penaltyEditor,
 }: {
   copy: Copy;
   rows: RefineryRow[];
-  activeProfileId: string;
-  onSelectProfile: (id: string) => void;
   onAddProfile: () => void;
   showPenaltyEditor: boolean;
   onTogglePenaltyEditor: () => void;
   cheapestId: string | null;
-  plannedDespatchMt: number;
-  achievedFfaPct: number;
-  potentialSavingRm: number | null;
+  defaultAchievedFfaPct: number;
+  tankerLoadMt: number;
+  onTankerLoadChange: (v: number) => void;
   penaltyEditor: React.ReactNode;
 }) {
-  const selectedRow = rows.find((r) => r.profile.id === activeProfileId) ?? null;
+  // Local, editable "what are we actually despatching today" state — separate
+  // from activeProfileId (which just controls which buyer's bands the
+  // Manage Penalty Bands editor is showing). Tick whichever refineries get a
+  // load today and type each one's own volume, same as before this page was
+  // redesigned; nothing here changes any other panel's calculations.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const [achievedFfa, setAchievedFfa] = useState(defaultAchievedFfaPct);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const rowExposure = (row: RefineryRow) =>
+    calcPenaltyExposure(achievedFfa, volumes[row.profile.id] ?? 0, row.profile.bands);
+  const rowBandLabel = (row: RefineryRow) => {
+    const exposure = rowExposure(row);
+    if (!exposure.band) return copy.despatchSummary.belowThreshold;
+    const idx = sortedBands(row.profile.bands).findIndex((b) => b.id === exposure.band!.id);
+    return copy.penalty.bandLevelLabel(idx + 1);
+  };
+  const rowLorries = (row: RefineryRow) => {
+    const mt = volumes[row.profile.id] ?? 0;
+    return mt > 0 && tankerLoadMt > 0 ? Math.ceil(mt / tankerLoadMt) : 0;
+  };
+
+  const selectedRows = rows.filter((r) => selected.has(r.profile.id));
+  const totalMt = selectedRows.reduce((s, r) => s + (volumes[r.profile.id] ?? 0), 0);
+  const totalLorries = selectedRows.reduce((s, r) => s + rowLorries(r), 0);
+  const totalPenaltyRm = selectedRows.reduce((s, r) => s + rowExposure(r).totalRm, 0);
 
   return (
     <section className="rounded-2xl border border-[#dde5df] bg-white p-4 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)] sm:p-6">
@@ -4298,14 +4390,42 @@ function RefineryComparison({
         <p className="mt-4 text-sm text-[#58665e]">{copy.refineryComparison.noRefineries}</p>
       ) : (
         <>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <label className="block w-40">
+              <span className="field-label">{copy.refineryDespatch.achievedFfaLabel}</span>
+              <div className="field-shell">
+                <NumericInput
+                  label={copy.refineryDespatch.achievedFfaLabel}
+                  value={achievedFfa}
+                  onChange={setAchievedFfa}
+                  className="numeric-input"
+                />
+                <span className="shrink-0 text-sm text-[#7a867f]">%</span>
+              </div>
+            </label>
+            <label className="block w-40">
+              <span className="field-label">{copy.refineryDespatch.tankerLoadLabel}</span>
+              <div className="field-shell">
+                <NumericInput
+                  label={copy.refineryDespatch.tankerLoadLabel}
+                  value={tankerLoadMt}
+                  onChange={onTankerLoadChange}
+                  className="numeric-input"
+                />
+                <span className="shrink-0 text-sm text-[#7a867f]">MT</span>
+              </div>
+            </label>
+          </div>
+
           <div className="mt-4 hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
+            <table className="w-full min-w-[820px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#6c7971]">
                   <th className="py-2 pr-2">{copy.refineryComparison.selectColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryComparison.refineryColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryComparison.bandColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryComparison.despatchColumn}</th>
+                  <th className="py-2 pr-2">{copy.refineryDespatch.lorriesColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryComparison.ffaColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryComparison.rateColumn}</th>
                   <th className="py-2 pr-2">{copy.refineryComparison.penaltyColumn}</th>
@@ -4314,12 +4434,9 @@ function RefineryComparison({
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const isSelected = row.profile.id === activeProfileId;
+                  const isChecked = selected.has(row.profile.id);
                   const isCheapest = cheapestId === row.profile.id;
-                  const bandLabel =
-                    row.bandIndex >= 0
-                      ? copy.penalty.bandLevelLabel(row.bandIndex + 1)
-                      : copy.despatchSummary.belowThreshold;
+                  const exposure = rowExposure(row);
                   return (
                     <tr
                       key={row.profile.id}
@@ -4327,10 +4444,9 @@ function RefineryComparison({
                     >
                       <td className="py-2.5 pr-2">
                         <input
-                          type="radio"
-                          name="refinery-select"
-                          checked={isSelected}
-                          onChange={() => onSelectProfile(row.profile.id)}
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggle(row.profile.id)}
                           className="h-4 w-4 accent-[#00713a]"
                           aria-label={row.profile.name}
                         />
@@ -4347,14 +4463,24 @@ function RefineryComparison({
                           )}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">{bandLabel}</td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">{n(plannedDespatchMt, 0)} MT</td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">{n(achievedFfaPct, 2)}%</td>
+                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">{rowBandLabel(row)}</td>
+                      <td className="py-2.5 pr-2">
+                        <NumericInput
+                          label={copy.refineryComparison.despatchColumn}
+                          value={volumes[row.profile.id] ?? 0}
+                          onChange={(v) => setVolumes((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
+                          className="numeric-input w-20"
+                        />
+                      </td>
                       <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">
-                        {row.profile.bands.length ? `RM ${n(row.displayExposure.rmPerMt, 2)}/MT` : "—"}
+                        {rowLorries(row) > 0 ? copy.refineryDespatch.lorryCount(rowLorries(row)) : "—"}
+                      </td>
+                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">{n(achievedFfa, 2)}%</td>
+                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">
+                        {row.profile.bands.length ? `RM ${n(exposure.rmPerMt, 2)}/MT` : "—"}
                       </td>
                       <td className="whitespace-nowrap py-2.5 pr-2 font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
-                        RM {n(row.totalRm, 0)}
+                        RM {n(exposure.totalRm, 0)}
                       </td>
                       <td className="whitespace-nowrap py-2.5 pr-2">
                         <span
@@ -4380,32 +4506,32 @@ function RefineryComparison({
                 key={row.profile.id}
                 copy={copy}
                 row={row}
-                isSelected={row.profile.id === activeProfileId}
+                isChecked={selected.has(row.profile.id)}
                 isCheapest={cheapestId === row.profile.id}
-                plannedDespatchMt={plannedDespatchMt}
-                achievedFfaPct={achievedFfaPct}
-                onSelect={() => onSelectProfile(row.profile.id)}
+                volumeMt={volumes[row.profile.id] ?? 0}
+                onVolumeChange={(v) => setVolumes((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
+                lorries={rowLorries(row)}
+                achievedFfaPct={achievedFfa}
+                bandLabel={rowBandLabel(row)}
+                exposure={rowExposure(row)}
+                onToggle={() => toggle(row.profile.id)}
               />
             ))}
           </div>
 
-          {selectedRow && (
-            <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3.5 sm:grid-cols-2">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#7a867f]">
-                  {copy.refineryComparison.selectedExposure}
-                </p>
-                <p className="mt-1 text-lg font-extrabold text-[#123c2c]">RM {n(selectedRow.totalRm, 0)}</p>
-              </div>
-              {potentialSavingRm !== null && (
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#7a867f]">
-                    {copy.refineryComparison.potentialSaving}
-                  </p>
-                  <p className="mt-1 text-lg font-extrabold text-[#187449]">RM {n(potentialSavingRm, 0)}</p>
-                  <p className="text-[10px] text-[#8a9690]">{copy.refineryComparison.potentialSavingSub}</p>
-                </div>
+          {selected.size > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
+              <span className="text-sm font-semibold text-[#7a4a32]">
+                {copy.refineryComparison.despatchColumn}: {n(totalMt, 0)} MT
+              </span>
+              {totalLorries > 0 && (
+                <span className="text-sm font-semibold text-[#7a4a32]">
+                  {copy.refineryDespatch.lorryCount(totalLorries)}
+                </span>
               )}
+              <span className="text-sm font-semibold text-[#7a4a32]">
+                {copy.refineryDespatch.totalToday(n(totalPenaltyRm, 0))}
+              </span>
             </div>
           )}
         </>
@@ -4813,10 +4939,6 @@ function BatchBlendPlanner({
   autoTransfer,
   onUseAuto,
   result,
-  includeIncoming,
-  onIncludeIncomingChange,
-  incomingCPO,
-  incomingFFA,
 }: {
   copy: Copy;
   tanks: Tank[];
@@ -4828,12 +4950,7 @@ function BatchBlendPlanner({
   autoTransfer: boolean;
   onUseAuto: () => void;
   result: BatchBlendResult | null;
-  includeIncoming: boolean;
-  onIncludeIncomingChange: (v: boolean) => void;
-  incomingCPO: number;
-  incomingFFA: number;
 }) {
-  const sourceLabel = (name: string) => (name === "incoming" ? copy.batchBlend.incomingCpoLabel : name);
   const reasonText = (reason: BatchBlendResult["reason"]) => {
     switch (reason) {
       case "no-spare-capacity":
@@ -4885,23 +5002,6 @@ function BatchBlendPlanner({
         />
       </div>
 
-      <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-[#dfe5dc] bg-[#f9fbf8] p-3">
-        <input
-          type="checkbox"
-          checked={includeIncoming}
-          onChange={(e) => onIncludeIncomingChange(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-[#173f30]"
-        />
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-[#173f30]">
-            {copy.batchBlend.includeIncoming}
-            {includeIncoming ? ` — ${n(incomingCPO, 0)} MT @ ${n(incomingFFA, 2)}% FFA` : ""}
-          </span>
-          <span className="mt-0.5 block text-xs leading-relaxed text-[#708078]">
-            {copy.batchBlend.includeIncomingHint}
-          </span>
-        </span>
-      </label>
 
       <div className="mt-4 border-t border-[#e8ede8] pt-4">
         {selected.size < 2 || !result ? (
@@ -4923,7 +5023,7 @@ function BatchBlendPlanner({
                 <div className="mt-2 space-y-1.5">
                   {result.steps.map((s, i) => (
                     <div key={i} className="rounded-lg bg-[#f9fbf8] px-3 py-2 text-xs text-[#53625a]">
-                      {copy.batchBlend.step(s.day, sourceLabel(s.fromTank), s.toTank, n(s.mt, 0), n(s.toTankFfaAfter, 2))}
+                      {copy.batchBlend.step(s.day, s.fromTank, s.toTank, n(s.mt, 0), n(s.toTankFfaAfter, 2))}
                     </div>
                   ))}
                 </div>
@@ -4947,7 +5047,7 @@ function BatchBlendPlanner({
                 <div className="mt-2 space-y-1.5">
                   {result.steps.map((s, i) => (
                     <div key={i} className="rounded-lg bg-[#f9fbf8] px-3 py-2 text-xs text-[#53625a]">
-                      {copy.batchBlend.step(s.day, sourceLabel(s.fromTank), s.toTank, n(s.mt, 0), n(s.toTankFfaAfter, 2))}
+                      {copy.batchBlend.step(s.day, s.fromTank, s.toTank, n(s.mt, 0), n(s.toTankFfaAfter, 2))}
                     </div>
                   ))}
                 </div>
