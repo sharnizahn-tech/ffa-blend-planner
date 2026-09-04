@@ -1400,9 +1400,8 @@ export default function Home() {
           singleTankFollowUp={singleTankFollowUp}
           hasProfile={!!activeProfile}
           onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
-          autoAiSuggestion={aiAllocationSuggestion}
-          autoAiLoading={aiAllocationLoading}
-          autoAiError={aiAllocationError}
+          topDespatchPlan={topDespatchPlans[0] ?? null}
+          lossOptimizerResults={lossOptimizerResults}
         />
       </div>
     </>
@@ -3176,9 +3175,8 @@ function SmartRecommendation({
   singleTankFollowUp,
   hasProfile,
   onApplySingle,
-  autoAiSuggestion,
-  autoAiLoading,
-  autoAiError,
+  topDespatchPlan,
+  lossOptimizerResults,
 }: {
   copy: Copy;
   topPlans: BlendPlan[];
@@ -3205,12 +3203,12 @@ function SmartRecommendation({
   singleTankFollowUp: HoldVsDespatch | null;
   hasProfile: boolean;
   onApplySingle: () => void;
-  // Same auto-fired AI explanation that Allocation strategy shows above —
-  // shared here too so the two panels always tell the same story instead of
-  // Smart Recommendation falling back to older, purely calculated wording.
-  autoAiSuggestion: string | null;
-  autoAiLoading: boolean;
-  autoAiError: boolean;
+  // Smart Recommendation's own job: a single day-plan checklist tying
+  // together routing, despatch, and blend-down — deliberately NOT the same
+  // content as the Allocation strategy card above, which only covers where
+  // today's incoming CPO goes.
+  topDespatchPlan: DespatchPlan | null;
+  lossOptimizerResults: HoldVsDespatch[];
 }) {
   const best = topPlans[0];
   // Which view to show is driven by what's actually APPLIED right now — not
@@ -3242,6 +3240,42 @@ function SmartRecommendation({
       penaltyText = buildPenaltyDecisionText(copy, hasProfile, singleTankFollowUp, singleTankBlendPlan);
     }
   }
+
+  // Smart Recommendation's actual job: a short, ordered checklist that ties
+  // together every decision the app already made — routing, despatch, and
+  // blend-down — into one place, instead of re-explaining routing alone the
+  // way the Allocation strategy card above already does.
+  const routeLine = useConsolidate
+    ? copy.plan.checklistRouteSingle(tanks[singleIndex].name)
+    : best
+      ? copy.plan.checklistRouteSplit(
+          best.allocation
+            .map((x, i) => (x > 0 ? `${x}% ${tanks[i].name}` : null))
+            .filter((s): s is string => !!s)
+            .join(", "),
+        )
+      : null;
+  const despatchLine =
+    topDespatchPlan && topDespatchPlan.totalMt > 0
+      ? copy.plan.checklistDespatch(
+          n(topDespatchPlan.totalMt, 0),
+          topDespatchPlan.sources.map((s) => s.name).join(" + "),
+          n(topDespatchPlan.loadFfaPct, 2),
+        ) +
+        (topDespatchPlan.shortfallMt > 0.5
+          ? copy.plan.checklistDespatchShortfall(n(topDespatchPlan.shortfallMt, 0))
+          : "")
+      : copy.plan.checklistNoDespatch;
+  const blendLines = lossOptimizerResults.length
+    ? lossOptimizerResults.map((r) =>
+        r.recommendation === "hold"
+          ? copy.plan.checklistBlendHold(r.tankName, r.bestDay)
+          : copy.plan.checklistBlendDespatch(r.tankName),
+      )
+    : [copy.plan.checklistAllGood];
+  const checklistLines = [routeLine, despatchLine, ...blendLines, copy.plan.checklistVerify].filter(
+    (s): s is string => !!s,
+  );
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
@@ -3281,31 +3315,22 @@ function SmartRecommendation({
         </div>
       </div>
       <div className="p-4 sm:p-5">
+        <div className="mb-4 space-y-2">
+          <p className="section-label">{copy.plan.checklistTitle}</p>
+          {checklistLines.map((line, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2.5 rounded-xl bg-[#f8faf7] p-3 text-sm leading-relaxed text-[#173f30]"
+            >
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#173f30] text-[10px] font-bold text-white">
+                {i + 1}
+              </span>
+              {line}
+            </div>
+          ))}
+        </div>
         {useConsolidate ? (
           <>
-            {autoAiSuggestion ? (
-              <div className="mb-4 rounded-xl bg-[#f8faf7] p-3.5">
-                <FormattedOpinion text={autoAiSuggestion} />
-              </div>
-            ) : autoAiLoading ? (
-              <p className="mb-4 flex items-center gap-1.5 text-xs text-[#8a9690]">
-                <Loader2 size={12} className="animate-spin" />
-                {copy.routingStrategy.aiThinking}
-              </p>
-            ) : autoAiError ? (
-              <p className="mb-4 text-xs text-[#8a9690]">{copy.routingStrategy.aiFallbackNote}</p>
-            ) : null}
-            <p className="section-label">{copy.plan.recommendedAllocation}</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {bestSingleTank!.allocation.map((x, i) => (
-                <div key={i} className="plan-pill">
-                  <p className="text-xs text-[#708078]">{tanks[i].name}</p>
-                  <p className="mt-1 text-xl font-extrabold text-[#173f30]">{x}%</p>
-                  <p className="text-[11px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
-                </div>
-              ))}
-            </div>
-
             {blendDownText && (
               <div className="mt-4">
                 <p className="section-label">{copy.plan.blendDownPlan}</p>
@@ -3348,17 +3373,6 @@ function SmartRecommendation({
           </>
         ) : best ? (
           <>
-            <p className="section-label">{copy.plan.recommendedAllocation}</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {best.allocation.map((x, i) => (
-                <div key={i} className="plan-pill">
-                  <p className="text-xs text-[#708078]">{tanks[i].name}</p>
-                  <p className="mt-1 text-xl font-extrabold text-[#173f30]">{x}%</p>
-                  <p className="text-[11px] text-[#708078]">{n(allocationMt(incomingCPO, x))} MT</p>
-                </div>
-              ))}
-            </div>
-
             {topPlans.length > 1 && (
               <div className="mt-4">
                 <p className="section-label">{copy.plan.topPlans}</p>
@@ -4261,41 +4275,61 @@ function PenaltyPanel({
             )}
 
             {activeProfile.bands.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px] border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#6c7971]">
-                      <th className="py-2 pr-2">{copy.penalty.bandColumn}</th>
-                      <th className="py-2 pr-2">{copy.penalty.fromFfaColumn}</th>
-                      <th className="py-2 pr-2">{copy.penalty.toFfaColumn}</th>
-                      <th className="py-2 pr-2">{copy.penalty.deductionColumn}</th>
-                      <th className="py-2 pr-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeProfile.bands.map((band, i) => (
-                      <tr key={band.id} className="border-b border-[#f0f2ef] align-middle">
-                        <td className="whitespace-nowrap py-2 pr-2 font-bold text-[#173f30]">
+              <div>
+                <div className="space-y-2">
+                  {activeProfile.bands.map((band, i) => (
+                    <div key={band.id} className="rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-[#173f30]">
                           {copy.penalty.bandLevelLabel(i + 1)}
-                        </td>
-                        <td className="py-2 pr-2">
-                          <NumericInput
-                            label={copy.penalty.minFfa}
-                            value={band.minFfaPct}
-                            onChange={(v) => updateBand(band.id, { minFfaPct: v })}
-                            className="numeric-input w-16"
-                          />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <NullableNumericInput
-                            label={copy.penalty.maxFfa}
-                            value={band.maxFfaPct}
-                            onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
-                            className="numeric-input w-16"
-                          />
-                        </td>
-                        <td className="py-2 pr-2 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
-                          <div className="flex items-center gap-1">
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeBand(band.id)}
+                          aria-label={copy.penalty.removeBand}
+                          title={copy.penalty.removeBand}
+                          className="remove-tank remove-tank--compact"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#8a9690]">
+                            {copy.penalty.fromFfaColumn}
+                          </span>
+                          <div className="flex items-center gap-1 text-sm">
+                            <NumericInput
+                              label={copy.penalty.minFfa}
+                              value={band.minFfaPct}
+                              onChange={(v) => updateBand(band.id, { minFfaPct: v })}
+                              className="numeric-input w-16"
+                            />
+                            %
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#8a9690]">
+                            {copy.penalty.toFfaColumn}
+                          </span>
+                          <div className="flex items-center gap-1 text-sm">
+                            <NullableNumericInput
+                              label={copy.penalty.maxFfa}
+                              value={band.maxFfaPct}
+                              onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
+                              className="numeric-input w-16"
+                            />
+                            %
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#8a9690]">
+                            {copy.penalty.deductionColumn}
+                          </span>
+                          <div
+                            className="flex items-center gap-1 text-sm font-semibold"
+                            style={{ color: PENALTY_STAT_COLOR }}
+                          >
                             RM
                             <NumericInput
                               label={copy.penalty.deduction}
@@ -4305,22 +4339,11 @@ function PenaltyPanel({
                             />
                             /MT
                           </div>
-                        </td>
-                        <td className="py-2 pr-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => removeBand(band.id)}
-                            aria-label={copy.penalty.removeBand}
-                            title={copy.penalty.removeBand}
-                            className="remove-tank remove-tank--compact"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <p className="mt-1.5 text-xs text-[#8a9690]">{copy.penalty.noCeilingHint}</p>
               </div>
             )}

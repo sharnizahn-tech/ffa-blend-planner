@@ -113,6 +113,19 @@ export const translations = {
     },
     plan: {
       smartRecommendation: "Smart recommendation",
+      checklistTitle: "Today's checklist",
+      checklistRouteSingle: (tank: string) => `Route incoming CPO: 100% into ${tank}.`,
+      checklistRouteSplit: (parts: string) => `Route incoming CPO: ${parts}.`,
+      checklistDespatch: (mt: string, sources: string, ffa: string) =>
+        `Despatch ${mt} MT from ${sources} today — ${ffa}% FFA, meets the limit.`,
+      checklistDespatchShortfall: (mt: string) =>
+        ` Short by ${mt} MT — not enough good-FFA stock for a full load.`,
+      checklistNoDespatch: "No feasible despatch load from good-FFA tanks today.",
+      checklistBlendHold: (tank: string, days: number) =>
+        `${tank}: hold ${days} day${days === 1 ? "" : "s"} and blend — cheaper than despatching now.`,
+      checklistBlendDespatch: (tank: string) => `${tank}: despatch now — holding doesn't help here.`,
+      checklistAllGood: "No tank is currently over the good FFA limit.",
+      checklistVerify: "Before transfer: verify tank dipping, valve routing, and lab FFA if there's any doubt.",
       planChecked: "PLAN CHECKED",
       checkInput: "CHECK INPUT",
       safeAllocation: "A safe allocation is available",
@@ -589,6 +602,19 @@ export const translations = {
     },
     plan: {
       smartRecommendation: "Cadangan pintar",
+      checklistTitle: "Senarai semak hari ini",
+      checklistRouteSingle: (tank: string) => `Alirkan CPO masuk: 100% ke ${tank}.`,
+      checklistRouteSplit: (parts: string) => `Alirkan CPO masuk: ${parts}.`,
+      checklistDespatch: (mt: string, sources: string, ffa: string) =>
+        `Despatch ${mt} MT dari ${sources} hari ini — ${ffa}% FFA, mencapai had.`,
+      checklistDespatchShortfall: (mt: string) =>
+        ` Kurang ${mt} MT — stok FFA baik tidak cukup untuk muatan penuh.`,
+      checklistNoDespatch: "Tiada muatan despatch munasabah daripada tangki FFA baik hari ini.",
+      checklistBlendHold: (tank: string, days: number) =>
+        `${tank}: tahan ${days} hari dan blend — lebih murah daripada despatch sekarang.`,
+      checklistBlendDespatch: (tank: string) => `${tank}: despatch sekarang — menahan tidak membantu di sini.`,
+      checklistAllGood: "Tiada tangki melebihi had FFA baik pada masa ini.",
+      checklistVerify: "Sebelum pemindahan: sahkan dipping tangki, laluan injap, dan FFA makmal jika ragu.",
       planChecked: "PELAN DISAHKAN",
       checkInput: "SEMAK INPUT",
       safeAllocation: "Peruntukan selamat tersedia",
