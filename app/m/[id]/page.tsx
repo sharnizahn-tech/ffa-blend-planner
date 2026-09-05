@@ -1126,7 +1126,12 @@ export default function Home() {
     setAiError(null);
     setAiCooldown(60);
     try {
-      const payload = buildAdvisePayload(question, historyForRequest, opts.deepAnalysis);
+      const payload = buildAdvisePayload(
+        question,
+        historyForRequest,
+        opts.deepAnalysis,
+        recommendSingle ? (bestSingleTank ?? undefined) : (best ?? undefined),
+      );
       const response = await fetch("/api/advise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
