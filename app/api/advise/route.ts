@@ -9,7 +9,7 @@ import {
 export const runtime = "nodejs";
 
 const DEFAULT_BASE_URL = "https://www.chenzk.top/v1";
-const FALLBACK_MODELS = ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra"];
+const FALLBACK_MODELS = ["gpt-5.5", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-5.6-sol"];
 
 function parseOpenAiError(detailText: string) {
   try {
@@ -82,7 +82,7 @@ async function callOpenAi(
     body: JSON.stringify({
       model,
       temperature: 0.3,
-      max_tokens: 900,
+      max_tokens: 1600,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
