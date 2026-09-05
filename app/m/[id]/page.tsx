@@ -5271,71 +5271,123 @@ function PenaltyPanel({
 
             {activeProfile.bands.length > 0 && (
               <div>
-                <div className="space-y-2">
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[420px] border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#6c7971]">
+                        <th className="py-2 pr-2">{copy.penalty.bandColumn}</th>
+                        <th className="py-2 pr-2">{copy.penalty.fromFfaColumn}</th>
+                        <th className="py-2 pr-2">{copy.penalty.toFfaColumn}</th>
+                        <th className="py-2 pr-2">{copy.penalty.deductionColumn}</th>
+                        <th className="py-2 pr-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeProfile.bands.map((band, i) => (
+                        <tr key={band.id} className="border-b border-[#f0f2ef] align-middle">
+                          <td className="whitespace-nowrap py-2.5 pr-2 font-bold text-[#173f30]">
+                            {copy.penalty.bandLevelLabel(i + 1)}
+                          </td>
+                          <td className="py-2.5 pr-2">
+                            <div className="flex items-center gap-1">
+                              <NumericInput
+                                label={copy.penalty.minFfa}
+                                value={band.minFfaPct}
+                                onChange={(v) => updateBand(band.id, { minFfaPct: v })}
+                                className="numeric-input w-16"
+                              />
+                              %
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-2">
+                            <div className="flex items-center gap-1">
+                              <NullableNumericInput
+                                label={copy.penalty.maxFfa}
+                                value={band.maxFfaPct}
+                                onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
+                                className="numeric-input w-16"
+                              />
+                              %
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-2 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
+                            <div className="flex items-center gap-1">
+                              RM
+                              <NumericInput
+                                label={copy.penalty.deduction}
+                                value={band.deductionRmPerMt}
+                                onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
+                                className="numeric-input w-16"
+                              />
+                              /MT
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => removeBand(band.id)}
+                              aria-label={copy.penalty.removeBand}
+                              title={copy.penalty.removeBand}
+                              className="remove-tank remove-tank--compact"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="space-y-2 md:hidden">
                   {activeProfile.bands.map((band, i) => (
-                    <div key={band.id} className="rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-bold text-[#173f30]">
-                          {copy.penalty.bandLevelLabel(i + 1)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeBand(band.id)}
-                          aria-label={copy.penalty.removeBand}
-                          title={copy.penalty.removeBand}
-                          className="remove-tank remove-tank--compact"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#8a9690]">
-                            {copy.penalty.fromFfaColumn}
-                          </span>
-                          <div className="flex items-center gap-1 text-sm">
-                            <NumericInput
-                              label={copy.penalty.minFfa}
-                              value={band.minFfaPct}
-                              onChange={(v) => updateBand(band.id, { minFfaPct: v })}
-                              className="numeric-input w-16"
-                            />
-                            %
-                          </div>
+                    <div
+                      key={band.id}
+                      className="flex items-center gap-2 rounded-lg border border-[#f0f2ef] bg-[#f9fbf8] px-2.5 py-2"
+                    >
+                      <span className="w-14 shrink-0 text-xs font-bold text-[#173f30]">
+                        {copy.penalty.bandLevelLabel(i + 1)}
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <div className="flex items-center gap-1">
+                          <NumericInput
+                            label={copy.penalty.minFfa}
+                            value={band.minFfaPct}
+                            onChange={(v) => updateBand(band.id, { minFfaPct: v })}
+                            className="numeric-input w-14"
+                          />
+                          %
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#8a9690]">
-                            {copy.penalty.toFfaColumn}
-                          </span>
-                          <div className="flex items-center gap-1 text-sm">
-                            <NullableNumericInput
-                              label={copy.penalty.maxFfa}
-                              value={band.maxFfaPct}
-                              onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
-                              className="numeric-input w-16"
-                            />
-                            %
-                          </div>
+                        <span className="text-[#a2ada4]">–</span>
+                        <div className="flex items-center gap-1">
+                          <NullableNumericInput
+                            label={copy.penalty.maxFfa}
+                            value={band.maxFfaPct}
+                            onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
+                            className="numeric-input w-14"
+                          />
+                          %
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#8a9690]">
-                            {copy.penalty.deductionColumn}
-                          </span>
-                          <div
-                            className="flex items-center gap-1 text-sm font-semibold"
-                            style={{ color: PENALTY_STAT_COLOR }}
-                          >
-                            RM
-                            <NumericInput
-                              label={copy.penalty.deduction}
-                              value={band.deductionRmPerMt}
-                              onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
-                              className="numeric-input w-16"
-                            />
-                            /MT
-                          </div>
+                        <div className="flex items-center gap-1 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
+                          RM
+                          <NumericInput
+                            label={copy.penalty.deduction}
+                            value={band.deductionRmPerMt}
+                            onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
+                            className="numeric-input w-14"
+                          />
+                          /MT
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => removeBand(band.id)}
+                        aria-label={copy.penalty.removeBand}
+                        title={copy.penalty.removeBand}
+                        className="remove-tank remove-tank--compact shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>
