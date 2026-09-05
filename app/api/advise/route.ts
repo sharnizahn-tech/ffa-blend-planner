@@ -10,6 +10,9 @@ export const runtime = "nodejs";
 
 const DEFAULT_BASE_URL = "https://www.chenzk.top/v1";
 const FALLBACK_MODELS = [
+  "claude-sonnet-4-20250514",
+  "claude-opus-4-20250514",
+  "claude-opus-4-1-20250805",
   "gpt-5.4",
   "gpt-4o-mini",
   "gpt-4o",
