@@ -2013,7 +2013,7 @@ function RoutingRecommendationCard({
         <button
           type="button"
           onClick={onViewBlend}
-          className="btn-touch mt-4 w-full bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] sm:w-auto"
+          className="btn-touch mt-4 w-[calc(100%-88px)] bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] sm:w-auto"
         >
           {copy.blendSituation.viewRecommendedBlend}
           <ChevronRight size={16} />
