@@ -9,7 +9,16 @@ import {
 export const runtime = "nodejs";
 
 const DEFAULT_BASE_URL = "https://www.chenzk.top/v1";
-const FALLBACK_MODELS = ["gpt-5.4", "gpt-4o-mini", "gpt-4o"];
+const FALLBACK_MODELS = [
+  "gpt-5.4",
+  "gpt-4o-mini",
+  "gpt-4o",
+  "gpt-4.1-mini",
+  "gpt-4.1",
+  "gpt-4-turbo",
+  "gpt-4",
+  "gpt-3.5-turbo",
+];
 
 function parseOpenAiError(detailText: string) {
   try {
