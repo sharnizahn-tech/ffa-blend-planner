@@ -2206,11 +2206,13 @@ function NumericInput({
   value,
   onChange,
   className,
+  style,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? formatNumericValue(value);
@@ -2234,6 +2236,7 @@ function NumericInput({
         setDraft(null);
       }}
       className={className}
+      style={style}
     />
   );
 }
@@ -2243,11 +2246,13 @@ function NullableNumericInput({
   value,
   onChange,
   className,
+  style,
 }: {
   label: string;
   value: number | null;
   onChange: (value: number | null) => void;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? (value === null ? "" : formatNumericValue(value));
@@ -2275,6 +2280,7 @@ function NullableNumericInput({
         setDraft(null);
       }}
       className={className}
+      style={style}
     />
   );
 }
@@ -5344,46 +5350,45 @@ function PenaltyPanel({
                   </table>
                 </div>
 
-                <div className="space-y-2 md:hidden">
+                <div className="space-y-1.5 md:hidden">
                   {activeProfile.bands.map((band, i) => (
                     <div
                       key={band.id}
-                      className="flex items-center gap-2 rounded-lg border border-[#f0f2ef] bg-[#f9fbf8] px-2.5 py-2"
+                      className="flex items-center gap-1 overflow-hidden rounded-lg border border-[#f0f2ef] bg-[#f9fbf8] px-2 py-1.5 text-[11px]"
                     >
-                      <span className="w-14 shrink-0 text-xs font-bold text-[#173f30]">
+                      <span className="shrink-0 whitespace-nowrap font-bold text-[#173f30]">
                         {copy.penalty.bandLevelLabel(i + 1)}
                       </span>
-                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                        <div className="flex items-center gap-1">
-                          <NumericInput
-                            label={copy.penalty.minFfa}
-                            value={band.minFfaPct}
-                            onChange={(v) => updateBand(band.id, { minFfaPct: v })}
-                            className="numeric-input w-14"
-                          />
-                          %
-                        </div>
-                        <span className="text-[#a2ada4]">–</span>
-                        <div className="flex items-center gap-1">
-                          <NullableNumericInput
-                            label={copy.penalty.maxFfa}
-                            value={band.maxFfaPct}
-                            onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
-                            className="numeric-input w-14"
-                          />
-                          %
-                        </div>
-                        <div className="flex items-center gap-1 font-semibold" style={{ color: PENALTY_STAT_COLOR }}>
-                          RM
-                          <NumericInput
-                            label={copy.penalty.deduction}
-                            value={band.deductionRmPerMt}
-                            onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
-                            className="numeric-input w-14"
-                          />
-                          /MT
-                        </div>
-                      </div>
+                      <NumericInput
+                        label={copy.penalty.minFfa}
+                        value={band.minFfaPct}
+                        onChange={(v) => updateBand(band.id, { minFfaPct: v })}
+                        className="numeric-input text-[11px]"
+                        style={{ flex: "0 0 30px", width: 30 }}
+                      />
+                      <span className="shrink-0 text-[#a2ada4]">–</span>
+                      <NullableNumericInput
+                        label={copy.penalty.maxFfa}
+                        value={band.maxFfaPct}
+                        onChange={(v) => updateBand(band.id, { maxFfaPct: v })}
+                        className="numeric-input text-[11px]"
+                        style={{ flex: "0 0 30px", width: 30 }}
+                      />
+                      <span className="shrink-0 text-[#a2ada4]">%</span>
+                      <span
+                        className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap font-semibold"
+                        style={{ color: PENALTY_STAT_COLOR }}
+                      >
+                        RM
+                        <NumericInput
+                          label={copy.penalty.deduction}
+                          value={band.deductionRmPerMt}
+                          onChange={(v) => updateBand(band.id, { deductionRmPerMt: v })}
+                          className="numeric-input text-[11px]"
+                          style={{ flex: "0 0 34px", width: 34 }}
+                        />
+                        /MT
+                      </span>
                       <button
                         type="button"
                         onClick={() => removeBand(band.id)}
@@ -5391,7 +5396,7 @@ function PenaltyPanel({
                         title={copy.penalty.removeBand}
                         className="remove-tank remove-tank--compact shrink-0"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   ))}
@@ -5409,9 +5414,14 @@ function PenaltyPanel({
               {copy.penalty.addBand}
             </button>
 
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-3.5 py-3">
-              <span className="text-sm font-semibold text-[#7a4a32]">{copy.penalty.estimatedExposure}</span>
-              <span className="text-lg font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
+            <div className="flex items-center justify-between gap-1.5 overflow-hidden rounded-xl border border-[#efc7aa] bg-[#fff8f3] px-2 py-2.5 sm:gap-3 sm:px-3.5 sm:py-3">
+              <span className="min-w-0 truncate text-[10px] font-semibold text-[#7a4a32] sm:text-sm">
+                {copy.penalty.estimatedExposure}
+              </span>
+              <span
+                className="shrink-0 whitespace-nowrap text-sm font-extrabold sm:text-lg"
+                style={{ color: PENALTY_STAT_COLOR }}
+              >
                 RM {n(totalExposureRm, 0)}
               </span>
             </div>
