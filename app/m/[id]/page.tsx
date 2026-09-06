@@ -2055,7 +2055,7 @@ function RoutingStat({
   valueStyle?: React.CSSProperties;
 }) {
   return (
-    <div className="rounded-xl bg-white/10 p-2.5">
+    <div className="rounded-xl border border-white/10 bg-[#0d2e21]/60 p-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-[#cfe0d5]">{label}</p>
       <p className="mt-1 text-base font-extrabold text-white sm:text-lg" style={valueStyle}>
         {value}
@@ -4672,11 +4672,11 @@ function DespatchDecision({
     <section className="overflow-hidden rounded-2xl border border-[#dde5df] bg-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
       <div className="relative h-28 w-full overflow-hidden">
         <Image
-          src="/Oil.png"
+          src="/BST-Storage.png"
           alt=""
           fill
           sizes="(min-width: 1024px) 38vw, 100vw"
-          style={{ objectPosition: "65% 35%" }}
+          style={{ objectPosition: "10% 75%" }}
           className="object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-white via-white/10 to-transparent" />

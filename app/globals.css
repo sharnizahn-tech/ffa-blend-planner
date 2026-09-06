@@ -275,14 +275,14 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .tank-unit__number {
   display: inline-flex;
-  height: 22px;
-  width: 22px;
+  height: 28px;
+  width: 28px;
   flex: none;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
   background: #123c2c;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   color: #fff;
 }
