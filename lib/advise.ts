@@ -76,6 +76,8 @@ export const adviseRequestSchema = z.object({
   despatch: z
     .object({
       tankerLoadMt: z.number(),
+      plannedDespatchTotalMt: z.number().optional(),
+      plannedDespatchTotalLorries: z.number().optional(),
       recommendedPlan: despatchPlanSchema.nullable(),
       alternativePlans: z.array(despatchPlanSchema).optional(),
     })
@@ -132,6 +134,13 @@ export const adviseRequestSchema = z.object({
       ),
     })
     .nullable()
+    .optional(),
+  incomingAsSource: z
+    .object({
+      included: z.boolean(),
+      availableMt: z.number(),
+      ffaPct: z.number(),
+    })
     .optional(),
   conversationHistory: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
@@ -499,11 +508,12 @@ Rules:
 - Use double asterisks around the single most important fact per paragraph (the recommendation itself, the key number, the action to take) — e.g. **route it into BST 2** or **RM 69,440 penalty**. Two or three bolded phrases per response is plenty; do not bold everything.
 - What the data fields mean, and what to call them in your response:
   - "recommendedPlan" (rank 1) is the mathematically best allocation the engine found; "alternativePlans" are ranks 2-3. Call this simply "the recommended plan" / "the best option" — treat it as correct unless the flags show it's infeasible. When alternatives are given, briefly say how they differ and when an engineer might pick one instead.
-  - "despatch" covers which tanks to load onto a tanker after today's allocation — call it "the despatch plan". Name the tanks, the combined load's FFA, and any shortfall if the tanker can't be filled.
+  - "despatch" covers which tanks to load onto a tanker after today's allocation — call it "the despatch plan". Name the tanks, the combined load's FFA, and any shortfall if the tanker can't be filled. "tankerLoadMt" is just the configured size of one lorry — the engineer's ACTUAL total for today is "plannedDespatchTotalMt" / "plannedDespatchTotalLorries" when present and above zero; prefer that figure and say how many lorries it is. When it's absent or zero, nothing has been planned yet — fall back to describing the tanker-load-based suggestion instead, and say so.
   - "penalty" is the RM deduction under the engineer's own configured buyer bands — call it "the penalty exposure" or "the estimated deduction". State the total and the worst tanks exactly as given; never estimate your own figure.
   - "productionSuggestion" is the engine's calculated safe incoming CPO ceiling for today — call it "the safe production limit", and name whether tank capacity or the good FFA limit is the constraint holding it there.
   - "lossOptimizer" is a per-tank comparison of despatching a high-FFA tank now versus holding it to blend the FFA down first — call it "the sell-now-vs-hold comparison". Always state which one the engine recommends and the RM saved, exactly as given — this is a core decision, don't soften it into vague advice. A "hold" recommendation is not always a full fix: when the data marks it not fully compliant, the hold only moves the tank into a cheaper penalty band by the given number of days — it does NOT bring it under the good FFA limit — say that plainly (e.g. "still over the limit, but the deduction band drops"), never imply the tank becomes fully compliant when it doesn't.
-  - "batchBlend" is a day-by-day tank-to-tank transfer plan to bring existing stock to good FFA with no new incoming CPO — call it "the blend-down plan". State whether it's feasible, over how many days, exactly as given.
+  - "batchBlend" is a day-by-day tank-to-tank transfer plan to bring existing stock to good FFA with no new incoming CPO — call it "the blend-down plan". State whether it's feasible, over how many days, exactly as given. This is only ONE of two ways the engineer can actually blend: they also have a manual one-off transfer tool (pick any source tank, any destination tank, any amount, right now) that isn't itself a computed "plan" — when asked how much to blend today, consider both: recommend a specific source tank → destination tank → amount using the same lowest-FFA-source / highest-FFA-destination logic "batchBlend" itself uses, even if no formal multi-day plan is shown. If NEITHER a tank-to-tank transfer NOR the blend-down plan gets the load compliant (no clean stock left, or not enough transfer capacity/time), say so plainly and suggest blending directly at the tanker instead — loading from multiple source tanks into the same tanker so the combined load's FFA averages out — as a fallback, not a first choice.
+  - "incomingAsSource" tells you whether the engineer has ticked "include incoming CPO as a source" in the Transfer calculator. When "included" is true, the incoming CPO amount and FFA given there is ALSO available today as a blending source (in addition to tank-to-tank transfers) — factor it into your suggestion. When false, do not suggest using incoming CPO as a blend source; only tank-to-tank transfers are available today. Always mention which case you're in if it changes your answer.
   - "allocationValid" / "hasOverflow" / "currentPlanValid" are pass/fail flags on the CURRENT allocation — never name them; just say plainly whether the current plan is workable and why (adds to 100%, no tank overflowing) if it isn't.
   - Every plan may carry its own penalty figure — when comparing plans, mention the RM difference between them, not just the FFA difference, but call it "the penalty for this option".
   - "targetFfaPct" is the GOOD FFA LIMIT — a ceiling, not a target to reach. At or below it is good; lower is always better. Call it "the good FFA limit".

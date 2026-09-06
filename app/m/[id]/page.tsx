@@ -1062,6 +1062,11 @@ export default function Home() {
         ),
         despatch: {
           tankerLoadMt: tankerLoadMt,
+          // What the engineer has actually ticked/typed in Refinery
+          // Comparison for today — 0 when nothing's been planned yet, in
+          // which case tankerLoadMt / recommendedPlan is the only guide.
+          plannedDespatchTotalMt,
+          plannedDespatchTotalLorries,
           recommendedPlan: topDespatchPlans[0]
             ? planToDespatchPayload(topDespatchPlans[0], 1)
             : null,
@@ -1114,6 +1119,11 @@ export default function Home() {
               })),
             }
           : null,
+        incomingAsSource: {
+          included: includeIncomingAsSource,
+          availableMt: includeIncomingAsSource ? incomingCPO : 0,
+          ffaPct: incomingFFA,
+        },
         conversationHistory: history,
         userQuestion: question || undefined,
         language: lang,
@@ -4715,9 +4725,7 @@ function DespatchDecision({
           <div className="rounded-lg bg-[#f9fbf8] p-2.5">
             <p className="text-[10px] font-bold uppercase text-[#7a867f]">{copy.despatchDecision.sourceTanks}</p>
             <p className="mt-0.5 truncate font-bold text-[#173f30]" title={sourceTanks.map((s) => s.name).join(", ")}>
-              {sourceTanks.length
-                ? sourceTanks.map((s) => `${s.name} (${n(s.mt, 0)} MT)`).join(", ")
-                : "—"}
+              {sourceTanks.length ? sourceTanks.map((s) => s.name).join(", ") : "—"}
             </p>
           </div>
         </div>
