@@ -126,8 +126,8 @@ export const translations = {
       checklistTitle: "Today's checklist",
       checklistRouteSingle: (tank: string) => `Route incoming CPO: 100% into ${tank}.`,
       checklistRouteSplit: (parts: string) => `Route incoming CPO: ${parts}.`,
-      checklistDespatch: (mt: string, sources: string, ffa: string) =>
-        `Despatch ${mt} MT from ${sources} today — ${ffa}% FFA, meets the limit.`,
+      checklistDespatch: (mt: string, sources: string, ffa: string, lorries: string) =>
+        `You can despatch up to ${mt} MT from ${sources} today — ${ffa}% FFA, meets the limit (${lorries}).`,
       checklistDespatchShortfall: (mt: string) =>
         ` Short by ${mt} MT — not enough good-FFA stock for a full load.`,
       checklistNoDespatch: "No feasible despatch load from good-FFA tanks today.",
@@ -734,8 +734,8 @@ export const translations = {
       checklistTitle: "Senarai semak hari ini",
       checklistRouteSingle: (tank: string) => `Alirkan CPO masuk: 100% ke ${tank}.`,
       checklistRouteSplit: (parts: string) => `Alirkan CPO masuk: ${parts}.`,
-      checklistDespatch: (mt: string, sources: string, ffa: string) =>
-        `Despatch ${mt} MT dari ${sources} hari ini — ${ffa}% FFA, mencapai had.`,
+      checklistDespatch: (mt: string, sources: string, ffa: string, lorries: string) =>
+        `Anda boleh despatch sehingga ${mt} MT dari ${sources} hari ini — ${ffa}% FFA, mencapai had (${lorries}).`,
       checklistDespatchShortfall: (mt: string) =>
         ` Kurang ${mt} MT — stok FFA baik tidak cukup untuk muatan penuh.`,
       checklistNoDespatch: "Tiada muatan despatch munasabah daripada tangki FFA baik hari ini.",

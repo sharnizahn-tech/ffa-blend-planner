@@ -1523,7 +1523,8 @@ export default function Home() {
           singleTankFollowUp={singleTankFollowUp}
           hasProfile={!!activeProfile}
           onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
-          topDespatchPlan={topDespatchPlans[0] ?? null}
+          goodFfaDespatchTanks={goodFfaDespatchTanks}
+          tankerLoadMt={tankerLoadMt}
           lossOptimizerResults={lossOptimizerResults}
         />
       </div>
@@ -3555,7 +3556,8 @@ function SmartRecommendation({
   singleTankFollowUp,
   hasProfile,
   onApplySingle,
-  topDespatchPlan,
+  goodFfaDespatchTanks,
+  tankerLoadMt,
   lossOptimizerResults,
 }: {
   copy: Copy;
@@ -3587,7 +3589,8 @@ function SmartRecommendation({
   // together routing, despatch, and blend-down — deliberately NOT the same
   // content as the Allocation strategy card above, which only covers where
   // today's incoming CPO goes.
-  topDespatchPlan: DespatchPlan | null;
+  goodFfaDespatchTanks: { name: string; stockMt: number; ffaPct: number }[];
+  tankerLoadMt: number;
   lossOptimizerResults: HoldVsDespatch[];
 }) {
   const best = topPlans[0];
@@ -3635,16 +3638,25 @@ function SmartRecommendation({
             .join(", "),
         )
       : null;
+  // Genuine "how much CAN we despatch today" — the total good-FFA stock
+  // actually sitting in tanks right now, not capped to a single tanker load
+  // (that per-lorry split still shows in the Despatch tab; this checklist
+  // line answers a different question: is it worth calling in extra lorries).
+  const despatchableTodayMt = goodFfaDespatchTanks.reduce((s, t) => s + t.stockMt, 0);
+  const despatchableTodayFfaPct =
+    despatchableTodayMt > 0
+      ? goodFfaDespatchTanks.reduce((s, t) => s + t.stockMt * t.ffaPct, 0) / despatchableTodayMt
+      : 0;
+  const despatchableTodayLorries =
+    despatchableTodayMt > 0 && tankerLoadMt > 0 ? Math.ceil(despatchableTodayMt / tankerLoadMt) : 0;
   const despatchLine =
-    topDespatchPlan && topDespatchPlan.totalMt > 0
+    despatchableTodayMt > 0
       ? copy.plan.checklistDespatch(
-          n(topDespatchPlan.totalMt, 0),
-          topDespatchPlan.sources.map((s) => s.name).join(" + "),
-          n(topDespatchPlan.loadFfaPct, 2),
-        ) +
-        (topDespatchPlan.shortfallMt > 0.5
-          ? copy.plan.checklistDespatchShortfall(n(topDespatchPlan.shortfallMt, 0))
-          : "")
+          n(despatchableTodayMt, 0),
+          goodFfaDespatchTanks.map((t) => t.name).join(" + "),
+          n(despatchableTodayFfaPct, 2),
+          copy.refineryDespatch.lorryCount(despatchableTodayLorries),
+        )
       : copy.plan.checklistNoDespatch;
   const blendLines = lossOptimizerResults.length
     ? lossOptimizerResults.map((r) => {
