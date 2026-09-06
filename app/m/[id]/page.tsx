@@ -1974,16 +1974,16 @@ function RoutingRecommendationCard({
     <section className="relative overflow-hidden rounded-2xl border border-[#0d2e21] shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.4)]">
       <div className="absolute inset-0">
         <Image
-          src="/BST-Storage.png"
+          src="/Oil.png"
           alt=""
           fill
           priority
           sizes="(min-width: 1280px) 52vw, 100vw"
-          style={{ objectPosition: "68% 60%" }}
+          style={{ objectPosition: "72% 38%" }}
           className="object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0d2e21] via-[#0d2e21]/85 to-[#0d2e21]/35" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0d2e21]/85 via-[#0d2e21]/10 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0d2e21]/75 via-[#0d2e21]/55 to-[#0d2e21]/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0d2e21]/70 via-[#0d2e21]/30 to-[#0d2e21]/10" />
       </div>
       <div className="relative p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -4672,11 +4672,11 @@ function DespatchDecision({
     <section className="overflow-hidden rounded-2xl border border-[#dde5df] bg-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
       <div className="relative h-28 w-full overflow-hidden">
         <Image
-          src="/BST-Storage.png"
+          src="/Oil.png"
           alt=""
           fill
           sizes="(min-width: 1024px) 38vw, 100vw"
-          style={{ objectPosition: "10% 75%" }}
+          style={{ objectPosition: "65% 35%" }}
           className="object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-white via-white/10 to-transparent" />
