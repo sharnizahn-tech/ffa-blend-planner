@@ -721,14 +721,6 @@ export default function Home() {
   const valid = allocationTotal === 100 && !results.some((r) => r.overflow);
   const bestMeetsTarget = !!best && best.results.every((r) => r.finalFFA <= target);
   const hasOverflow = results.some((r) => r.overflow);
-  const projectedBlendFfa = best
-    ? (() => {
-        const totalStock = best.results.reduce((s, r) => s + r.finalStock, 0);
-        return totalStock > 0
-          ? best.results.reduce((s, r) => s + r.finalFFA * r.finalStock, 0) / totalStock
-          : incomingFFA;
-      })()
-    : incomingFFA;
   const blendConfidence: "high" | "medium" | "low" = !best
     ? "low"
     : bestMeetsTarget && !hasOverflow
@@ -1130,9 +1122,9 @@ export default function Home() {
       };
   };
 
-  const fetchAiOpinion = async (opts: { deepAnalysis?: boolean } = {}) => {
+  const fetchAiOpinion = async (opts: { deepAnalysis?: boolean; questionOverride?: string } = {}) => {
     if (aiLoading || aiCooldown > 0) return;
-    const question = aiQuestion.trim();
+    const question = (opts.questionOverride ?? aiQuestion).trim();
     const historyForRequest = aiMessages.map((m) => ({ role: m.role, content: m.content }));
     if (question) {
       setAiMessages((prev) => [...prev, { role: "user", content: question }]);
@@ -1619,19 +1611,6 @@ export default function Home() {
         />
         </div>
       </div>
-
-      <SellHoldComparison
-        copy={copy}
-        results={lossOptimizerResults}
-        tanks={tanks}
-        target={target}
-        deadStockMt={deadStockMt}
-        selectedRefineryName={activeProfile?.name ?? null}
-        maxTransferPerDayMt={maxTransferPerDayMt}
-        onMaxTransferChange={changeMaxTransferPerDay}
-        autoTransfer={autoTransfer}
-        onUseAuto={useAutoTransfer}
-      />
     </>
   );
 
@@ -1648,6 +1627,17 @@ export default function Home() {
         incomingFFA={incomingFFA}
         onTransferFromIncoming={transferFromIncoming}
       />
+      <button
+        type="button"
+        onClick={() => {
+          setAiModalOpen(true);
+          fetchAiOpinion({ questionOverride: copy.batchBlend.askAiBlendQuestion });
+        }}
+        className="btn-touch w-full border border-[#b9c8bd] bg-white text-[#173f30] sm:w-auto"
+      >
+        <Bot size={16} />
+        {copy.batchBlend.askAiBlendButton}
+      </button>
       <details className="advanced-disclosure">
         <summary>{copy.transferCalc.advanced}</summary>
         <div className="mt-4">
@@ -1678,8 +1668,8 @@ export default function Home() {
   const navItems: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: copy.nav.overview, icon: <LayoutDashboard size={20} /> },
     { id: "production", label: copy.nav.production, icon: <Droplets size={20} /> },
-    { id: "despatch", label: copy.nav.despatch, icon: <Truck size={20} /> },
     { id: "transfer", label: copy.nav.transfer, icon: <ArrowRightLeft size={20} /> },
+    { id: "despatch", label: copy.nav.despatch, icon: <Truck size={20} /> },
   ];
 
   if (millLoadState === "loading") {
@@ -1797,7 +1787,6 @@ export default function Home() {
                   incomingCPO={incomingCPO}
                   incomingFFA={incomingFFA}
                   target={target}
-                  projectedFfa={projectedBlendFfa}
                   atRisk={blendAtRisk}
                   incomingHighFfa={incomingFFA > target}
                   confidence={blendConfidence}
@@ -1921,7 +1910,7 @@ export default function Home() {
   );
 }
 
-const FLOW_ORDER: MobileTab[] = ["overview", "production", "despatch", "transfer"];
+const FLOW_ORDER: MobileTab[] = ["overview", "production", "transfer", "despatch"];
 
 function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
   const stepIndex = FLOW_ORDER.indexOf(activeTab);
@@ -1949,7 +1938,6 @@ function RoutingRecommendationCard({
   incomingCPO,
   incomingFFA,
   target,
-  projectedFfa,
   atRisk,
   incomingHighFfa,
   confidence,
@@ -1959,7 +1947,6 @@ function RoutingRecommendationCard({
   incomingCPO: number;
   incomingFFA: number;
   target: number;
-  projectedFfa: number;
   atRisk: boolean;
   incomingHighFfa: boolean;
   confidence: "high" | "medium" | "low";
@@ -2014,18 +2001,13 @@ function RoutingRecommendationCard({
               : copy.blendSituation.existingStockRiskText}
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-3 gap-2.5">
           <RoutingStat
             label={copy.blendSituation.incomingCpo}
             value={`${n(incomingCPO, 0)} MT`}
             sub={`@ ${n(incomingFFA, 2)}% FFA`}
           />
           <RoutingStat label={copy.blendSituation.targetDispatchFfa} value={`≤ ${n(target, 2)}%`} />
-          <RoutingStat
-            label={copy.blendSituation.projectedAfterBlending}
-            value={`${n(projectedFfa, 2)}%`}
-            valueStyle={{ color: projectedFfa > target ? "#ffb4a8" : "#8ff0bb" }}
-          />
           <RoutingStat
             label={copy.blendSituation.confidence}
             value={confidenceLabel}
@@ -4805,167 +4787,6 @@ function DespatchDecision({
         </p>
       </div>
     </section>
-    </div>
-  );
-}
-
-function SellHoldComparison({
-  copy,
-  results,
-  tanks,
-  target,
-  deadStockMt,
-  selectedRefineryName,
-  maxTransferPerDayMt,
-  onMaxTransferChange,
-  autoTransfer,
-  onUseAuto,
-}: {
-  copy: Copy;
-  results: HoldVsDespatch[];
-  tanks: Tank[];
-  target: number;
-  deadStockMt: number;
-  selectedRefineryName: string | null;
-  maxTransferPerDayMt: number;
-  onMaxTransferChange: (v: number) => void;
-  autoTransfer: boolean;
-  onUseAuto: () => void;
-}) {
-  return (
-    <section className="rounded-2xl border border-[#dde5df] bg-white p-4 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)] sm:p-6">
-      <div className="flex items-center gap-2.5">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e5faed] text-[#00713a]">
-          <Scale size={18} />
-        </span>
-        <div>
-          <h2 className="text-base font-extrabold tracking-tight text-[#123c2c] sm:text-lg">{copy.sellHold.title}</h2>
-          <p className="text-xs text-[#8a9690]">{copy.sellHold.subtitle}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 max-w-xs">
-        <TransferRateField
-          copy={copy}
-          label={copy.lossOptimizer.maxTransferLabel}
-          value={maxTransferPerDayMt}
-          onChange={onMaxTransferChange}
-          autoTransfer={autoTransfer}
-          onUseAuto={onUseAuto}
-        />
-      </div>
-
-      {results.length === 0 ? (
-        <p className="mt-4 text-sm text-[#58665e]">{copy.sellHold.allGood}</p>
-      ) : (
-        <div className="mt-5 space-y-6">
-          {results.map((r) => {
-            const holdWins = r.recommendation === "hold";
-            const availableBlendStock = tanks
-              .filter((t) => t.name !== r.tankName && t.ffa < target)
-              .reduce((s, t) => s + Math.max(0, t.stock - deadStockMt), 0);
-            const blendQtyToday = r.bestDayTransferMt + r.bestDayIncomingMt;
-            return (
-              <div key={r.tankName}>
-                <p className="mb-2.5 text-sm font-bold text-[#173f30]">{r.tankName}</p>
-                <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-[1fr_auto_1fr]">
-                  <div
-                    className={`rounded-xl border p-4 ${
-                      !holdWins ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#e8ede8] bg-[#f9fbf8]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-[#173f30]">{copy.sellHold.optionADespatch}</p>
-                      {!holdWins && (
-                        <span className="rounded-full bg-[#d4f7e2] px-2 py-0.5 text-[10px] font-bold text-[#00713a]">
-                          {copy.sellHold.recommended}
-                        </span>
-                      )}
-                    </div>
-                    <dl className="mt-2.5 space-y-1.5 text-xs">
-                      <Row label={copy.sellHold.tank} value={r.tankName} />
-                      <Row label={copy.sellHold.quantity} value={`${n(r.tankStockMt, 0)} MT`} />
-                      <Row label={copy.sellHold.currentFfa} value={`${n(r.tankFfaPct, 2)}%`} />
-                      <Row label={copy.sellHold.selectedRefinery} value={selectedRefineryName ?? "—"} />
-                      <Row label={copy.sellHold.deductionRate} value={`RM ${n(r.despatchNowRmPerMt, 2)}/MT`} />
-                      <Row
-                        label={copy.sellHold.estimatedPenalty}
-                        value={`RM ${n(r.despatchNowPenaltyRm, 0)}`}
-                        strong
-                      />
-                      <Row label={copy.sellHold.feasibility} value={copy.sellHold.feasible} good />
-                    </dl>
-                  </div>
-
-                  <div className="hidden items-center justify-center md:flex">
-                    <span className="grid h-8 w-8 place-items-center rounded-full bg-[#f4f6f2] text-[10px] font-extrabold text-[#6c7971]">
-                      {copy.sellHold.vsLabel}
-                    </span>
-                  </div>
-
-                  <div
-                    className={`rounded-xl border p-4 ${
-                      holdWins ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#e8ede8] bg-[#f9fbf8]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-[#173f30]">{copy.sellHold.optionBHold}</p>
-                      {holdWins && (
-                        <span className="rounded-full bg-[#d4f7e2] px-2 py-0.5 text-[10px] font-bold text-[#00713a]">
-                          {copy.sellHold.recommended}
-                        </span>
-                      )}
-                    </div>
-                    {r.bestDay > 0 ? (
-                      <dl className="mt-2.5 space-y-1.5 text-xs">
-                        <Row label={copy.sellHold.expectedFfaAfter} value={`${n(r.bestDayFfaPct, 2)}%`} />
-                        <Row label={copy.sellHold.requiredBlendQty} value={`${n(blendQtyToday, 0)} MT`} />
-                        <Row
-                          label={copy.sellHold.holdingPeriod}
-                          value={copy.sellHold.holdingPeriodDays(r.bestDay)}
-                        />
-                        <Row label={copy.sellHold.availableBlendStock} value={`${n(availableBlendStock, 0)} MT`} />
-                        <Row
-                          label={copy.sellHold.futurePenalty}
-                          value={`RM ${n(r.bestDayPenaltyRm, 0)}`}
-                          strong
-                        />
-                        <Row
-                          label={copy.sellHold.feasibility}
-                          value={r.bestDayFullyCompliant ? copy.sellHold.feasible : copy.sellHold.partiallyFeasible}
-                          good={r.bestDayFullyCompliant ? true : undefined}
-                        />
-                      </dl>
-                    ) : (
-                      <p className="mt-2.5 text-xs leading-relaxed text-[#a4342c]">{copy.sellHold.noFeasibleBlend}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <details className="mt-5 border-t border-[#e8ede8] pt-4">
-        <summary className="cursor-pointer text-xs font-bold text-[#00713a]">{copy.sellHold.viewCalcDetails}</summary>
-        <p className="mt-2 text-xs leading-relaxed text-[#7a867f]">{copy.sellHold.calcDetailsText}</p>
-      </details>
-    </section>
-  );
-}
-
-function Row({ label, value, strong, good }: { label: string; value: string; strong?: boolean; good?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <dt className="text-[#7a867f]">{label}</dt>
-      <dd
-        className={`text-right ${strong ? "font-extrabold" : "font-semibold"} ${
-          good === true ? "text-[#187449]" : good === false ? "text-[#a4342c]" : "text-[#173f30]"
-        }`}
-      >
-        {value}
-      </dd>
     </div>
   );
 }

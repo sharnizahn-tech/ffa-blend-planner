@@ -13,9 +13,9 @@ export const translations = {
     nav: { overview: "Overview", production: "Production", despatch: "Despatch", transfer: "Transfer" },
     flow: {
       overview: "Step 1 of 4 — Check today's status and the AI recommendation.",
-      production: "Step 2 of 4 — Confirm tanks and allocate incoming CPO.",
-      despatch: "Step 3 of 4 — Ship from good-FFA tanks first.",
-      transfer: "Step 4 of 4 — Only if needed: move stock between tanks.",
+      production: "Step 2 of 4 — Decide which BST incoming CPO should go into.",
+      transfer: "Step 3 of 4 — Blend stock down today so it's ready to ship.",
+      despatch: "Step 4 of 4 — Despatch tomorrow based on today's blending.",
     },
     metrics: {
       currentStock: "Current stock",
@@ -467,6 +467,9 @@ export const translations = {
         `Day ${day}: move ${mt} MT from ${from} to ${to} → ${to} FFA becomes ${ffa}%`,
       finalTitle: "Final transfer result",
       needAtLeastTwo: "Select at least two tanks — one to receive, one lower-FFA source to transfer from.",
+      askAiBlendButton: "Ask AI: how much should we blend today?",
+      askAiBlendQuestion:
+        "Based on today's tank readings, how much should we blend today, from which tank, and into which tank — so it's ready to despatch tomorrow?",
     },
     warnings: {
       title: "Warnings",
@@ -617,9 +620,9 @@ export const translations = {
     nav: { overview: "Ringkasan", production: "Pengeluaran", despatch: "Despatch", transfer: "Pemindahan" },
     flow: {
       overview: "Langkah 1/4 — Semak status hari ini dan cadangan AI.",
-      production: "Langkah 2/4 — Sahkan tangki dan peruntukkan CPO masuk.",
-      despatch: "Langkah 3/4 — Despatch dari tangki FFA baik dahulu.",
-      transfer: "Langkah 4/4 — Jika perlu: pindah stok antara tangki.",
+      production: "Langkah 2/4 — Tentukan tangki BST mana CPO masuk patut pergi.",
+      transfer: "Langkah 3/4 — Blend stok hari ini supaya sedia untuk dihantar.",
+      despatch: "Langkah 4/4 — Despatch esok berdasarkan blending hari ini.",
     },
     metrics: {
       currentStock: "Stok semasa",
@@ -1068,6 +1071,9 @@ export const translations = {
         `Hari ${day}: pindah ${mt} MT daripada ${from} ke ${to} → FFA ${to} menjadi ${ffa}%`,
       finalTitle: "Hasil pemindahan akhir",
       needAtLeastTwo: "Pilih sekurang-kurangnya dua tangki — satu untuk terima, satu sumber FFA rendah untuk dipindah.",
+      askAiBlendButton: "Tanya AI: berapa banyak patut kita blend hari ini?",
+      askAiBlendQuestion:
+        "Berdasarkan bacaan tangki hari ini, berapa banyak patut kita blend hari ini, dari tangki mana, dan ke tangki mana — supaya sedia untuk despatch esok?",
     },
     warnings: {
       title: "Amaran",
