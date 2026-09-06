@@ -8,8 +8,8 @@ import {
 
 export const runtime = "nodejs";
 
-const DEFAULT_BASE_URL = "https://www.chenzk.top/v1";
-const FALLBACK_MODELS = ["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-opus-4-1-20250805"];
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
+const FALLBACK_MODELS = ["moonshotai/kimi-k2", "openai/gpt-4o-mini", "anthropic/claude-3-5-haiku"];
 
 function parseOpenAiError(detailText: string) {
   try {
@@ -27,16 +27,21 @@ function openAiErrorMessage(status: number, detailText: string): string {
   const code = detail?.error?.code ?? "";
 
   if (status === 401 || code === "invalid_api_key") {
-    return "Invalid OpenAI API key. Check OPENAI_API_KEY in Vercel.";
+    return "Invalid API key. Check OPENAI_API_KEY in Vercel.";
   }
-  if (code === "insufficient_quota" || message.toLowerCase().includes("quota")) {
-    return "OpenAI account or proxy has no available credits.";
+  if (
+    status === 402 ||
+    code === "insufficient_quota" ||
+    message.toLowerCase().includes("quota") ||
+    message.toLowerCase().includes("credit")
+  ) {
+    return "AI provider account has no credits. Add credits at openrouter.ai/settings/credits.";
   }
   if (status === 429) {
-    return "OpenAI rate limit reached. Wait 60 seconds, tap once only, then try again.";
+    return "AI rate limit reached. Wait 60 seconds, tap once only, then try again.";
   }
   if (code === "model_not_found") {
-    return "OpenAI model unavailable. Set OPENAI_MODEL to gpt-4o-mini in Vercel or remove that variable.";
+    return "Configured AI model is unavailable on this provider account.";
   }
   if (message) return message;
 
