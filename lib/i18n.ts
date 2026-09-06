@@ -280,12 +280,12 @@ export const translations = {
     },
     despatchSummary: {
       blendFfa: "Today's Blend FFA",
-      tankerLoad: "Tanker Load",
+      tankerLoad: "Tanker Load (per lorry)",
       bestRefinery: "Best Refinery",
       estimatedPenalty: "Estimated Penalty",
       belowThreshold: "Below penalty threshold",
       noDeduction: "No deduction",
-      readyForDespatch: "Ready for despatch",
+      readyForDespatch: "Capacity per lorry — set total loads below",
       noRefineryYet: "Add a refinery to compare",
     },
     refineryComparison: {
@@ -888,12 +888,12 @@ export const translations = {
     },
     despatchSummary: {
       blendFfa: "FFA Campuran Hari Ini",
-      tankerLoad: "Muatan Tanker",
+      tankerLoad: "Muatan Tanker (setiap lori)",
       bestRefinery: "Kilang Penapisan Terbaik",
       estimatedPenalty: "Anggaran Penalti",
       belowThreshold: "Di bawah ambang penalti",
       noDeduction: "Tiada potongan",
-      readyForDespatch: "Sedia untuk despatch",
+      readyForDespatch: "Kapasiti setiap lori — tetapkan jumlah muatan di bawah",
       noRefineryYet: "Tambah kilang penapisan untuk banding",
     },
     refineryComparison: {
