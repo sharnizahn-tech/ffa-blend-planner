@@ -494,6 +494,11 @@ export default function Home() {
   // lightweight "last calculated" timestamp for the Refresh affordance — set
   // client-side only, after mount, so server and client markup match.
   const [showPenaltyEditor, setShowPenaltyEditor] = useState(false);
+  // Which refineries are ticked today and how much each gets, lifted up from
+  // the Refinery Comparison table so the top summary card can show today's
+  // real planned total instead of just the static per-lorry tanker size.
+  const [refinerySelected, setRefinerySelected] = useState<Set<string>>(() => new Set());
+  const [refineryVolumes, setRefineryVolumes] = useState<Record<string, number>>({});
   const [lastCalculatedAt, setLastCalculatedAt] = useState<Date | null>(null);
   const [despatchConfirmedAt, setDespatchConfirmedAt] = useState<Date | null>(null);
   const [verificationAcknowledged, setVerificationAcknowledged] = useState(false);
@@ -814,6 +819,14 @@ export default function Home() {
     ? configuredRefineryRows.reduce((a, b) => (b.totalRm < a.totalRm ? b : a))
     : null;
   const selectedRefineryRow = refineryRows.find((r) => r.profile.id === activeProfileId) ?? refineryRows[0] ?? null;
+  // Today's actual planned total across ticked refineries — what the top
+  // summary card shows once the engineer starts planning, instead of just
+  // the static per-lorry tanker size.
+  const plannedDespatchTotalMt = refineryRows
+    .filter((r) => refinerySelected.has(r.profile.id))
+    .reduce((s, r) => s + (refineryVolumes[r.profile.id] ?? 0), 0);
+  const plannedDespatchTotalLorries =
+    plannedDespatchTotalMt > 0 && tankerLoadMt > 0 ? Math.ceil(plannedDespatchTotalMt / tankerLoadMt) : 0;
 
   const safeProduction = useMemo<SafeProductionSuggestion>(
     () => suggestSafeProduction(tanks, target, incomingFFA, millCapacity, hours, utilisation, oer),
@@ -1555,6 +1568,8 @@ export default function Home() {
         blendFfaPct={achievedFfaPct}
         target={target}
         tankerLoadMt={tankerLoadMt}
+        plannedDespatchTotalMt={plannedDespatchTotalMt}
+        plannedDespatchTotalLorries={plannedDespatchTotalLorries}
         bestRow={cheapestRefineryRow}
       />
 
@@ -1574,6 +1589,10 @@ export default function Home() {
           defaultAchievedFfaPct={achievedFfaPct}
           tankerLoadMt={tankerLoadMt}
           onTankerLoadChange={setTankerLoadMt}
+          selected={refinerySelected}
+          onSelectedChange={setRefinerySelected}
+          volumes={refineryVolumes}
+          onVolumesChange={setRefineryVolumes}
           penaltyEditor={penaltyPanel}
         />
         </div>
@@ -4205,16 +4224,25 @@ function DespatchSummaryCards({
   blendFfaPct,
   target,
   tankerLoadMt,
+  plannedDespatchTotalMt,
+  plannedDespatchTotalLorries,
   bestRow,
 }: {
   copy: Copy;
   blendFfaPct: number;
   target: number;
   tankerLoadMt: number;
+  plannedDespatchTotalMt: number;
+  plannedDespatchTotalLorries: number;
   bestRow: RefineryRow | null;
 }) {
   const ffaOk = blendFfaPct <= target;
   const bestBelowThreshold = bestRow ? bestRow.bandIndex < 0 : false;
+  // Once the engineer has actually ticked refineries and typed volumes
+  // below, show today's real planned total here instead of just the static
+  // per-lorry tanker size — the card becomes a live "what am I sending
+  // today" figure rather than a fixed setting reminder.
+  const hasPlannedDespatch = plannedDespatchTotalMt > 0;
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <SummaryCard
@@ -4226,9 +4254,15 @@ function DespatchSummaryCards({
       />
       <SummaryCard
         icon={<Truck size={18} />}
-        label={copy.despatchSummary.tankerLoad}
-        value={`${n(tankerLoadMt, 0)} MT`}
-        status={copy.despatchSummary.readyForDespatch}
+        label={hasPlannedDespatch ? copy.refineryComparison.despatchColumn : copy.despatchSummary.tankerLoad}
+        value={hasPlannedDespatch ? `${n(plannedDespatchTotalMt, 0)} MT` : `${n(tankerLoadMt, 0)} MT`}
+        status={
+          hasPlannedDespatch
+            ? plannedDespatchTotalLorries > 0
+              ? copy.refineryDespatch.lorryCount(plannedDespatchTotalLorries)
+              : copy.despatchSummary.readyForDespatch
+            : copy.despatchSummary.readyForDespatch
+        }
         ok
       />
       <SummaryCard
@@ -4340,6 +4374,10 @@ function RefineryComparison({
   defaultAchievedFfaPct,
   tankerLoadMt,
   onTankerLoadChange,
+  selected,
+  onSelectedChange,
+  volumes,
+  onVolumesChange,
   penaltyEditor,
 }: {
   copy: Copy;
@@ -4351,19 +4389,21 @@ function RefineryComparison({
   defaultAchievedFfaPct: number;
   tankerLoadMt: number;
   onTankerLoadChange: (v: number) => void;
+  // "What are we actually despatching today" — separate from activeProfileId
+  // (which just controls which buyer's bands the Manage Penalty Bands editor
+  // is showing). Lifted up to the parent page so the top summary card can
+  // show today's real planned total; nothing here changes any other panel's
+  // own calculations.
+  selected: Set<string>;
+  onSelectedChange: (updater: (prev: Set<string>) => Set<string>) => void;
+  volumes: Record<string, number>;
+  onVolumesChange: (updater: (prev: Record<string, number>) => Record<string, number>) => void;
   penaltyEditor: React.ReactNode;
 }) {
-  // Local, editable "what are we actually despatching today" state — separate
-  // from activeProfileId (which just controls which buyer's bands the
-  // Manage Penalty Bands editor is showing). Tick whichever refineries get a
-  // load today and type each one's own volume, same as before this page was
-  // redesigned; nothing here changes any other panel's calculations.
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [achievedFfa, setAchievedFfa] = useState(defaultAchievedFfaPct);
 
   const toggle = (id: string) =>
-    setSelected((prev) => {
+    onSelectedChange((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -4497,7 +4537,7 @@ function RefineryComparison({
                         <NumericInput
                           label={copy.refineryComparison.despatchColumn}
                           value={volumes[row.profile.id] ?? 0}
-                          onChange={(v) => setVolumes((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
+                          onChange={(v) => onVolumesChange((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
                           className="numeric-input w-20"
                         />
                       </td>
@@ -4538,7 +4578,7 @@ function RefineryComparison({
                 isChecked={selected.has(row.profile.id)}
                 isCheapest={cheapestId === row.profile.id}
                 volumeMt={volumes[row.profile.id] ?? 0}
-                onVolumeChange={(v) => setVolumes((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
+                onVolumeChange={(v) => onVolumesChange((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
                 lorries={rowLorries(row)}
                 achievedFfaPct={achievedFfa}
                 bandLabel={rowBandLabel(row)}
