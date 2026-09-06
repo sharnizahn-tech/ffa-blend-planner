@@ -897,19 +897,11 @@ export default function Home() {
     copy.despatchDecision.reasonTankerReady(n(plannedDespatchMt, 0)),
   ];
 
-  // "Hold one day" reuses the SAME hold-vs-despatch trace already computed
-  // for the primary over-limit tank (day 1 = today's blending, at the real
-  // pump-rate cap) — priced under whichever refinery is currently selected,
-  // so this stays consistent with the rest of the Despatch Decision panel.
-  const dispatchNowCostRm = primaryLossOptimizer
-    ? primaryLossOptimizer.despatchNowPenaltyRm
-    : (selectedRefineryRow?.totalRm ?? 0);
-  const holdOneDayCostRm = (() => {
-    if (!primaryLossOptimizer || !activeProfile) return dispatchNowCostRm;
-    const day1 = primaryLossOptimizer.hold.trace[1];
-    if (!day1) return dispatchNowCostRm;
-    return calcPenaltyExposure(day1.ffaPct, day1.stockMt, activeProfile.bands).totalRm;
-  })();
+  // Which tank(s) the planned despatch quantity actually comes from — the
+  // engine's own despatch plan already knows this (it fills from the
+  // lowest-FFA good tank first), so just surface it rather than making the
+  // engineer cross-reference the table below.
+  const despatchSourceTanks = topDespatchPlans[0]?.sources.map((s) => ({ name: s.name, mt: s.mt })) ?? [];
 
   // If routing 100% into one tank leaves it over the limit, don't just say
   // "sort it out later" — reuse the same despatch-vs-hold engine the Loss
@@ -1615,9 +1607,8 @@ export default function Home() {
               : null
           }
           totalPenaltyRm={selectedRefineryRow ? selectedRefineryRow.totalRm : null}
-          plannedDespatchMt={plannedDespatchMt}
-          dispatchNowCostRm={dispatchNowCostRm}
-          holdOneDayCostRm={holdOneDayCostRm}
+          plannedDespatchMt={plannedDespatchTotalMt || plannedDespatchMt}
+          sourceTanks={despatchSourceTanks}
           verificationAcknowledged={verificationAcknowledged}
           onVerificationChange={setVerificationAcknowledged}
           confirmDisabledReasons={confirmDisabledReasons}
@@ -4634,8 +4625,7 @@ function DespatchDecision({
   rateRmPerMt,
   totalPenaltyRm,
   plannedDespatchMt,
-  dispatchNowCostRm,
-  holdOneDayCostRm,
+  sourceTanks,
   verificationAcknowledged,
   onVerificationChange,
   confirmDisabledReasons,
@@ -4652,8 +4642,7 @@ function DespatchDecision({
   rateRmPerMt: number | null;
   totalPenaltyRm: number | null;
   plannedDespatchMt: number;
-  dispatchNowCostRm: number;
-  holdOneDayCostRm: number;
+  sourceTanks: { name: string; mt: number }[];
   verificationAcknowledged: boolean;
   onVerificationChange: (v: boolean) => void;
   confirmDisabledReasons: string[];
@@ -4685,7 +4674,6 @@ function DespatchDecision({
     },
   };
   const meta = statusMeta[status];
-  const differenceRm = dispatchNowCostRm - holdOneDayCostRm;
 
   return (
     <div className="lg:sticky lg:top-4">
@@ -4742,6 +4730,14 @@ function DespatchDecision({
             <p className="text-[10px] font-bold uppercase text-[#7a867f]">{copy.despatchDecision.tankerQuantity}</p>
             <p className="mt-0.5 font-bold text-[#173f30]">{n(plannedDespatchMt, 0)} MT</p>
           </div>
+          <div className="rounded-lg bg-[#f9fbf8] p-2.5">
+            <p className="text-[10px] font-bold uppercase text-[#7a867f]">{copy.despatchDecision.sourceTanks}</p>
+            <p className="mt-0.5 truncate font-bold text-[#173f30]" title={sourceTanks.map((s) => s.name).join(", ")}>
+              {sourceTanks.length
+                ? sourceTanks.map((s) => `${s.name} (${n(s.mt, 0)} MT)`).join(", ")
+                : "—"}
+            </p>
+          </div>
         </div>
         {totalPenaltyRm !== null && (
           <div className="mt-2 rounded-lg border border-[#e8ede8] p-2.5 text-sm">
@@ -4751,29 +4747,6 @@ function DespatchDecision({
             </p>
           </div>
         )}
-
-        <div className="mt-4 border-t border-[#e8ede8] pt-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-[#7a867f]">
-            {copy.despatchDecision.costComparisonTitle}
-          </p>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-            <div>
-              <p className="text-[10px] text-[#8a9690]">{copy.despatchDecision.dispatchNowCost}</p>
-              <p className="mt-0.5 text-sm font-extrabold text-[#173f30]">RM {n(dispatchNowCostRm, 0)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-[#8a9690]">{copy.despatchDecision.holdOneDayCost}</p>
-              <p className="mt-0.5 text-sm font-extrabold text-[#173f30]">RM {n(holdOneDayCostRm, 0)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-[#8a9690]">{copy.despatchDecision.difference}</p>
-              <p className={`mt-0.5 text-sm font-extrabold ${differenceRm > 0 ? "text-[#187449]" : "text-[#173f30]"}`}>
-                RM {n(Math.abs(differenceRm), 0)}
-              </p>
-            </div>
-          </div>
-          <p className="mt-1.5 text-[10px] text-[#a2ada4]">{copy.despatchDecision.estimatedNote}</p>
-        </div>
 
         <div className="mt-4 flex items-start gap-2 rounded-xl border border-[#f7d9ba] bg-[#fff3e6] p-3 text-xs leading-relaxed text-[#7a4a1f]">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
