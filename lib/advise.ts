@@ -15,7 +15,11 @@ const blendPlanSchema = z.object({
     }),
   ),
   meetsTarget: z.boolean(),
-  scoreDeltaPct: z.number(),
+  // Optional (not required) so a browser running slightly-stale cached
+  // frontend code — from just before this field was introduced — doesn't
+  // get its entire advise request hard-rejected; it just loses the
+  // relative-ranking commentary for that one call instead.
+  scoreDeltaPct: z.number().optional(),
   maxFinalFfaPct: z.number().optional(),
   penaltyRm: z.number().optional(),
 });
@@ -26,7 +30,7 @@ const despatchPlanSchema = z.object({
   loadFfaPct: z.number(),
   meetsTarget: z.boolean(),
   shortfallMt: z.number(),
-  scoreDeltaPct: z.number(),
+  scoreDeltaPct: z.number().optional(),
   sources: z.array(
     z.object({
       name: z.string(),
