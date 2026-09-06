@@ -9,7 +9,7 @@ import {
 export const runtime = "nodejs";
 
 const DEFAULT_BASE_URL = "https://www.chenzk.top/v1";
-const FALLBACK_MODELS = ["gpt-5.5", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-5.6-sol"];
+const FALLBACK_MODELS = ["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-opus-4-1-20250805"];
 
 function parseOpenAiError(detailText: string) {
   try {
