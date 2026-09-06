@@ -285,11 +285,20 @@ function planToAdvisePayload(
   rank: number,
   target: number,
   penaltyBands?: PenaltyBand[] | null,
+  bestScore?: number,
 ) {
+  // The raw engine score is an internal ranking index (arbitrary units,
+  // weighted composite of FFA-over-limit, contamination, etc.) — not
+  // something meaningful to quote to an engineer on its own. Send a plain
+  // percentage difference against the best plan instead, so the AI has an
+  // actually-correct number to cite rather than reciting a confusing raw
+  // index as if it were a real quantity.
+  const baseline = bestScore ?? plan.score;
+  const scoreDeltaPct = baseline > 0 ? ((plan.score - baseline) / baseline) * 100 : 0;
   return {
     rank,
     allocationPct: plan.allocation,
-    score: plan.score,
+    scoreDeltaPct: Math.round(scoreDeltaPct * 10) / 10,
     meetsTarget: plan.results.every((r) => r.finalFFA <= target),
     maxFinalFfaPct: Math.max(...plan.results.map((r) => r.finalFFA)),
     tanks: plan.results.map((r) => ({
@@ -1048,9 +1057,11 @@ export default function Home() {
           utilisationPct: r.utilisation,
           overflow: r.overflow,
         })),
-        recommendedPlan: recommended ? planToAdvisePayload(recommended, 1, target, activeProfile?.bands) : null,
+        recommendedPlan: recommended
+          ? planToAdvisePayload(recommended, 1, target, activeProfile?.bands)
+          : null,
         alternativePlans: alternatives.map((plan, i) =>
-          planToAdvisePayload(plan, i + 2, target, activeProfile?.bands),
+          planToAdvisePayload(plan, i + 2, target, activeProfile?.bands, recommended?.score),
         ),
         despatch: {
           tankerLoadMt: tankerLoadMt,
@@ -1059,7 +1070,7 @@ export default function Home() {
             : null,
           alternativePlans: topDespatchPlans
             .slice(1)
-            .map((plan, i) => planToDespatchPayload(plan, i + 2)),
+            .map((plan, i) => planToDespatchPayload(plan, i + 2, topDespatchPlans[0]?.score)),
         },
         flags: {
           allocationTotalPct: allocationTotal,

@@ -98,14 +98,20 @@ export function findTopDespatchPlans(
   return top;
 }
 
-export function planToDespatchPayload(plan: DespatchPlan, rank: number) {
+export function planToDespatchPayload(plan: DespatchPlan, rank: number, bestScore?: number) {
+  // Same reasoning as the allocation planner: the raw score is an internal
+  // ranking index in arbitrary units, not something meaningful to quote to
+  // an engineer. Send a plain percentage difference against the best plan
+  // instead.
+  const baseline = bestScore ?? plan.score;
+  const scoreDeltaPct = baseline > 0 ? ((plan.score - baseline) / baseline) * 100 : 0;
   return {
     rank,
     totalMt: plan.totalMt,
     loadFfaPct: plan.loadFfaPct,
     meetsTarget: plan.meetsLimit,
     shortfallMt: plan.shortfallMt,
-    score: plan.score,
+    scoreDeltaPct: Math.round(scoreDeltaPct * 10) / 10,
     sources: plan.sources.map((s) => ({
       name: s.name,
       mt: s.mt,

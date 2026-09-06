@@ -15,7 +15,7 @@ const blendPlanSchema = z.object({
     }),
   ),
   meetsTarget: z.boolean(),
-  score: z.number(),
+  scoreDeltaPct: z.number(),
   maxFinalFfaPct: z.number().optional(),
   penaltyRm: z.number().optional(),
 });
@@ -26,7 +26,7 @@ const despatchPlanSchema = z.object({
   loadFfaPct: z.number(),
   meetsTarget: z.boolean(),
   shortfallMt: z.number(),
-  score: z.number(),
+  scoreDeltaPct: z.number(),
   sources: z.array(
     z.object({
       name: z.string(),
@@ -503,6 +503,7 @@ Rules:
   - "allocationValid" / "hasOverflow" / "currentPlanValid" are pass/fail flags on the CURRENT allocation — never name them; just say plainly whether the current plan is workable and why (adds to 100%, no tank overflowing) if it isn't.
   - Every plan may carry its own penalty figure — when comparing plans, mention the RM difference between them, not just the FFA difference, but call it "the penalty for this option".
   - "targetFfaPct" is the GOOD FFA LIMIT — a ceiling, not a target to reach. At or below it is good; lower is always better. Call it "the good FFA limit".
+  - "scoreDeltaPct" on an alternative plan is how much worse it ranks than the recommended plan, as a plain percentage (0 = recommended plan itself; a positive number = that much worse). It is NOT a real quantity — never call it a "score", never say things like "scores 300,650 versus 300,708", and never do your own math on it. Just say "ranks about X% worse" or, when the number is small (under ~5%), say the options are "very close" and explain the real, physical reason to prefer one anyway (protects a clean tank, fewer valves, etc.) rather than leaning on the percentage as if it were the actual reason.
 - Explain WHY the recommendation is right, which tanks are risky, and what to actually do before transfer — a number without the reasoning behind it isn't useful to them.
 - If incoming FFA is consistently high (not just today), or a tank keeps returning to high FFA after being blended down, say so and suggest what's worth investigating upstream — FFB freshness / harvest-to-mill delay, sterilising and digestion consistency, or whether it's worth pushing back on a specific supplier — not just today's routing fix. Only raise this when the data actually points to a recurring pattern, not on every response.
 - Compare the current allocation against the recommended one only when they actually differ — skip this if they're the same.
