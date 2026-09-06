@@ -6,6 +6,7 @@ const n = (v: number, d = 2) =>
 export const translations = {
   en: {
     appTitle: "Mill Stock Optimizer",
+    appTitleShort: "Mill Optimizer",
     appSubtitle: "CPO quality decision support",
     ready: "Ready",
     footer:
@@ -613,6 +614,7 @@ export const translations = {
   },
   bm: {
     appTitle: "Pengoptimum Stok Kilang",
+    appTitleShort: "Optimum Kilang",
     appSubtitle: "Sokongan keputusan kualiti CPO",
     ready: "Sedia",
     footer:

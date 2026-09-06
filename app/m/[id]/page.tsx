@@ -1748,40 +1748,94 @@ export default function Home() {
 
   return (
     <main className="min-h-screen min-w-0 overflow-x-hidden bg-[#f4f6f2] text-[#17231d]">
-      <header className="sticky top-0 z-30 border-b border-[#dfe5dc] bg-[#123c2c] text-white">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3 sm:px-7 sm:py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.45)]">
-                <Droplets size={24} />
-              </div>
-              <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold sm:text-xl">{copy.appTitle}</h1>
-                <p className="truncate text-xs text-[#b9d3c4]">{copy.appSubtitle}</p>
-              </div>
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#123c2c] text-white">
+        <div className="mx-auto flex max-w-[1440px] items-center gap-3 px-4 py-3 sm:px-8 xl:h-[88px] xl:gap-4 xl:px-12 xl:py-0">
+          {/* Left: branding */}
+          <div className="flex min-w-0 shrink-0 items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#00b14f] text-white">
+              <Droplets size={20} />
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <LanguageToggle lang={lang} onChange={setLanguage} />
-              <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs md:flex">
-                <span className="h-2 w-2 rounded-full bg-[#00e676]" />
-                {copy.ready}
-              </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-[15px] font-bold leading-tight sm:text-base">
+                <span className="sm:hidden">{copy.appTitleShort}</span>
+                <span className="hidden sm:inline">{copy.appTitle}</span>
+              </h1>
+              <p className="hidden truncate text-[11px] leading-tight text-[#8fd9b6] sm:block">
+                {copy.appSubtitle}
+              </p>
             </div>
           </div>
-          <nav className="top-nav" aria-label="Section navigation">
+
+          {/* Centre: step navigation — inline once there's real room, else it
+              moves to its own scrollable row below the header (tablet/mobile). */}
+          <nav aria-label="Section navigation" className="hidden min-w-0 flex-1 items-center justify-center gap-1 xl:flex">
             {navItems.map((item, i) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`top-nav__item ${mobileTab === item.id ? "active" : ""}`}
-                onClick={() => setMobileTab(item.id)}
-              >
-                <span className="top-nav__step">{i + 1}</span>
-                {item.label}
-              </button>
+              <div key={item.id} className="flex shrink-0 items-center gap-1">
+                {i > 0 && <ChevronRight size={14} className="text-white/25" aria-hidden="true" />}
+                <button
+                  type="button"
+                  onClick={() => setMobileTab(item.id)}
+                  aria-current={mobileTab === item.id ? "step" : undefined}
+                  className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-[13px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00e676] ${
+                    mobileTab === item.id
+                      ? "bg-[#d4f7e2] text-[#123c2c]"
+                      : "bg-transparent text-white/70 hover:bg-white/10"
+                  }`}
+                >
+                  <span
+                    className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-extrabold ${
+                      mobileTab === item.id ? "bg-[#00b14f] text-white" : "bg-white/15 text-white"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  {item.label}
+                </button>
+              </div>
             ))}
           </nav>
+
+          {/* Right: controls */}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <LanguageToggle lang={lang} onChange={setLanguage} />
+            <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs md:flex">
+              <span className="h-2 w-2 rounded-full bg-[#00e676]" />
+              {copy.ready}
+            </div>
+          </div>
         </div>
+
+        {/* Tablet/mobile: step navigation as its own compact, horizontally
+            scrollable row — never compressed or wrapped. */}
+        <nav
+          aria-label="Section navigation"
+          className="flex items-center gap-1 overflow-x-auto border-t border-white/10 px-4 py-2 sm:px-8 xl:hidden"
+        >
+          {navItems.map((item, i) => (
+            <div key={item.id} className="flex shrink-0 items-center gap-1">
+              {i > 0 && <ChevronRight size={14} className="text-white/25" aria-hidden="true" />}
+              <button
+                type="button"
+                onClick={() => setMobileTab(item.id)}
+                aria-current={mobileTab === item.id ? "step" : undefined}
+                className={`flex min-h-[44px] shrink-0 items-center gap-2 rounded-full px-3 text-[13px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00e676] ${
+                  mobileTab === item.id
+                    ? "bg-[#d4f7e2] text-[#123c2c]"
+                    : "bg-transparent text-white/70 hover:bg-white/10"
+                }`}
+              >
+                <span
+                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-extrabold ${
+                    mobileTab === item.id ? "bg-[#00b14f] text-white" : "bg-white/15 text-white"
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                {item.label}
+              </button>
+            </div>
+          ))}
+        </nav>
       </header>
 
       <div className="mx-auto max-w-[1400px] px-4 py-4 pb-36 sm:px-7 sm:py-6 md:pb-8 xl:pb-10">
