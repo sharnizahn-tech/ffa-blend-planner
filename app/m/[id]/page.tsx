@@ -1778,6 +1778,7 @@ export default function Home() {
                   target={target}
                   projectedFfa={projectedBlendFfa}
                   atRisk={blendAtRisk}
+                  incomingHighFfa={incomingFFA > target}
                   confidence={blendConfidence}
                   onViewBlend={() => setMobileTab("production")}
                 />
@@ -1929,6 +1930,7 @@ function RoutingRecommendationCard({
   target,
   projectedFfa,
   atRisk,
+  incomingHighFfa,
   confidence,
   onViewBlend,
 }: {
@@ -1938,6 +1940,7 @@ function RoutingRecommendationCard({
   target: number;
   projectedFfa: number;
   atRisk: boolean;
+  incomingHighFfa: boolean;
   confidence: "high" | "medium" | "low";
   onViewBlend: () => void;
 }) {
@@ -1983,7 +1986,11 @@ function RoutingRecommendationCard({
           </span>
         </div>
         <p className="mt-3 max-w-md text-sm leading-relaxed text-[#cfe0d5]">
-          {atRisk ? copy.blendSituation.highRiskText : copy.blendSituation.onTrackText}
+          {!atRisk
+            ? copy.blendSituation.onTrackText
+            : incomingHighFfa
+              ? copy.blendSituation.highRiskText
+              : copy.blendSituation.existingStockRiskText}
         </p>
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">

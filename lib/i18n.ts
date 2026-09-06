@@ -33,6 +33,8 @@ export const translations = {
       highRisk: "High FFA risk",
       onTrack: "On track",
       highRiskText: "Incoming CPO is high in FFA. Careful routing is recommended to meet the target quality.",
+      existingStockRiskText:
+        "Today's incoming CPO is within the good FFA limit, but existing tank stock is already above it. Careful routing is recommended so it doesn't get worse.",
       onTrackText: "Incoming CPO quality is manageable. Routing keeps stock within the good FFA limit.",
       incomingCpo: "Incoming CPO",
       highFfaStock: "High-FFA stock",
@@ -639,6 +641,8 @@ export const translations = {
       highRisk: "Risiko FFA tinggi",
       onTrack: "Mengikut landasan",
       highRiskText: "CPO masuk tinggi FFA. Peruntukan teliti disyorkan untuk penuhi kualiti sasaran.",
+      existingStockRiskText:
+        "CPO masuk hari ini berada dalam had FFA baik, tetapi stok tangki sedia ada sudah melebihi had itu. Peruntukan teliti disyorkan supaya ia tidak bertambah teruk.",
       onTrackText: "Kualiti CPO masuk boleh diurus. Peruntukan mengekalkan stok dalam had FFA baik.",
       incomingCpo: "CPO masuk",
       highFfaStock: "Stok FFA tinggi",
