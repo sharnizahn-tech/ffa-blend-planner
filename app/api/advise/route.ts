@@ -187,6 +187,7 @@ export async function POST(request: Request) {
           productionSuggestion: payload.productionSuggestion ?? null,
           lossOptimizer: payload.lossOptimizer ?? [],
           batchBlend: payload.batchBlend ?? null,
+          incomingAsSource: payload.incomingAsSource ?? null,
         },
         conversationHistory: payload.conversationHistory ?? [],
         engineerQuestion: payload.userQuestion ?? null,
