@@ -128,6 +128,19 @@ export const translations = {
       checklistRouteSplit: (parts: string) => `Route incoming CPO: ${parts}.`,
       checklistDespatch: (mt: string, sources: string, ffa: string, lorries: string) =>
         `You can despatch up to ${mt} MT from ${sources} today — ${ffa}% FFA, meets the limit (${lorries}).`,
+      checklistDespatchNet: (
+        totalMt: string,
+        sources: string,
+        reservedMt: string,
+        netMt: string,
+        lorries: string,
+        needsMoreDaysLater: boolean,
+      ) =>
+        `${sources} has ${totalMt} MT of good-FFA stock, but the blend-down plan below already needs ${reservedMt} MT of it today — despatching all of it would leave nothing to blend with. Up to ${netMt} MT is free to despatch without disrupting that (${lorries})${
+          needsMoreDaysLater
+            ? ", though later days still need more of this same stock — check the full blend-down plan before sending extra"
+            : ""
+        }.`,
       checklistDespatchShortfall: (mt: string) =>
         ` Short by ${mt} MT — not enough good-FFA stock for a full load.`,
       checklistNoDespatch: "No feasible despatch load from good-FFA tanks today.",
@@ -135,7 +148,10 @@ export const translations = {
         `${tank}: hold ${days} day${days === 1 ? "" : "s"} and blend — cheaper than despatching now.`,
       checklistBlendToday: (tank: string, mt: string) =>
         `${tank}: blend in ${mt} MT today, toward the good FFA limit.`,
-      checklistBlendDespatch: (tank: string) => `${tank}: despatch now — holding doesn't help here.`,
+      checklistBlendDespatch: (tank: string, reason: "no-source" | "no-savings") =>
+        reason === "no-source"
+          ? `${tank}: despatch now — no clean stock or lower-FFA incoming CPO is available to blend with, so holding wouldn't reduce the FFA at all.`
+          : `${tank}: despatch now — blending would move the FFA slightly, but not enough to reach a cheaper deduction band, so it doesn't actually save anything. Holding doesn't help here.`,
       checklistAllGood: "No tank is currently over the good FFA limit.",
       checklistVerify: "Before transfer: verify tank dipping, valve routing, and lab FFA if there's any doubt.",
       planChecked: "PLAN CHECKED",
@@ -736,6 +752,19 @@ export const translations = {
       checklistRouteSplit: (parts: string) => `Alirkan CPO masuk: ${parts}.`,
       checklistDespatch: (mt: string, sources: string, ffa: string, lorries: string) =>
         `Anda boleh despatch sehingga ${mt} MT dari ${sources} hari ini — ${ffa}% FFA, mencapai had (${lorries}).`,
+      checklistDespatchNet: (
+        totalMt: string,
+        sources: string,
+        reservedMt: string,
+        netMt: string,
+        lorries: string,
+        needsMoreDaysLater: boolean,
+      ) =>
+        `${sources} ada ${totalMt} MT stok FFA baik, tetapi pelan blend-down di bawah sudah perlukan ${reservedMt} MT daripadanya hari ini — jika despatch semuanya, tiada lagi untuk di-blend. Sehingga ${netMt} MT bebas untuk despatch tanpa menjejaskan itu (${lorries})${
+          needsMoreDaysLater
+            ? ", walaupun hari-hari seterusnya masih perlukan lebih stok yang sama — semak pelan blend-down penuh sebelum menghantar lebih"
+            : ""
+        }.`,
       checklistDespatchShortfall: (mt: string) =>
         ` Kurang ${mt} MT — stok FFA baik tidak cukup untuk muatan penuh.`,
       checklistNoDespatch: "Tiada muatan despatch munasabah daripada tangki FFA baik hari ini.",
@@ -743,7 +772,10 @@ export const translations = {
         `${tank}: tahan ${days} hari dan blend — lebih murah daripada despatch sekarang.`,
       checklistBlendToday: (tank: string, mt: string) =>
         `${tank}: blend masuk ${mt} MT hari ini, ke arah had FFA baik.`,
-      checklistBlendDespatch: (tank: string) => `${tank}: despatch sekarang — menahan tidak membantu di sini.`,
+      checklistBlendDespatch: (tank: string, reason: "no-source" | "no-savings") =>
+        reason === "no-source"
+          ? `${tank}: despatch sekarang — tiada stok bersih atau CPO masuk FFA lebih rendah tersedia untuk di-blend, jadi menahan tidak akan kurangkan FFA langsung.`
+          : `${tank}: despatch sekarang — blending akan gerakkan FFA sedikit, tetapi tidak cukup untuk sampai band potongan lebih murah, jadi ia tidak menjimatkan apa-apa. Menahan tidak membantu di sini.`,
       checklistAllGood: "Tiada tangki melebihi had FFA baik pada masa ini.",
       checklistVerify: "Sebelum pemindahan: sahkan dipping tangki, laluan injap, dan FFA makmal jika ragu.",
       planChecked: "PELAN DISAHKAN",

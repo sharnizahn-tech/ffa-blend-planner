@@ -1806,11 +1806,15 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Tablet/mobile: step navigation as its own compact, horizontally
-            scrollable row — never compressed or wrapped. */}
+        {/* Tablet only: step navigation as its own compact, horizontally
+            scrollable row. Hidden on phone (<768px) — the bottom tab bar
+            already covers navigation there, so showing both was redundant.
+            Hidden again at xl+ where the header's inline centred nav takes
+            over. Tablet (768-1279px) has no bottom tab bar, so this row is
+            the only navigation at that width — it must stay. */}
         <nav
           aria-label="Section navigation"
-          className="flex items-center gap-1 overflow-x-auto border-t border-white/10 px-4 py-2 sm:px-8 xl:hidden"
+          className="hidden items-center gap-1 overflow-x-auto border-t border-white/10 px-4 py-2 sm:px-8 md:flex xl:hidden"
         >
           {navItems.map((item, i) => (
             <div key={item.id} className="flex shrink-0 items-center gap-1">
@@ -3647,20 +3651,52 @@ function SmartRecommendation({
     despatchableTodayMt > 0
       ? goodFfaDespatchTanks.reduce((s, t) => s + t.stockMt * t.ffaPct, 0) / despatchableTodayMt
       : 0;
-  const despatchableTodayLorries =
-    despatchableTodayMt > 0 && tankerLoadMt > 0 ? Math.ceil(despatchableTodayMt / tankerLoadMt) : 0;
+  // How much of that same clean stock the blend-down plan below ALSO needs
+  // today — despatching and blending draw from the same tank, so the two
+  // checklist lines must reconcile rather than each pretending the other
+  // doesn't exist. Only counts the tank-to-tank portion (not incoming CPO,
+  // which isn't part of despatchableTodayMt either).
+  const blendReservedTodayMt = lossOptimizerResults
+    .filter((r) => r.recommendation === "hold")
+    .reduce((s, r) => s + (r.hold.trace[1]?.transferUsedMt ?? 0), 0);
+  // Whether the hold plan needs MORE than just today — despatching right up
+  // to the net-free amount is only safe for today; if later days need more
+  // of the same clean stock, say so rather than implying it's a one-off.
+  const blendNeedsMoreDaysLater = lossOptimizerResults.some(
+    (r) => r.recommendation === "hold" && r.hold.days !== null && r.hold.days > 1,
+  );
+  const netDespatchableTodayMt = Math.max(0, despatchableTodayMt - blendReservedTodayMt);
+  const netDespatchableLorries =
+    netDespatchableTodayMt > 0 && tankerLoadMt > 0 ? Math.ceil(netDespatchableTodayMt / tankerLoadMt) : 0;
   const despatchLine =
-    despatchableTodayMt > 0
-      ? copy.plan.checklistDespatch(
-          n(despatchableTodayMt, 0),
-          goodFfaDespatchTanks.map((t) => t.name).join(" + "),
-          n(despatchableTodayFfaPct, 2),
-          copy.refineryDespatch.lorryCount(despatchableTodayLorries),
-        )
-      : copy.plan.checklistNoDespatch;
+    despatchableTodayMt <= 0
+      ? copy.plan.checklistNoDespatch
+      : blendReservedTodayMt > 0.5
+        ? copy.plan.checklistDespatchNet(
+            n(despatchableTodayMt, 0),
+            goodFfaDespatchTanks.map((t) => t.name).join(" + "),
+            n(blendReservedTodayMt, 0),
+            n(netDespatchableTodayMt, 0),
+            copy.refineryDespatch.lorryCount(netDespatchableLorries),
+            blendNeedsMoreDaysLater,
+          )
+        : copy.plan.checklistDespatch(
+            n(despatchableTodayMt, 0),
+            goodFfaDespatchTanks.map((t) => t.name).join(" + "),
+            n(despatchableTodayFfaPct, 2),
+            copy.refineryDespatch.lorryCount(netDespatchableLorries),
+          );
   const blendLines = lossOptimizerResults.length
     ? lossOptimizerResults.map((r) => {
-        if (r.recommendation !== "hold") return copy.plan.checklistBlendDespatch(r.tankName);
+        if (r.recommendation !== "hold") {
+          // Distinguish "genuinely nothing available to blend with" from
+          // "blending happens but never crosses into a cheaper band" — the
+          // engineer should see WHY holding doesn't help, not just that it
+          // doesn't, so they can trust the conclusion instead of suspecting
+          // the system gave up early.
+          const neverBlended = r.hold.transferUsedMt <= 0 && r.hold.incomingUsedMt <= 0;
+          return copy.plan.checklistBlendDespatch(r.tankName, neverBlended ? "no-source" : "no-savings");
+        }
         // Day 1 of the hold trace is specifically TODAY's move — bestDay is
         // the cheapest day overall, which may be later, so this is deliberately
         // a different number: "what to actually do today" vs "when it pays off".
