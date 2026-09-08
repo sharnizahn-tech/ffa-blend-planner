@@ -18,6 +18,7 @@ import {
   Gauge,
   Info,
   LayoutDashboard,
+  List,
   Loader2,
   Pencil,
   Plus,
@@ -69,9 +70,13 @@ type Result = Tank & {
 type TankState = "safe" | "warning" | "critical";
 type MobileTab = "overview" | "production" | "despatch" | "transfer";
 
+// Placeholder shown only for the instant before a mill's real saved state
+// (or, for a brand-new mill, its zeroed defaultMillState()) loads from R2 —
+// the loading screen gates the dashboard until then, so these values are
+// never actually seen. Kept zeroed to match, not as demo data.
 const initialTanks: Tank[] = [
-  { name: "BST 1", capacity: 2000, stock: 465, ffa: 4.54 },
-  { name: "BST 2", capacity: 2000, stock: 716, ffa: 6.23 },
+  { name: "BST 1", capacity: 0, stock: 0, ffa: 0 },
+  { name: "BST 2", capacity: 0, stock: 0, ffa: 0 },
 ];
 
 function suggestTankName(tanks: Tank[]) {
@@ -437,19 +442,24 @@ export default function Home() {
   const hydratedRef = useRef(false);
 
   const [tanks, setTanks] = useState(initialTanks);
-  const [millCapacity, setMillCapacity] = useState(40);
-  const [hours, setHours] = useState(20);
-  const [utilisation, setUtilisation] = useState(100);
-  const [oer, setOer] = useState(19);
-  const [incomingFFA, setIncomingFFA] = useState(6.7);
-  const [target, setTarget] = useState(4.8);
-  const [deadStockMt, setDeadStockMtState] = useState(200);
-  const [allocation, setAllocation] = useState([0, 100]);
+  const [millCapacity, setMillCapacity] = useState(0);
+  const [hours, setHours] = useState(0);
+  const [utilisation, setUtilisation] = useState(0);
+  const [oer, setOer] = useState(0);
+  const [incomingFFA, setIncomingFFA] = useState(0);
+  const [target, setTarget] = useState(0);
+  const [deadStockMt, setDeadStockMtState] = useState(0);
+  const [allocation, setAllocation] = useState([0, 0]);
   const [mobileTab, setMobileTab] = useState<MobileTab>("overview");
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [expandedTanks, setExpandedTanks] = useState<Set<number>>(() => new Set([0]));
   const [aiMessages, setAiMessages] = useState<
-    { role: "user" | "assistant"; content: string; source?: "openai" | "offline"; kind?: "deep" }[]
+    {
+      role: "user" | "assistant";
+      content: string;
+      source?: "openai" | "offline";
+      kind?: "deep" | "summary";
+    }[]
   >([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -463,7 +473,7 @@ export default function Home() {
   const [aiAllocationLoading, setAiAllocationLoading] = useState(false);
   const [aiAllocationError, setAiAllocationError] = useState(false);
   const [lang, setLang] = useState<Lang>("en");
-  const [tankerLoadMt, setTankerLoadMt] = useState(38);
+  const [tankerLoadMt, setTankerLoadMt] = useState(0);
 
   const [buyerProfiles, setBuyerProfiles] = useState<BuyerProfile[]>(() => [
     createEmptyBuyerProfile("Buyer 1"),
@@ -472,8 +482,8 @@ export default function Home() {
   const [preferFewerTanks, setPreferFewerTanks] = useState(true);
   const [showScenarioCompare, setShowScenarioCompare] = useState(false);
   const [scenarios, setScenarios] = useState([
-    { id: "b", millCapacity: 40, hours: 22, utilisation: 100, oer: 19, incomingFFA: 6.7 },
-    { id: "c", millCapacity: 40, hours: 18, utilisation: 100, oer: 19, incomingFFA: 6.7 },
+    { id: "b", millCapacity: 0, hours: 0, utilisation: 0, oer: 0, incomingFFA: 0 },
+    { id: "c", millCapacity: 0, hours: 0, utilisation: 0, oer: 0, incomingFFA: 0 },
   ]);
   const [manualMaxTransferPerDayMt, setMaxTransferPerDayMtState] = useState(DEFAULT_MAX_TRANSFER_PER_DAY_MT);
   const [autoTransfer, setAutoTransfer] = useState(true);
@@ -1020,6 +1030,7 @@ export default function Home() {
     // actually showing, and can't reason its way to a contradictory
     // answer. `best` is still included as an alternative either way.
     recommendedPlanOverride?: BlendPlan,
+    concise?: boolean,
   ): AdviseRequest => {
     const recommended = recommendedPlanOverride ?? best;
     const alternatives = recommendedPlanOverride
@@ -1128,11 +1139,14 @@ export default function Home() {
         userQuestion: question || undefined,
         language: lang,
         deepAnalysis,
+        concise,
         currentTab: mobileTab,
       };
   };
 
-  const fetchAiOpinion = async (opts: { deepAnalysis?: boolean; questionOverride?: string } = {}) => {
+  const fetchAiOpinion = async (
+    opts: { deepAnalysis?: boolean; concise?: boolean; questionOverride?: string } = {},
+  ) => {
     if (aiLoading || aiCooldown > 0) return;
     const question = (opts.questionOverride ?? aiQuestion).trim();
     const historyForRequest = aiMessages.map((m) => ({ role: m.role, content: m.content }));
@@ -1149,6 +1163,7 @@ export default function Home() {
         historyForRequest,
         opts.deepAnalysis,
         recommendSingle ? (bestSingleTank ?? undefined) : (best ?? undefined),
+        opts.concise,
       );
       const response = await fetch("/api/advise", {
         method: "POST",
@@ -1171,7 +1186,7 @@ export default function Home() {
           role: "assistant",
           content: data.opinion ?? "",
           source: data.source ?? "openai",
-          kind: opts.deepAnalysis ? "deep" : undefined,
+          kind: opts.deepAnalysis ? "deep" : opts.concise ? "summary" : undefined,
         },
       ]);
     } catch (error) {
@@ -1931,11 +1946,19 @@ export default function Home() {
         </div>
       )}
 
-      {/* Floating Ask AI button — visible on every tab */}
+      {/* Floating Ask AI button. On mobile it sits above the sticky action
+         bar (shown on overview/production/despatch) so the two never touch;
+         it's hidden on the transfer tab specifically because that panel's
+         own bottom "Confirm Transfer" button sits right where it would land,
+         and Transfer already has its own in-flow "Ask AI: how much should we
+         blend today?" shortcut. Always visible again at md: and up, where
+         the layout is wide enough that nothing sits underneath it. */}
       <button
         type="button"
         onClick={() => setAiModalOpen(true)}
-        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-[#00b14f] px-4 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(0,177,79,0.45)] hover:bg-[#00a047] md:bottom-6"
+        className={`fixed right-4 z-40 items-center gap-2 rounded-full bg-[#00b14f] px-4 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(0,177,79,0.45)] hover:bg-[#00a047] md:flex md:bottom-6 ${
+          mobileTab === "transfer" ? "hidden bottom-24" : "flex bottom-36"
+        }`}
       >
         <Bot size={18} />
         {copy.askAi.button}
@@ -3609,7 +3632,7 @@ function SmartRecommendation({
   aiCooldown: number;
   aiQuestion: string;
   onAiQuestionChange: (value: string) => void;
-  onGetAiOpinion: (opts?: { deepAnalysis?: boolean }) => void;
+  onGetAiOpinion: (opts?: { deepAnalysis?: boolean; concise?: boolean }) => void;
   onClearChat: () => void;
   penaltyBands?: PenaltyBand[] | null;
   bestSingleTank: BlendPlan | null;
@@ -3908,7 +3931,7 @@ type AiMessage = {
   role: "user" | "assistant";
   content: string;
   source?: "openai" | "offline";
-  kind?: "deep";
+  kind?: "deep" | "summary";
 };
 
 function AiAdvisorPanel({
@@ -3929,7 +3952,7 @@ function AiAdvisorPanel({
   aiCooldown: number;
   aiQuestion: string;
   onAiQuestionChange: (value: string) => void;
-  onGetAiOpinion: (opts?: { deepAnalysis?: boolean }) => void;
+  onGetAiOpinion: (opts?: { deepAnalysis?: boolean; concise?: boolean }) => void;
   onClearChat: () => void;
 }) {
   const aiDisabled = aiLoading || aiCooldown > 0;
@@ -3978,9 +4001,11 @@ function AiAdvisorPanel({
                   <Bot size={12} />
                   {msg.kind === "deep"
                     ? copy.aiChat.deepAnalysis
-                    : msg.source === "offline"
-                      ? copy.ai.opinionOffline
-                      : copy.ai.opinionLive}
+                    : msg.kind === "summary"
+                      ? copy.aiChat.quickSummary
+                      : msg.source === "offline"
+                        ? copy.ai.opinionOffline
+                        : copy.ai.opinionLive}
                 </div>
                 <FormattedOpinion text={msg.content} />
               </div>
@@ -4006,6 +4031,15 @@ function AiAdvisorPanel({
         >
           {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
           {askLabel}
+        </button>
+        <button
+          type="button"
+          onClick={() => onGetAiOpinion({ concise: true })}
+          disabled={aiDisabled}
+          className="btn-touch border border-[#b9c8bd] bg-white text-[#173f30] disabled:opacity-60"
+        >
+          {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <List size={16} />}
+          {copy.aiChat.quickSummary}
         </button>
         <button
           type="button"

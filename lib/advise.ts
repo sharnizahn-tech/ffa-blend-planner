@@ -149,6 +149,11 @@ export const adviseRequestSchema = z.object({
   userQuestion: z.string().trim().max(500).optional(),
   language: z.enum(["en", "bm"]).optional(),
   deepAnalysis: z.boolean().optional(),
+  // Engineer tapped "Quick summary" instead of Ask AI / Full analysis — reply
+  // in short bullet points instead of paragraphs. Mutually exclusive with
+  // deepAnalysis in practice (separate buttons), but if both are somehow set,
+  // concise wins.
+  concise: z.boolean().optional(),
   // Which tab the engineer is actually looking at right now, so a question
   // asked from the Despatch tab gets a despatch-focused answer instead of a
   // generic one — every tab's data is always included regardless.
@@ -465,6 +470,7 @@ export function buildSystemPrompt(
   deepAnalysis?: boolean,
   hasHistory?: boolean,
   currentTab?: "overview" | "production" | "despatch" | "transfer",
+  concise?: boolean,
 ) {
   const languageRule =
     lang === "bm"
@@ -474,14 +480,24 @@ export function buildSystemPrompt(
   // "Ask AI" (no question typed) and "Full analysis" must read as genuinely
   // different things, not the same prompt at two lengths: Ask AI is a quick
   // take an engineer can read in ten seconds; Full analysis is the report
-  // they'd print before a shift handover.
-  const questionRule = userQuestion
-    ? deepAnalysis
-      ? `The engineer asked: "${userQuestion}" and tapped FULL ANALYSIS, not the quick Ask AI button — they specifically want the deep version of this answer. Answer the question directly in the first sentence, then go well beyond just that question: full reasoning behind the answer, plus the wider picture as far as it's relevant — penalty/cost exposure, the sell-now-vs-hold call for any tank over the limit, the forecast, and what to verify before transfer. Genuinely use the extra room; this must read as more complete than a quick answer, not the same length with a different label.`
-      : `The engineer asked: "${userQuestion}". Answer it directly in the first sentence, then give only the specific numbers and reasoning that back that answer up — explain WHY, not just what. Keep it to the quick ASK AI depth — a few short paragraphs, not the full report (that's what Full analysis is for). If the question asks for a length (e.g. "2-3 sentences"), treat that as a floor, not a ceiling: stay close to it but don't cut a genuinely necessary reason just to hit a word count. Do not pad the response with an extra "supporting context" section covering unrelated data fields.`
-    : deepAnalysis
-      ? "This is the FULL ANALYSIS mode — the engineer wants the complete picture, not a quick take. Cover, in flowing paragraphs (not a checklist): the situation today, the key risk and why it matters, the recommended move with full reasoning, the penalty/cost picture if a buyer profile is set up, the sell-now-vs-hold call for any tank already over the limit, the forecast/early-warning if provided, and what to verify before transfer. Be genuinely thorough — this mode exists specifically to be longer and more complete than Ask AI, so use the room."
-      : "This is the quick ASK AI mode — the engineer wants the short version, not the full report (that's what Full analysis is for). Cover in 2-3 short paragraphs: what's happening today, the recommended move and the one main reason why, and the single most important next action. Skip anything not directly useful to the immediate decision.";
+  // they'd print before a shift handover. "Quick summary" is a third,
+  // orthogonal mode — same depth as Ask AI, but bullet points instead of
+  // paragraphs, for an engineer who wants to skim it in five seconds.
+  const questionRule = concise
+    ? userQuestion
+      ? `The engineer asked: "${userQuestion}" and tapped QUICK SUMMARY — they want this skimmed in five seconds, not read. Answer the question directly as the first bullet, then only the specific numbers/reasons that back it up.`
+      : "This is QUICK SUMMARY mode — the engineer wants the shortest possible skim: what's happening today, the recommended move, and the one thing to do next."
+    : userQuestion
+      ? deepAnalysis
+        ? `The engineer asked: "${userQuestion}" and tapped FULL ANALYSIS, not the quick Ask AI button — they specifically want the deep version of this answer. Answer the question directly in the first sentence, then go well beyond just that question: full reasoning behind the answer, plus the wider picture as far as it's relevant — penalty/cost exposure, the sell-now-vs-hold call for any tank over the limit, the forecast, and what to verify before transfer. Genuinely use the extra room; this must read as more complete than a quick answer, not the same length with a different label.`
+        : `The engineer asked: "${userQuestion}". Answer it directly in the first sentence, then give only the specific numbers and reasoning that back that answer up — explain WHY, not just what. Keep it to the quick ASK AI depth — a few short paragraphs, not the full report (that's what Full analysis is for). If the question asks for a length (e.g. "2-3 sentences"), treat that as a floor, not a ceiling: stay close to it but don't cut a genuinely necessary reason just to hit a word count. Do not pad the response with an extra "supporting context" section covering unrelated data fields.`
+      : deepAnalysis
+        ? "This is the FULL ANALYSIS mode — the engineer wants the complete picture, not a quick take. Cover, in flowing paragraphs (not a checklist): the situation today, the key risk and why it matters, the recommended move with full reasoning, the penalty/cost picture if a buyer profile is set up, the sell-now-vs-hold call for any tank already over the limit, the forecast/early-warning if provided, and what to verify before transfer. Be genuinely thorough — this mode exists specifically to be longer and more complete than Ask AI, so use the room."
+        : "This is the quick ASK AI mode — the engineer wants the short version, not the full report (that's what Full analysis is for). Cover in 2-3 short paragraphs: what's happening today, the recommended move and the one main reason why, and the single most important next action. Skip anything not directly useful to the immediate decision.";
+
+  const formatRule = concise
+    ? `Reply in 3-6 short bullet points, each on its own line starting with "- ", one idea per line — the direct recommendation/answer first, then the key numbers or reasons behind it, then (if relevant) the one next action. No intro sentence before the bullets and no closing recap after them beyond the required verification line. Cut anything not essential — this mode exists to be short.`
+    : `Structure your answer as short paragraphs separated by a blank line — never one unbroken block of text, and never a bullet list. Lead with the direct answer/recommendation in the first paragraph, then the reasoning, then what to do next. Do not label the paragraphs with headings like "Recommended plan" or "Supporting context" — just write them as plain paragraphs, the way you'd explain it out loud.`;
 
   const historyRule = hasHistory
     ? "The user message includes a conversationHistory array of prior turns in this session. Treat it as context — do not repeat earlier points verbatim, answer the latest question in light of what was already discussed."
@@ -504,7 +520,7 @@ Rules:
 - NEVER write a raw field/variable name from the data in your response. The tell is simple: any single word with no spaces that mixes lowercase and uppercase letters (camelCase, e.g. "allocationValid", "hasOverflow", "penaltyRm", "maxSafeIncomingCpoMt", "holdDays", "loadFfaPct") is internal data plumbing, not something an engineer says out loud — always describe the underlying idea in plain words instead (see the translations below for the common ones). Before finishing, reread your own draft specifically hunting for camelCase and rewrite any you find.
 - Always say "blend" / "blend it down" / "blending" — never "dilute" / "diluting". Blending is the term this mill actually uses.
 - Format every RM and MT figure with comma thousand-separators, the way a person would write it: "RM 69,440" and "1,181 MT", never "RM 69440" or "1181 MT".
-- Structure your answer as short paragraphs separated by a blank line — never one unbroken block of text, and never a bullet list. Lead with the direct answer/recommendation in the first paragraph, then the reasoning, then what to do next. Do not label the paragraphs with headings like "Recommended plan" or "Supporting context" — just write them as plain paragraphs, the way you'd explain it out loud.
+- ${formatRule}
 - Use double asterisks around the single most important fact per paragraph (the recommendation itself, the key number, the action to take) — e.g. **route it into BST 2** or **RM 69,440 penalty**. Two or three bolded phrases per response is plenty; do not bold everything.
 - What the data fields mean, and what to call them in your response:
   - "recommendedPlan" (rank 1) is the mathematically best allocation the engine found; "alternativePlans" are ranks 2-3. Call this simply "the recommended plan" / "the best option" — treat it as correct unless the flags show it's infeasible. When alternatives are given, briefly say how they differ and when an engineer might pick one instead.
@@ -532,5 +548,5 @@ Rules:
 - Keep tank names (e.g. BST 1) unchanged.
 - Keep the tone practical and conversational, like a colleague explaining it, not a report.
 - End with one short sentence: this is decision support only — authorised engineer verification is required before transfer.
-- Do not approve transfers. Do not output JSON. Do not use bullet points, numbered lists, or markdown headings (#).`;
+- Do not approve transfers. Do not output JSON. Do not use markdown headings (#) or numbered lists.${concise ? "" : " Do not use bullet points."}`;
 }

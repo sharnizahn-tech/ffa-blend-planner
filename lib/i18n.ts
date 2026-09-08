@@ -427,6 +427,7 @@ export const translations = {
     },
     aiChat: {
       deepAnalysis: "Full analysis",
+      quickSummary: "Quick summary",
       newQuestion: "Ask a follow-up",
       you: "You",
       riskScore: "Risk snapshot",
@@ -1054,6 +1055,7 @@ export const translations = {
     },
     aiChat: {
       deepAnalysis: "Analisis penuh",
+      quickSummary: "Ringkasan pantas",
       newQuestion: "Tanya soalan susulan",
       you: "Anda",
       riskScore: "Snapshot risiko",

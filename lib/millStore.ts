@@ -83,30 +83,36 @@ export type MillState = MillStateInput & {
   updatedAt: string;
 };
 
+// A brand-new mill (createMill(), below) starts completely blank — no demo
+// tank readings, no pre-filled production numbers. A first-time engineer
+// must never mistake sample data for their own mill's real figures; only
+// tank NAMES are suggested (a label, not a reading) so the setup screen
+// isn't a wall of unlabelled rows. Everything an engineer would actually
+// dip, weigh, or measure starts at 0 until they enter it themselves.
 const DEFAULT_TANKS: MillTank[] = [
-  { name: "BST 1", capacity: 2000, stock: 465, ffa: 4.54 },
-  { name: "BST 2", capacity: 2000, stock: 716, ffa: 6.23 },
+  { name: "BST 1", capacity: 0, stock: 0, ffa: 0 },
+  { name: "BST 2", capacity: 0, stock: 0, ffa: 0 },
 ];
 
 export function defaultMillState(): MillState {
   const buyerProfiles = [createEmptyBuyerProfile("Buyer 1")];
   return {
     tanks: DEFAULT_TANKS,
-    millCapacity: 40,
-    hours: 20,
-    utilisation: 100,
-    oer: 19,
-    incomingFFA: 6.7,
-    target: 4.8,
-    deadStockMt: 200,
-    allocation: [0, 100],
-    tankerLoadMt: 38,
+    millCapacity: 0,
+    hours: 0,
+    utilisation: 0,
+    oer: 0,
+    incomingFFA: 0,
+    target: 0,
+    deadStockMt: 0,
+    allocation: [0, 0],
+    tankerLoadMt: 0,
     buyerProfiles,
     activeProfileId: buyerProfiles[0].id,
     preferFewerTanks: true,
     scenarios: [
-      { id: "b", millCapacity: 40, hours: 22, utilisation: 100, oer: 19, incomingFFA: 6.7 },
-      { id: "c", millCapacity: 40, hours: 18, utilisation: 100, oer: 19, incomingFFA: 6.7 },
+      { id: "b", millCapacity: 0, hours: 0, utilisation: 0, oer: 0, incomingFFA: 0 },
+      { id: "c", millCapacity: 0, hours: 0, utilisation: 0, oer: 0, incomingFFA: 0 },
     ],
     manualMaxTransferPerDayMt: DEFAULT_MAX_TRANSFER_PER_DAY_MT,
     autoTransfer: true,

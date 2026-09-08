@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 const MARKDOWN_BOLD = /\*\*(.+?)\*\*/g;
 const AUTO_BOLD =
   /(\bBST\s*\d+\b|\b\d+(?:[.,]\d+)?\s*%|\b\d+(?:[.,]\d+)?\s*MT\b)/gi;
+const BULLET_LINE = /^[-•]\s+/;
 
 function autoBoldPlain(text: string, keyStart: number): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -51,10 +52,40 @@ export function parseOpinionText(text: string): ReactNode[] {
   return nodes;
 }
 
+// Splits the response into blank-line-separated blocks, then renders any
+// block whose every line starts with "- " (the Quick Summary mode's format)
+// as a real dotted bullet list instead of raw dashes — everything else
+// renders as a plain paragraph, same as before.
 export function FormattedOpinion({ text }: { text: string }) {
+  const blocks = text.split(/\n{2,}/);
+
   return (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#58665e]">
-      {parseOpinionText(text)}
+    <div className="space-y-2.5 text-sm leading-relaxed text-[#58665e]">
+      {blocks.map((block, i) => {
+        const lines = block.split("\n").filter((line) => line.trim().length > 0);
+        const isBulletBlock = lines.length > 0 && lines.every((line) => BULLET_LINE.test(line.trim()));
+
+        if (isBulletBlock) {
+          return (
+            <ul key={i} className="space-y-1.5">
+              {lines.map((line, j) => (
+                <li key={j} className="flex gap-2">
+                  <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-[#00b14f]" />
+                  <span className="whitespace-pre-wrap">
+                    {parseOpinionText(line.trim().replace(BULLET_LINE, ""))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={i} className="whitespace-pre-wrap">
+            {parseOpinionText(block)}
+          </p>
+        );
+      })}
     </div>
   );
 }
