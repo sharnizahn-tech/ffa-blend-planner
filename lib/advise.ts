@@ -146,7 +146,12 @@ export const adviseRequestSchema = z.object({
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
     .max(20)
     .optional(),
-  userQuestion: z.string().trim().max(500).optional(),
+  // 900, not 500: the engineer's own free-typed question is separately
+  // capped at 500 chars by the Ask AI textarea's maxLength, but this field
+  // is reused for the Allocation strategy card's internally-built question
+  // (a long templated sentence plus the "lay out real alternatives as
+  // Option 1/2" hint appended to it), which can run past 500 on its own.
+  userQuestion: z.string().trim().max(900).optional(),
   language: z.enum(["en", "bm"]).optional(),
   deepAnalysis: z.boolean().optional(),
   // Engineer tapped "Quick summary" instead of Ask AI / Full analysis — reply
