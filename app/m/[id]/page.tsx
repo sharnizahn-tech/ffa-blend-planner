@@ -1216,13 +1216,18 @@ export default function Home() {
     setAiAllocationLoading(true);
     setAiAllocationError(false);
     const singleTank = tanks[singleIndexForRecommendation];
-    const question = forceSplitFallback
+    const baseQuestion = forceSplitFallback
       ? copy.routingStrategy.aiQuestionForceSplit(singleTank?.name ?? "")
       : consolidateRuleApplies
         ? copy.routingStrategy.aiQuestionConsolidate(singleTank?.name ?? "")
         : recommendSingle
           ? copy.routingStrategy.aiQuestionSingle(singleTank?.name ?? "")
           : copy.routingStrategy.aiQuestionSplit;
+    // This card shows the AI's opinion in place of the calculated bullets,
+    // so it needs to read the same way: short bullets (concise mode), and —
+    // when a real alternative exists in the data — labelled as Option 1 /
+    // Option 2 rather than just a single paragraph verdict.
+    const question = baseQuestion + copy.routingStrategy.aiQuestionOptionsHint;
     // Tell the AI the SAME plan the card is actually showing as
     // recommended — otherwise it reasons from the generic split-scored
     // plan and can contradict the card it's meant to be explaining.
@@ -1231,6 +1236,7 @@ export default function Home() {
       [],
       false,
       recommendSingle ? (bestSingleTank ?? undefined) : (best ?? undefined),
+      true,
     );
     fetch("/api/advise", {
       method: "POST",
@@ -3458,57 +3464,34 @@ function RoutingStrategyCard({
   const singleTank = tanks[singleIndex];
   const singleResult = bestSingleTank.results[singleIndex];
   const singleMeets = bestSingleTank.results.every((r) => r.finalFFA <= target);
-  const splitMeets = best.results.every((r) => r.finalFFA <= target);
 
   // Mills here route incoming CPO into one tank at a time — precise flow
   // splitting isn't practical — so single-tank is the default explanation
   // essentially always; split only gets its own text when there's genuinely
-  // no single tank left with room.
+  // no single tank left with room. Every one of these reads as a short
+  // bullet list (see i18n.ts) rather than a paragraph — same reason the AI
+  // opinion below is bulleted: an engineer skimming this screen wants the
+  // key facts, not prose.
   const calculatedText = forceSplitFallback
     ? copy.routingStrategy.forceSplitText(singleTank.name)
     : consolidateRuleApplies
       ? copy.routingStrategy.consolidateRule(singleTank.name, n(target, 2))
       : singleMeets
-        ? copy.routingStrategy.recommendSingle(singleTank.name)
+        ? copy.routingStrategy.recommendSingle(singleTank.name, n(incomingCPO, 0), n(singleResult.finalFFA, 2))
         : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
-  // The calculated explanation (always correct, always instant, zero cost)
-  // stays visible on its own — the AI opinion is on-demand only, via the
-  // "Give advice" button, and shown separately below rather than silently
-  // replacing this text in place.
 
-  // One decisive recommendation, not a side-by-side comparison to pick from —
-  // recommendSingle already says which route is correct for this situation
-  // (forced single-tank consolidation, forced split when there's no room, or
-  // whichever scores better in the ordinary case), so that's the only card
-  // shown. The split plan is still one click away via Smart Recommendation
-  // below if an engineer wants to override it.
-  const singleBadge = singleResult.overflow
-    ? copy.routingStrategy.noRoom
-    : singleMeets
-      ? copy.routingStrategy.meetsLimit
-      : copy.routingStrategy.overLimit;
-  const singleBadgeOk = !singleResult.overflow && singleMeets;
-
+  // No separate "recommendation card" with its own label/badge/detail —
+  // that information is already stated plainly in the bullets above, so a
+  // second box repeating it was redundant. Just the one-click apply action
+  // survives here; which plan it applies still follows the same decisive
+  // single-vs-split logic as before.
   const recommended = recommendSingle
     ? {
-        label: copy.routingStrategy.singleLabel,
-        hint: copy.routingStrategy.singleHint,
-        detail: `${n(incomingCPO, 0)} MT → ${singleTank.name} · ${n(singleResult.finalFFA, 2)}% FFA`,
-        badge: singleBadge,
-        badgeOk: singleBadgeOk,
         onApply: onApplySingle,
         disabled: singleResult.overflow,
         applyLabel: copy.routingStrategy.applySingle,
       }
     : {
-        label: copy.routingStrategy.splitLabel,
-        hint: copy.routingStrategy.splitHint,
-        detail: best.allocation
-          .map((pct, i) => (pct > 0 ? `${pct}%→${tanks[i].name}` : null))
-          .filter(Boolean)
-          .join(", "),
-        badge: splitMeets ? copy.routingStrategy.meetsLimit : copy.routingStrategy.overLimit,
-        badgeOk: splitMeets,
         onApply: onApplySplit,
         disabled: false,
         applyLabel: copy.routingStrategy.applySplit,
@@ -3520,67 +3503,55 @@ function RoutingStrategyCard({
       subtitle={copy.routingStrategy.subtitle}
       icon={<ArrowRightLeft size={19} />}
     >
-      <div className="rounded-xl border border-[#00b14f] bg-[#f6fae9] p-3.5">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-bold text-[#173f30]">{recommended.label}</p>
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              recommended.badgeOk ? "bg-[#d4f7e2] text-[#00713a]" : "bg-[#ffceb7] text-[#7c2d12]"
-            }`}
-          >
-            {recommended.badge}
-          </span>
-        </div>
-        <p className="mt-1 text-xs text-[#708078]">{recommended.hint}</p>
-        <p className="mt-2 text-sm text-[#3f4c46]">{recommended.detail}</p>
-        <button
-          type="button"
-          onClick={recommended.onApply}
-          disabled={recommended.disabled}
-          className="btn-touch mt-3 w-full bg-[#00713a] text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {recommended.applyLabel}
-        </button>
-      </div>
-
-      <div className="mt-4 rounded-xl bg-[#f8faf7] p-3.5">
-        <FormattedOpinion text={calculatedText} />
-      </div>
-
-      {aiSuggestion && (
-        <div className="mt-3 rounded-xl border-l-4 border-[#00b14f] bg-[#f0faf3] p-3.5">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#00713a]">
+      {/* The AI's opinion, once fetched, IS the explanation shown here —
+         it replaces the calculated bullets rather than sitting alongside
+         them, so there's one answer to read, not two. */}
+      <div className="rounded-xl bg-[#f8faf7] p-3.5">
+        {aiSuggestion && (
+          <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#00713a]">
             <Bot size={13} />
             {copy.routingStrategy.aiOpinionLabel}
           </p>
-          <div className="mt-1.5">
-            <FormattedOpinion text={aiSuggestion} />
-          </div>
-        </div>
-      )}
+        )}
+        <FormattedOpinion text={aiSuggestion ?? calculatedText} />
+      </div>
 
       {aiError && (
         <p className="mt-2 text-xs text-[#8a9690]">{copy.routingStrategy.aiFallbackNote}</p>
       )}
 
-      <button
-        type="button"
-        onClick={onGiveAdvice}
-        disabled={aiLoading}
-        className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-      >
-        {aiLoading ? (
-          <>
-            <Loader2 size={16} className="animate-spin" />
-            {copy.routingStrategy.aiThinking}
-          </>
-        ) : (
-          <>
-            <Bot size={16} />
-            {aiSuggestion ? copy.routingStrategy.giveAdviceAgain : copy.routingStrategy.giveAdvice}
-          </>
-        )}
-      </button>
+      {recommended.disabled && (
+        <p className="mt-2 text-xs font-semibold text-[#a4342c]">{copy.routingStrategy.noRoom}</p>
+      )}
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={recommended.onApply}
+          disabled={recommended.disabled}
+          className="btn-touch flex-1 bg-[#00713a] text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {recommended.applyLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onGiveAdvice}
+          disabled={aiLoading}
+          className="btn-touch flex-1 border border-[#b9c8bd] bg-white text-[#173f30] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {aiLoading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              {copy.routingStrategy.aiThinking}
+            </>
+          ) : (
+            <>
+              <Bot size={16} />
+              {aiSuggestion ? copy.routingStrategy.giveAdviceAgain : copy.routingStrategy.giveAdvice}
+            </>
+          )}
+        </button>
+      </div>
     </Panel>
   );
 }

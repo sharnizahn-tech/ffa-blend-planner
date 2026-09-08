@@ -529,16 +529,12 @@ export const translations = {
     routingStrategy: {
       title: "Allocation strategy",
       subtitle: "Where today's incoming CPO should go, based on your production forecast.",
-      singleLabel: "Single tank (simple to execute)",
-      splitLabel: "Split across tanks (current method)",
-      singleHint: "One valve, one number to record — no flow-splitting needed.",
-      splitHint: "Needs precise flow control to hit the % split accurately.",
-      recommendSingle: (tank: string) =>
-        `Recommended: route 100% into ${tank}. It stays within the good FFA limit, and there's only one number to record — no need to split the flow.`,
+      recommendSingle: (tank: string, mt: string, ffa: string) =>
+        `- Route ${mt} MT (100%) into ${tank} — ends at ${ffa}% FFA, within the good FFA limit.\n- One valve, one number to record — no flow-splitting needed today.`,
       recommendSplitOverSingle: (tank: string, ffa: string) =>
-        `Recommended: split across tanks. Routing 100% into ${tank} alone would leave it at ${ffa}% FFA — over the limit. Splitting keeps every tank compliant, though it needs careful flow control to execute accurately.`,
+        `- Option 1 (recommended): split across tanks — keeps every tank within the good FFA limit today.\n- Option 2: route 100% into ${tank} alone — simpler (one valve), but ends at ${ffa}% FFA, over the limit.\n- Splitting needs precise flow control to hit the % accurately; that's the trade-off for staying compliant.`,
       recommendSingleWithFollowUp: (tank: string, ffa: string) =>
-        `Neither option keeps every tank compliant today. Routing 100% into ${tank} (ending at ${ffa}%) is simpler to execute — see below for exactly what to do about it.`,
+        `- Neither option keeps every tank compliant today.\n- Route 100% into ${tank} anyway — ends at ${ffa}% FFA, simplest to execute (one valve, no flow-splitting).\n- See below for exactly what to do about the overage.`,
       followUpDespatchNow: (info: {
         tonnageMt: number;
         ffaPct: number;
@@ -577,11 +573,9 @@ export const translations = {
         "Set up a buyer penalty profile on the Despatch tab to get a concrete despatch-now-vs-hold recommendation for this tank.",
       applySingle: "Route into this tank",
       applySplit: "Use the split plan",
-      meetsLimit: "Stays within limit",
-      overLimit: "Over limit",
       noRoom: "No room left",
       consolidateRule: (tank: string, target: string) =>
-        `Incoming FFA is above your ${target}% good FFA limit — send the whole batch straight into ${tank}, which is already the highest-FFA tank. Keeping the bad CPO in one place is easier to record and fix than nudging every tank's FFA up a little.`,
+        `- Incoming FFA is above your ${target}% good FFA limit today.\n- Send the whole batch into ${tank} — already the highest-FFA tank.\n- Keeping the bad CPO in one place is easier to record and fix than nudging every tank's FFA up a little.`,
       consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
         `Blend-down plan: move about ${moveMt} MT from ${dilutionTank} (plus ongoing incoming CPO) over ${days} day${days === 1 ? "" : "s"} to bring it down to ${finalFfa}% FFA.`,
       consolidateBlendInfeasible:
@@ -589,7 +583,7 @@ export const translations = {
       consolidateNoDilutionTank:
         "No good-FFA tank is available to blend with right now — despatch this stock instead (see Loss Optimizer).",
       forceSplitText: (tank: string) =>
-        `${tank} has no spare room for today's batch, so there's no single tank to consolidate into — splitting across tanks is the only way to take in this CPO without an overflow.`,
+        `- ${tank} has no spare room for today's batch.\n- No single tank can take the full load, so splitting across tanks is the only way to avoid an overflow.`,
       whatToTransfer: "What to transfer",
       penaltyExposure: "Penalty exposure",
       alreadyCompliant: (ffa: string) =>
@@ -603,6 +597,8 @@ export const translations = {
         `Incoming FFA is above the good FFA limit, so the plan is to route the whole batch into ${tank} — the tank that's already the highest FFA — on purpose, even though that leaves it over the limit, rather than spread the bad CPO thin across every tank. Explain why this is the right call here, using the real FFA and MT numbers, and what needs to happen next before despatch. Give the full reasoning, not just the conclusion — an engineer reading this should understand why, not just what.`,
       aiQuestionForceSplit: (tank: string) =>
         `${tank} — the tank that's already the highest FFA — has no spare capacity left for today's incoming batch, so routing everything into it isn't possible right now, which is why the plan splits the batch across tanks instead. Explain why splitting is the only real option here, using the actual capacity and FFA numbers.`,
+      aiQuestionOptionsHint:
+        " If there's a genuinely reasonable alternative worth weighing (from the alternative plans provided), lay it out as a labelled Option 1 / Option 2 (a third only if it's actually worth considering) so I can compare at a glance — otherwise just give the one recommendation.",
       aiThinking: "Working out the best move for today's batch…",
       aiFallbackNote: "AI explanation unavailable right now — showing the calculated recommendation instead.",
       aiOpinionLabel: "AI opinion",
@@ -1154,16 +1150,12 @@ export const translations = {
     routingStrategy: {
       title: "Strategi peruntukan",
       subtitle: "Ke mana CPO masuk hari ini patut pergi, berdasarkan ramalan pengeluaran anda.",
-      singleLabel: "Satu tangki (mudah dilaksana)",
-      splitLabel: "Pisah merentasi tangki (kaedah semasa)",
-      singleHint: "Satu injap, satu nombor untuk direkod — tiada pemisahan aliran diperlukan.",
-      splitHint: "Perlukan kawalan aliran tepat untuk capai pisahan % dengan betul.",
-      recommendSingle: (tank: string) =>
-        `Disyorkan: alirkan 100% ke ${tank}. Ia kekal dalam had FFA baik, dan hanya satu nombor untuk direkod — tiada keperluan pisah aliran.`,
+      recommendSingle: (tank: string, mt: string, ffa: string) =>
+        `- Alirkan ${mt} MT (100%) ke ${tank} — berakhir pada ${ffa}% FFA, dalam had FFA baik.\n- Satu injap, satu nombor untuk direkod — tiada pemisahan aliran diperlukan hari ini.`,
       recommendSplitOverSingle: (tank: string, ffa: string) =>
-        `Disyorkan: pisah merentasi tangki. Mengalirkan 100% ke ${tank} sahaja akan tinggalkannya pada ${ffa}% FFA — melebihi had. Pisahan mengekalkan setiap tangki patuh, walaupun ia perlukan kawalan aliran teliti untuk dilaksanakan dengan tepat.`,
+        `- Pilihan 1 (disyorkan): pisah merentasi tangki — mengekalkan setiap tangki dalam had FFA baik hari ini.\n- Pilihan 2: alirkan 100% ke ${tank} sahaja — lebih mudah (satu injap), tetapi berakhir pada ${ffa}% FFA, melebihi had.\n- Pisahan perlukan kawalan aliran teliti untuk capai % dengan tepat; itulah pertukaran untuk kekal patuh.`,
       recommendSingleWithFollowUp: (tank: string, ffa: string) =>
-        `Tiada pilihan yang mengekalkan setiap tangki patuh hari ini. Mengalirkan 100% ke ${tank} (berakhir pada ${ffa}%) lebih mudah dilaksanakan — lihat di bawah untuk tindakan sebenar.`,
+        `- Tiada pilihan yang mengekalkan setiap tangki patuh hari ini.\n- Alirkan 100% ke ${tank} juga — berakhir pada ${ffa}% FFA, paling mudah dilaksanakan (satu injap, tiada pisah aliran).\n- Lihat di bawah untuk tindakan sebenar tentang lebihan ini.`,
       followUpDespatchNow: (info: {
         tonnageMt: number;
         ffaPct: number;
@@ -1202,11 +1194,9 @@ export const translations = {
         "Tetapkan profil penalti pembeli di tab Despatch untuk dapatkan cadangan despatch-vs-tahan yang konkrit untuk tangki ini.",
       applySingle: "Alirkan ke tangki ini",
       applySplit: "Guna pelan pisahan",
-      meetsLimit: "Kekal dalam had",
-      overLimit: "Melebihi had",
       noRoom: "Tiada ruang lagi",
       consolidateRule: (tank: string, target: string) =>
-        `FFA masuk melebihi had FFA baik ${target}% anda — alirkan semua terus ke ${tank}, yang sudah pun tangki FFA tertinggi. Mengekalkan CPO buruk di satu tempat lebih mudah direkod dan dibaiki berbanding menaikkan sedikit FFA setiap tangki.`,
+        `- FFA masuk melebihi had FFA baik ${target}% anda hari ini.\n- Alirkan semua kelompok ke ${tank} — sudah pun tangki FFA tertinggi.\n- Mengekalkan CPO buruk di satu tempat lebih mudah direkod dan dibaiki berbanding menaikkan sedikit FFA setiap tangki.`,
       consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
         `Pelan blend: pindah lebih kurang ${moveMt} MT dari ${dilutionTank} (bersama CPO masuk berterusan) selama ${days} hari untuk turunkannya ke ${finalFfa}% FFA.`,
       consolidateBlendInfeasible:
@@ -1214,7 +1204,7 @@ export const translations = {
       consolidateNoDilutionTank:
         "Tiada tangki FFA baik tersedia untuk blend sekarang — despatch stok ini sahaja (lihat Loss Optimizer).",
       forceSplitText: (tank: string) =>
-        `${tank} tiada ruang lagi untuk kelompok hari ini, jadi tiada satu tangki untuk digabungkan — pisahan merentasi tangki satu-satunya cara untuk terima CPO ini tanpa limpah.`,
+        `- ${tank} tiada ruang lagi untuk kelompok hari ini.\n- Tiada satu tangki boleh terima kelompok penuh, jadi pisahan merentasi tangki satu-satunya cara untuk elak limpah.`,
       whatToTransfer: "Apa untuk dipindah",
       penaltyExposure: "Pendedahan penalti",
       alreadyCompliant: (ffa: string) =>
@@ -1228,6 +1218,8 @@ export const translations = {
         `FFA masuk melebihi had FFA baik, jadi pelan ialah alirkan semua kelompok ke ${tank} — tangki yang sudah pun tertinggi FFA — dengan sengaja, walaupun ia meninggalkannya melebihi had, berbanding menyebarkan CPO buruk nipis ke setiap tangki. Terangkan kenapa ini pilihan tepat di sini, menggunakan nombor FFA/MT sebenar, dan apa yang perlu berlaku seterusnya sebelum despatch (blend turunkan). Berikan sebab lengkap, bukan sekadar kesimpulan — jurutera yang baca patut faham kenapa, bukan sekadar apa.`,
       aiQuestionForceSplit: (tank: string) =>
         `${tank} — tangki yang sudah pun tertinggi FFA — tiada kapasiti lagi untuk kelompok masuk hari ini, jadi mengalirkan semua ke situ tidak mungkin sekarang, sebab itu pelan memisahkan kelompok merentasi tangki sebaliknya. Terangkan kenapa pisahan satu-satunya pilihan sebenar di sini, menggunakan nombor kapasiti/FFA sebenar.`,
+      aiQuestionOptionsHint:
+        " Jika ada alternatif yang benar-benar munasabah untuk dipertimbangkan (daripada pelan alternatif yang diberikan), susun sebagai Pilihan 1 / Pilihan 2 berlabel (Pilihan 3 hanya jika benar-benar wajar) supaya saya boleh bandingkan sepintas lalu — jika tidak, berikan sahaja satu cadangan.",
       aiThinking: "Mengira langkah terbaik untuk kelompok hari ini…",
       aiFallbackNote: "Penjelasan AI tidak tersedia sekarang — menunjukkan cadangan yang dikira sebagai gantinya.",
       aiOpinionLabel: "Pendapat AI",
