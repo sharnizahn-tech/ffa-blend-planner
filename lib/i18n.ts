@@ -604,6 +604,9 @@ export const translations = {
         `${tank} — the tank that's already the highest FFA — has no spare capacity left for today's incoming batch, so routing everything into it isn't possible right now, which is why the plan splits the batch across tanks instead. Explain why splitting is the only real option here, using the actual capacity and FFA numbers.`,
       aiThinking: "Working out the best move for today's batch…",
       aiFallbackNote: "AI explanation unavailable right now — showing the calculated recommendation instead.",
+      aiOpinionLabel: "AI opinion",
+      giveAdvice: "Give advice",
+      giveAdviceAgain: "Ask again",
     },
     transferCalc: {
       title: "Transfer calculator",
@@ -1225,6 +1228,9 @@ export const translations = {
         `${tank} — tangki yang sudah pun tertinggi FFA — tiada kapasiti lagi untuk kelompok masuk hari ini, jadi mengalirkan semua ke situ tidak mungkin sekarang, sebab itu pelan memisahkan kelompok merentasi tangki sebaliknya. Terangkan kenapa pisahan satu-satunya pilihan sebenar di sini, menggunakan nombor kapasiti/FFA sebenar.`,
       aiThinking: "Mengira langkah terbaik untuk kelompok hari ini…",
       aiFallbackNote: "Penjelasan AI tidak tersedia sekarang — menunjukkan cadangan yang dikira sebagai gantinya.",
+      aiOpinionLabel: "Pendapat AI",
+      giveAdvice: "Beri nasihat",
+      giveAdviceAgain: "Tanya lagi",
     },
     transferCalc: {
       title: "Kalkulator pemindahan",

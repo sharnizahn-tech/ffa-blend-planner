@@ -1181,61 +1181,60 @@ export default function Home() {
     }
   };
 
-  // Auto-fire an AI explanation for the Allocation strategy recommendation
-  // whenever the underlying situation actually changes — debounced so
-  // typing in the production forecast doesn't spam the AI service. The
-  // deterministic recommendation (recommendSingle, recommendationText) is
-  // computed instantly either way; this only replaces the wording shown
-  // with the AI's explanation once it's back, and falls back cleanly if the
-  // AI call fails.
+  // The Allocation strategy AI explanation is now on-demand only (a "Give
+  // advice" button the engineer clicks) rather than auto-firing on every
+  // change — Opus-tier models cost real money per call, and most edits to
+  // the production forecast don't need a fresh AI opinion every time. This
+  // effect just clears out a STALE suggestion when the underlying situation
+  // changes, so the card falls back to the always-correct calculated text
+  // instead of showing advice for a plan that's no longer current — it
+  // does not itself call the AI.
   useEffect(() => {
-    if (!best || !bestSingleTank || incomingCPO <= 0) {
-      setAiAllocationSuggestion(null);
-      setAiAllocationLoading(false);
-      setAiAllocationError(false);
-      return;
-    }
-    setAiAllocationLoading(true);
+    setAiAllocationSuggestion(null);
+    setAiAllocationLoading(false);
     setAiAllocationError(false);
-    const timer = setTimeout(() => {
-      const singleTank = tanks[singleIndexForRecommendation];
-      const question = forceSplitFallback
-        ? copy.routingStrategy.aiQuestionForceSplit(singleTank?.name ?? "")
-        : consolidateRuleApplies
-          ? copy.routingStrategy.aiQuestionConsolidate(singleTank?.name ?? "")
-          : recommendSingle
-            ? copy.routingStrategy.aiQuestionSingle(singleTank?.name ?? "")
-            : copy.routingStrategy.aiQuestionSplit;
-      // Tell the AI the SAME plan the card is actually showing as
-      // recommended — otherwise it reasons from the generic split-scored
-      // plan and can contradict the card it's meant to be explaining.
-      const payload = buildAdvisePayload(
-        question,
-        [],
-        false,
-        recommendSingle ? (bestSingleTank ?? undefined) : (best ?? undefined),
-      );
-      fetch("/api/advise", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(roundDeep(payload, 2)),
-      })
-        .then(async (res) => {
-          const data = (await res.json()) as { opinion?: string; error?: string; source?: "openai" | "offline" };
-          if (!res.ok || !data.opinion || data.source === "offline") {
-            throw new Error(data.error ?? "unavailable");
-          }
-          setAiAllocationSuggestion(data.opinion);
-        })
-        .catch(() => {
-          setAiAllocationError(true);
-          setAiAllocationSuggestion(null);
-        })
-        .finally(() => setAiAllocationLoading(false));
-    }, 1200);
-    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tanks, incomingCPO, incomingFFA, target, recommendSingle, singleIndexForRecommendation, lang]);
+
+  const fetchAllocationAdvice = () => {
+    if (!best || !bestSingleTank || incomingCPO <= 0 || aiAllocationLoading) return;
+    setAiAllocationLoading(true);
+    setAiAllocationError(false);
+    const singleTank = tanks[singleIndexForRecommendation];
+    const question = forceSplitFallback
+      ? copy.routingStrategy.aiQuestionForceSplit(singleTank?.name ?? "")
+      : consolidateRuleApplies
+        ? copy.routingStrategy.aiQuestionConsolidate(singleTank?.name ?? "")
+        : recommendSingle
+          ? copy.routingStrategy.aiQuestionSingle(singleTank?.name ?? "")
+          : copy.routingStrategy.aiQuestionSplit;
+    // Tell the AI the SAME plan the card is actually showing as
+    // recommended — otherwise it reasons from the generic split-scored
+    // plan and can contradict the card it's meant to be explaining.
+    const payload = buildAdvisePayload(
+      question,
+      [],
+      false,
+      recommendSingle ? (bestSingleTank ?? undefined) : (best ?? undefined),
+    );
+    fetch("/api/advise", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(roundDeep(payload, 2)),
+    })
+      .then(async (res) => {
+        const data = (await res.json()) as { opinion?: string; error?: string; source?: "openai" | "offline" };
+        if (!res.ok || !data.opinion || data.source === "offline") {
+          throw new Error(data.error ?? "unavailable");
+        }
+        setAiAllocationSuggestion(data.opinion);
+      })
+      .catch(() => {
+        setAiAllocationError(true);
+        setAiAllocationSuggestion(null);
+      })
+      .finally(() => setAiAllocationLoading(false));
+  };
 
   const updateTank = (i: number, key: keyof Tank, value: string | number) =>
     setTanks((p) =>
@@ -1491,6 +1490,7 @@ export default function Home() {
         aiError={aiAllocationError}
         onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
         onApplySplit={() => best && applyPlan(best)}
+        onGiveAdvice={fetchAllocationAdvice}
       />
       <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
         {tanksPanel}
@@ -3411,6 +3411,7 @@ function RoutingStrategyCard({
   aiError,
   onApplySingle,
   onApplySplit,
+  onGiveAdvice,
 }: {
   copy: Copy;
   tanks: Tank[];
@@ -3426,6 +3427,7 @@ function RoutingStrategyCard({
   aiError: boolean;
   onApplySingle: () => void;
   onApplySplit: () => void;
+  onGiveAdvice: () => void;
 }) {
   if (!best || !bestSingleTank || incomingCPO <= 0) return null;
 
@@ -3446,10 +3448,10 @@ function RoutingStrategyCard({
       : singleMeets
         ? copy.routingStrategy.recommendSingle(singleTank.name)
         : copy.routingStrategy.recommendSingleWithFollowUp(singleTank.name, n(singleResult.finalFFA, 2));
-  // Prefer the AI's written explanation once it's back; the calculated text
-  // (always correct, always instant) is the fallback while it's loading, if
-  // it failed, or before the first response ever arrives.
-  const recommendationText = aiSuggestion ?? calculatedText;
+  // The calculated explanation (always correct, always instant, zero cost)
+  // stays visible on its own — the AI opinion is on-demand only, via the
+  // "Give advice" button, and shown separately below rather than silently
+  // replacing this text in place.
 
   // One decisive recommendation, not a side-by-side comparison to pick from —
   // recommendSingle already says which route is correct for this situation
@@ -3519,17 +3521,43 @@ function RoutingStrategyCard({
       </div>
 
       <div className="mt-4 rounded-xl bg-[#f8faf7] p-3.5">
-        <FormattedOpinion text={recommendationText} />
+        <FormattedOpinion text={calculatedText} />
       </div>
-      {aiLoading && !aiSuggestion && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-[#8a9690]">
-          <Loader2 size={12} className="animate-spin" />
-          {copy.routingStrategy.aiThinking}
-        </p>
+
+      {aiSuggestion && (
+        <div className="mt-3 rounded-xl border-l-4 border-[#00b14f] bg-[#f0faf3] p-3.5">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#00713a]">
+            <Bot size={13} />
+            {copy.routingStrategy.aiOpinionLabel}
+          </p>
+          <div className="mt-1.5">
+            <FormattedOpinion text={aiSuggestion} />
+          </div>
+        </div>
       )}
+
       {aiError && (
         <p className="mt-2 text-xs text-[#8a9690]">{copy.routingStrategy.aiFallbackNote}</p>
       )}
+
+      <button
+        type="button"
+        onClick={onGiveAdvice}
+        disabled={aiLoading}
+        className="btn-touch mt-3 w-full border border-[#b9c8bd] bg-white text-[#173f30] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+      >
+        {aiLoading ? (
+          <>
+            <Loader2 size={16} className="animate-spin" />
+            {copy.routingStrategy.aiThinking}
+          </>
+        ) : (
+          <>
+            <Bot size={16} />
+            {aiSuggestion ? copy.routingStrategy.giveAdviceAgain : copy.routingStrategy.giveAdvice}
+          </>
+        )}
+      </button>
     </Panel>
   );
 }

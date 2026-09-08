@@ -9,7 +9,12 @@ import {
 export const runtime = "nodejs";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
-const FALLBACK_MODELS = ["moonshotai/kimi-k2", "openai/gpt-4o-mini", "anthropic/claude-3-5-haiku"];
+const FALLBACK_MODELS = [
+  "anthropic/claude-opus-4",
+  "moonshotai/kimi-k2",
+  "openai/gpt-4o-mini",
+  "anthropic/claude-3-5-haiku",
+];
 
 function parseOpenAiError(detailText: string) {
   try {
