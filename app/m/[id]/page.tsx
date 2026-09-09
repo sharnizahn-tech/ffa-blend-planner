@@ -1832,7 +1832,7 @@ export default function Home() {
       className="min-h-screen min-w-0 overflow-x-hidden bg-[#f4f6f2] bg-cover bg-top text-[#17231d]"
       style={{
         backgroundImage:
-          "linear-gradient(rgba(244,246,242,0.68), rgba(244,246,242,0.68)), url(/Background.png)",
+          "linear-gradient(rgba(244,246,242,0.5), rgba(244,246,242,0.5)), url(/Background.png)",
       }}
     >
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#123c2c] text-white">
