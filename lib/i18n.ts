@@ -6,7 +6,7 @@ const n = (v: number, d = 2) =>
 export const translations = {
   en: {
     appTitle: "Mill Stock Optimizer",
-    appTitleShort: "Mill Optimizer",
+    appTitleShort: "Mill Stock Optimizer",
     appSubtitle: "CPO quality decision support",
     ready: "Ready",
     footer:
@@ -308,8 +308,6 @@ export const translations = {
     refineryComparison: {
       title: "Refinery Comparison",
       managePenaltyBands: "Manage Penalty Bands",
-      selectColumn: "Select",
-      refineryColumn: "Refinery",
       bandColumn: "Applicable Band",
       despatchColumn: "Planned Despatch",
       ffaColumn: "Achieved FFA",
@@ -612,7 +610,7 @@ export const translations = {
   },
   bm: {
     appTitle: "Pengoptimum Stok Kilang",
-    appTitleShort: "Optimum Kilang",
+    appTitleShort: "Optimum Stok Kilang",
     appSubtitle: "Sokongan keputusan kualiti CPO",
     ready: "Sedia",
     footer:
@@ -914,8 +912,6 @@ export const translations = {
     refineryComparison: {
       title: "Perbandingan Kilang Penapisan",
       managePenaltyBands: "Urus Band Penalti",
-      selectColumn: "Pilih",
-      refineryColumn: "Kilang Penapisan",
       bandColumn: "Band Berkenaan",
       despatchColumn: "Despatch Dirancang",
       ffaColumn: "FFA Dicapai",

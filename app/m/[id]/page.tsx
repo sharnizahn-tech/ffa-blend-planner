@@ -1604,16 +1604,16 @@ export default function Home() {
 
   const despatchPanel = (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-white/90 p-3.5">
         <div>
           <h1 className="text-lg font-extrabold tracking-tight text-[#123c2c] sm:text-xl">
             {copy.despatchPage.title}
           </h1>
-          <p className="mt-1 text-sm text-[#708078]">{copy.despatchPage.subtitle}</p>
+          <p className="mt-1 text-sm text-[#3f4c46]">{copy.despatchPage.subtitle}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {lastCalculatedAt && (
-            <span className="flex items-center gap-1.5 text-xs text-[#8a9690]">
+            <span className="flex items-center gap-1.5 text-xs text-[#586a5f]">
               <Clock size={13} />
               {copy.despatchPage.lastCalculated(formatClockTime(lastCalculatedAt))}
             </span>
@@ -1661,6 +1661,13 @@ export default function Home() {
           onVolumesChange={setRefineryVolumes}
           penaltyEditor={penaltyPanel}
         />
+        {showTankerBlend && tankerBlendSuggestion && tankerBlendOptionWithPenalty && (
+          <TankerBlendCard
+            copy={copy}
+            problemTank={tankerBlendSuggestion.problemTank}
+            option={tankerBlendOptionWithPenalty}
+          />
+        )}
         </div>
         <div className="min-w-0 lg:w-[38%]">
         <DespatchDecision
@@ -1692,13 +1699,6 @@ export default function Home() {
         />
         </div>
       </div>
-      {showTankerBlend && tankerBlendSuggestion && tankerBlendOptionWithPenalty && (
-        <TankerBlendCard
-          copy={copy}
-          problemTank={tankerBlendSuggestion.problemTank}
-          option={tankerBlendOptionWithPenalty}
-        />
-      )}
     </>
   );
 
@@ -3803,6 +3803,25 @@ function SmartRecommendation({
   const checklistLines = [routeLine, despatchLine, ...blendLines, copy.plan.checklistVerify].filter(
     (s): s is string => !!s,
   );
+  // Rendered after the branch-specific content (top 3 plans / blend-down
+  // plan) below, not before it — the concrete options come first, the
+  // step-by-step checklist follows.
+  const checklistBlock = (
+    <div className="mb-4 space-y-2">
+      <p className="section-label">{copy.plan.checklistTitle}</p>
+      {checklistLines.map((line, i) => (
+        <div
+          key={i}
+          className="flex items-start gap-2.5 rounded-xl bg-[#f8faf7] p-3 text-sm leading-relaxed text-[#173f30]"
+        >
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#173f30] text-[10px] font-bold text-white">
+            {i + 1}
+          </span>
+          {line}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2da] bg-white shadow-sm">
@@ -3842,20 +3861,6 @@ function SmartRecommendation({
         </div>
       </div>
       <div className="p-4 sm:p-5">
-        <div className="mb-4 space-y-2">
-          <p className="section-label">{copy.plan.checklistTitle}</p>
-          {checklistLines.map((line, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-2.5 rounded-xl bg-[#f8faf7] p-3 text-sm leading-relaxed text-[#173f30]"
-            >
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#173f30] text-[10px] font-bold text-white">
-                {i + 1}
-              </span>
-              {line}
-            </div>
-          ))}
-        </div>
         {useConsolidate ? (
           <>
             {blendDownText && (
@@ -3875,10 +3880,12 @@ function SmartRecommendation({
               </div>
             )}
 
+            <div className="mt-4">{checklistBlock}</div>
+
             <button
               type="button"
               onClick={onApplySingle}
-              className="btn-touch mt-5 flex w-full bg-[#d4f7e2] text-[#00713a]"
+              className="btn-touch mt-1 flex w-full bg-[#d4f7e2] text-[#00713a]"
             >
               <RefreshCw size={16} />
               {copy.routingStrategy.applySingle}
@@ -3923,10 +3930,12 @@ function SmartRecommendation({
               </div>
             )}
 
+            <div className="mt-4">{checklistBlock}</div>
+
             <button
               type="button"
               onClick={() => onApplyPlan(best)}
-              className="btn-touch mt-5 flex w-full bg-[#d4f7e2] text-[#00713a]"
+              className="btn-touch mt-1 flex w-full bg-[#d4f7e2] text-[#00713a]"
             >
               <RefreshCw size={16} />
               {copy.allocation.applyRecommended}
@@ -3949,7 +3958,8 @@ function SmartRecommendation({
         ) : (
           <>
             <p className="text-sm leading-relaxed text-[#8a3d20]">{copy.plan.noFeasiblePlan}</p>
-            <div className="mt-5 border-t border-[#e8ede8] pt-5">
+            <div className="mt-4">{checklistBlock}</div>
+            <div className="border-t border-[#e8ede8] pt-5">
               <AiAdvisorPanel
                 copy={copy}
                 aiMessages={aiMessages}
@@ -4542,6 +4552,16 @@ function RefineryMobileCard({
         <span className="text-right font-semibold text-[#3f4c46]">
           {row.profile.bands.length ? `RM ${n(exposure.rmPerMt, 2)}/MT` : "—"}
         </span>
+        <span className="text-[#7a867f]">{copy.refineryComparison.statusColumn}</span>
+        <span className="flex justify-end">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              row.profile.bands.length ? "bg-[#e3f3e8] text-[#187449]" : "bg-[#f4f6f2] text-[#6c7971]"
+            }`}
+          >
+            {row.profile.bands.length ? copy.refineryComparison.eligible : copy.refineryComparison.notConfigured}
+          </span>
+        </span>
       </div>
       <div className="mt-2.5 flex items-center justify-between border-t border-black/5 pt-2.5">
         <span className="text-xs font-bold text-[#7a867f]">{copy.refineryComparison.penaltyColumn}</span>
@@ -4675,90 +4695,12 @@ function RefineryComparison({
             </label>
           </div>
 
-          <div className="mt-4 hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[820px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-[#e8ede8] text-left text-[11px] font-bold uppercase tracking-wide text-[#6c7971]">
-                  <th className="py-2 pr-2">{copy.refineryComparison.selectColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryComparison.refineryColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryComparison.bandColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryComparison.despatchColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryDespatch.lorriesColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryComparison.ffaColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryComparison.rateColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryComparison.penaltyColumn}</th>
-                  <th className="py-2 pr-2">{copy.refineryComparison.statusColumn}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const isChecked = selected.has(row.profile.id);
-                  const isCheapest = cheapestId === row.profile.id;
-                  const exposure = rowExposure(row);
-                  return (
-                    <tr
-                      key={row.profile.id}
-                      className={`border-b border-[#f0f2ef] align-middle ${isCheapest ? "bg-[#f0faf3]" : ""}`}
-                    >
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggle(row.profile.id)}
-                          className="h-4 w-4 accent-[#00713a]"
-                          aria-label={row.profile.name}
-                        />
-                      </td>
-                      <td className="max-w-[160px] py-2.5 pr-2">
-                        <span className="flex items-center gap-1.5">
-                          <span className="truncate font-bold text-[#173f30]" title={row.profile.name}>
-                            {row.profile.name}
-                          </span>
-                          {isCheapest && (
-                            <span className="shrink-0 rounded-full bg-[#d4f7e2] px-2 py-0.5 text-[10px] font-bold text-[#00713a]">
-                              {copy.refineryComparison.lowestCostBadge}
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">{rowBandLabel(row)}</td>
-                      <td className="py-2.5 pr-2">
-                        <NumericInput
-                          label={copy.refineryComparison.despatchColumn}
-                          value={volumes[row.profile.id] ?? 0}
-                          onChange={(v) => onVolumesChange((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
-                          className="numeric-input w-20"
-                        />
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">
-                        {rowLorries(row) > 0 ? copy.refineryDespatch.lorryCount(rowLorries(row)) : "—"}
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">{n(achievedFfa, 2)}%</td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 text-[#3f4c46]">
-                        {row.profile.bands.length ? `RM ${n(exposure.rmPerMt, 2)}/MT` : "—"}
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-2 font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
-                        RM {n(exposure.totalRm, 0)}
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            row.profile.bands.length
-                              ? "bg-[#e3f3e8] text-[#187449]"
-                              : "bg-[#f4f6f2] text-[#6c7971]"
-                          }`}
-                        >
-                          {row.profile.bands.length ? copy.refineryComparison.eligible : copy.refineryComparison.notConfigured}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-4 space-y-2.5 md:hidden">
+          {/* Always the card layout, at every width — a table here always
+             needed either horizontal scrolling or truncating the refinery
+             name behind the "Lowest Cost" badge to fit a fixed min-width.
+             Cards stack every field vertically instead, so nothing is ever
+             cut off or hidden behind a scrollbar. */}
+          <div className="mt-4 space-y-2.5">
             {rows.map((row) => (
               <RefineryMobileCard
                 key={row.profile.id}
