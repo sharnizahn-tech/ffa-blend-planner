@@ -133,7 +133,7 @@ function calculate(
       incoming,
       finalStock,
       finalFFA,
-      utilisation: (finalStock / tank.capacity) * 100,
+      utilisation: tank.capacity > 0 ? (finalStock / tank.capacity) * 100 : 0,
       overflow: finalStock > tank.capacity,
     };
   });
