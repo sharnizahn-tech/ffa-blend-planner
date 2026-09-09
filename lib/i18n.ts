@@ -160,11 +160,10 @@ export const translations = {
       limitNotAchievable: "Good FFA limit cannot be met for all tanks",
       consolidateTitle: (tank: string) => `Consolidate into ${tank}, then blend it down`,
       consolidateBasis: (target: string) =>
-        `Incoming FFA is above your ${target}% good FFA limit — this batch goes to the highest-FFA tank on purpose, then gets blended back down separately. See the blend-down plan below.`,
+        `Incoming FFA is above your ${target}% good FFA limit — this batch goes to the highest-FFA tank on purpose, then gets blended back down separately.`,
       planBasis:
         "Based on tank capacity, current stock, and the good FFA limit (lower FFA is better; 4.8% is the maximum for good quality).",
       recommendedAllocation: "Recommended allocation",
-      blendDownPlan: "Blend-down plan",
       useSplitInstead: "No — use the split plan instead",
       topPlans: "Top 3 plans",
       planRank: (rank: number) => (rank === 1 ? "Plan 1 (best)" : `Plan ${rank}`),
@@ -517,60 +516,14 @@ export const translations = {
         `- Option 1 (recommended): split across tanks — keeps every tank within the good FFA limit today.\n- Option 2: route 100% into ${tank} alone — simpler (one valve), but ends at ${ffa}% FFA, over the limit.\n- Splitting needs precise flow control to hit the % accurately; that's the trade-off for staying compliant.`,
       recommendSingleWithFollowUp: (tank: string, ffa: string) =>
         `- Neither option keeps every tank compliant today.\n- Route 100% into ${tank} anyway — ends at ${ffa}% FFA, simplest to execute (one valve, no flow-splitting).\n- See below for exactly what to do about the overage.`,
-      followUpDespatchNow: (info: {
-        tonnageMt: number;
-        ffaPct: number;
-        rmPerMt: number;
-        rm: number;
-        triedMt: number;
-        bestFfaPct: number;
-      }) =>
-        `What to do about it: despatch it now — ${n(info.tonnageMt, 0)} MT at ${n(info.ffaPct, 2)}% FFA falls in the RM ${n(info.rmPerMt, 0)}/MT band, so the penalty is RM ${n(info.rmPerMt, 0)} × ${n(info.tonnageMt, 0)} MT = RM ${n(info.rm, 0)}.` +
-        (info.triedMt > 0.5
-          ? ` Blending first was checked — moving ${n(info.triedMt, 0)} MT in from other tanks and/or incoming CPO over 30 days only gets it to ${n(info.bestFfaPct, 2)}% FFA, still above the limit, so holding would just delay the same penalty.`
-          : ` There's no good-FFA tank or usable incoming CPO to blend it with right now, so there's no way to avoid this penalty by holding.`),
-      followUpHold: (info: {
-        days: number;
-        transferMt: number;
-        dilutionTank: string;
-        incomingMt: number;
-        finalFfaPct: number;
-        rm: number;
-      }) =>
-        `What to do about it: hold and blend it down — move ${n(info.transferMt, 0)} MT from ${info.dilutionTank}${
-          info.incomingMt > 0.5 ? ` and let in ${n(info.incomingMt, 0)} MT of incoming CPO` : ""
-        } over ${info.days} day${info.days === 1 ? "" : "s"} to bring it to ${n(info.finalFfaPct, 2)}% FFA — within the good FFA limit. That avoids RM ${n(info.rm, 0)} in penalty versus despatching it today.`,
-      followUpHoldPartial: (info: {
-        days: number;
-        transferMt: number;
-        dilutionTank: string;
-        incomingMt: number;
-        finalFfaPct: number;
-        rm: number;
-      }) =>
-        `What to do about it: hold and blend it down for ${info.days} day${info.days === 1 ? "" : "s"} — move ${n(info.transferMt, 0)} MT from ${info.dilutionTank}${
-          info.incomingMt > 0.5 ? ` and let in ${n(info.incomingMt, 0)} MT of incoming CPO` : ""
-        } to bring it to ${n(info.finalFfaPct, 2)}% FFA. That's still above the good FFA limit, but it drops into a cheaper penalty band, saving RM ${n(info.rm, 0)} versus despatching it as-is today — keep blending toward full compliance if there's time before the tanker arrives.`,
-      followUpNoProfile:
-        "Set up a buyer penalty profile on the Despatch tab to get a concrete despatch-now-vs-hold recommendation for this tank.",
       applySingle: "Route into this tank",
       applySplit: "Use the split plan",
       noRoom: "No room left",
       consolidateRule: (tank: string, target: string) =>
         `- Incoming FFA is above your ${target}% good FFA limit today.\n- Send the whole batch into ${tank} — already the highest-FFA tank.\n- Keeping the bad CPO in one place is easier to record and fix than nudging every tank's FFA up a little.`,
-      consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
-        `Blend-down plan: move about ${moveMt} MT from ${dilutionTank} (plus ongoing incoming CPO) over ${days} day${days === 1 ? "" : "s"} to bring it down to ${finalFfa}% FFA.`,
-      consolidateBlendInfeasible:
-        "There isn't enough good-FFA stock or transfer capacity to blend it back down within 30 days. Despatch it instead (see Loss Optimizer) or free up a good-FFA tank first.",
-      consolidateNoDilutionTank:
-        "No good-FFA tank is available to blend with right now — despatch this stock instead (see Loss Optimizer).",
       forceSplitText: (tank: string) =>
         `- ${tank} has no spare room for today's batch.\n- No single tank can take the full load, so splitting across tanks is the only way to avoid an overflow.`,
       whatToTransfer: "What to transfer",
-      penaltyExposure: "Penalty exposure",
-      alreadyCompliant: (ffa: string) =>
-        `Already within limit after this batch — lands at ${ffa}% FFA, no blending needed before despatch.`,
-      unnamedTank: "another tank",
       aiQuestionSingle: (tank: string) =>
         `Should today's incoming CPO go into ${tank} as one tank, or get split across tanks instead? Give your recommendation, then walk through the reasoning — why this option and not the other, using the real numbers from the plan.`,
       aiQuestionSplit:
@@ -766,11 +719,10 @@ export const translations = {
       limitNotAchievable: "Had FFA baik tidak boleh dicapai untuk semua tangki",
       consolidateTitle: (tank: string) => `Gabungkan ke ${tank}, kemudian blend turunkan`,
       consolidateBasis: (target: string) =>
-        `FFA masuk melebihi had FFA baik ${target}% anda — kelompok ini sengaja pergi ke tangki FFA tertinggi, kemudian di-blend turun semula secara berasingan. Lihat pelan blend di bawah.`,
+        `FFA masuk melebihi had FFA baik ${target}% anda — kelompok ini sengaja pergi ke tangki FFA tertinggi, kemudian di-blend turun semula secara berasingan.`,
       planBasis:
         "Berdasarkan kapasiti tangki, stok semasa, dan had FFA baik (FFA lebih rendah lebih baik; 4.8% ialah maksimum untuk kualiti baik).",
       recommendedAllocation: "Peruntukan disyorkan",
-      blendDownPlan: "Pelan blend",
       useSplitInstead: "Tidak — guna pelan pisahan sebaliknya",
       topPlans: "3 pelan terbaik",
       planRank: (rank: number) => (rank === 1 ? "Pelan 1 (terbaik)" : `Pelan ${rank}`),
@@ -1120,60 +1072,14 @@ export const translations = {
         `- Pilihan 1 (disyorkan): pisah merentasi tangki — mengekalkan setiap tangki dalam had FFA baik hari ini.\n- Pilihan 2: alirkan 100% ke ${tank} sahaja — lebih mudah (satu injap), tetapi berakhir pada ${ffa}% FFA, melebihi had.\n- Pisahan perlukan kawalan aliran teliti untuk capai % dengan tepat; itulah pertukaran untuk kekal patuh.`,
       recommendSingleWithFollowUp: (tank: string, ffa: string) =>
         `- Tiada pilihan yang mengekalkan setiap tangki patuh hari ini.\n- Alirkan 100% ke ${tank} juga — berakhir pada ${ffa}% FFA, paling mudah dilaksanakan (satu injap, tiada pisah aliran).\n- Lihat di bawah untuk tindakan sebenar tentang lebihan ini.`,
-      followUpDespatchNow: (info: {
-        tonnageMt: number;
-        ffaPct: number;
-        rmPerMt: number;
-        rm: number;
-        triedMt: number;
-        bestFfaPct: number;
-      }) =>
-        `Apa nak buat: despatch sekarang — ${n(info.tonnageMt, 0)} MT pada ${n(info.ffaPct, 2)}% FFA jatuh dalam band RM ${n(info.rmPerMt, 0)}/MT, jadi penalti ialah RM ${n(info.rmPerMt, 0)} × ${n(info.tonnageMt, 0)} MT = RM ${n(info.rm, 0)}.` +
-        (info.triedMt > 0.5
-          ? ` Blend telah disemak — memindah masuk ${n(info.triedMt, 0)} MT dari tangki lain dan/atau CPO masuk selama 30 hari hanya capai ${n(info.bestFfaPct, 2)}% FFA, masih melebihi had, jadi menahan hanya akan menangguhkan penalti yang sama.`
-          : ` Tiada tangki FFA baik atau CPO masuk yang boleh digunakan untuk blend sekarang, jadi tiada cara untuk elak penalti ini dengan menahan.`),
-      followUpHold: (info: {
-        days: number;
-        transferMt: number;
-        dilutionTank: string;
-        incomingMt: number;
-        finalFfaPct: number;
-        rm: number;
-      }) =>
-        `Apa nak buat: tahan dan blend turunkan — pindah ${n(info.transferMt, 0)} MT dari ${info.dilutionTank}${
-          info.incomingMt > 0.5 ? ` dan biarkan masuk ${n(info.incomingMt, 0)} MT CPO masuk` : ""
-        } selama ${info.days} hari untuk turunkannya ke ${n(info.finalFfaPct, 2)}% FFA — dalam had FFA baik. Ini jimat RM ${n(info.rm, 0)} penalti berbanding despatch hari ini.`,
-      followUpHoldPartial: (info: {
-        days: number;
-        transferMt: number;
-        dilutionTank: string;
-        incomingMt: number;
-        finalFfaPct: number;
-        rm: number;
-      }) =>
-        `Apa nak buat: tahan dan blend turunkan selama ${info.days} hari — pindah ${n(info.transferMt, 0)} MT dari ${info.dilutionTank}${
-          info.incomingMt > 0.5 ? ` dan biarkan masuk ${n(info.incomingMt, 0)} MT CPO masuk` : ""
-        } untuk turunkannya ke ${n(info.finalFfaPct, 2)}% FFA. Ini masih melebihi had FFA baik, tetapi masuk band penalti lebih murah, menjimatkan RM ${n(info.rm, 0)} berbanding despatch hari ini seadanya — teruskan blending ke arah pematuhan penuh jika ada masa sebelum tangki dimuatkan.`,
-      followUpNoProfile:
-        "Tetapkan profil penalti pembeli di tab Despatch untuk dapatkan cadangan despatch-vs-tahan yang konkrit untuk tangki ini.",
       applySingle: "Alirkan ke tangki ini",
       applySplit: "Guna pelan pisahan",
       noRoom: "Tiada ruang lagi",
       consolidateRule: (tank: string, target: string) =>
         `- FFA masuk melebihi had FFA baik ${target}% anda hari ini.\n- Alirkan semua kelompok ke ${tank} — sudah pun tangki FFA tertinggi.\n- Mengekalkan CPO buruk di satu tempat lebih mudah direkod dan dibaiki berbanding menaikkan sedikit FFA setiap tangki.`,
-      consolidateBlendPlan: (moveMt: string, dilutionTank: string, days: number, finalFfa: string) =>
-        `Pelan blend: pindah lebih kurang ${moveMt} MT dari ${dilutionTank} (bersama CPO masuk berterusan) selama ${days} hari untuk turunkannya ke ${finalFfa}% FFA.`,
-      consolidateBlendInfeasible:
-        "Tidak cukup stok FFA baik atau kapasiti pemindahan untuk blend turunkannya dalam 30 hari. Despatch sahaja (lihat Loss Optimizer) atau kosongkan tangki FFA baik dahulu.",
-      consolidateNoDilutionTank:
-        "Tiada tangki FFA baik tersedia untuk blend sekarang — despatch stok ini sahaja (lihat Loss Optimizer).",
       forceSplitText: (tank: string) =>
         `- ${tank} tiada ruang lagi untuk kelompok hari ini.\n- Tiada satu tangki boleh terima kelompok penuh, jadi pisahan merentasi tangki satu-satunya cara untuk elak limpah.`,
       whatToTransfer: "Apa untuk dipindah",
-      penaltyExposure: "Pendedahan penalti",
-      alreadyCompliant: (ffa: string) =>
-        `Sudah dalam had selepas kelompok ini — berada pada ${ffa}% FFA, tiada blend diperlukan sebelum despatch.`,
-      unnamedTank: "tangki lain",
       aiQuestionSingle: (tank: string) =>
         `Patutkah CPO masuk hari ini dialirkan ke ${tank} sebagai satu tangki, atau dipisahkan merentasi tangki? Berikan cadangan anda, kemudian terangkan sebabnya — kenapa pilihan ini dan bukan yang satu lagi, menggunakan nombor sebenar daripada pelan.`,
       aiQuestionSplit:

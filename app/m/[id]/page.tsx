@@ -52,9 +52,7 @@ import {
   autoMaxTransferPerDayMt,
   compareHoldVsDespatch,
   DEFAULT_MAX_TRANSFER_PER_DAY_MT,
-  simulateHoldToTarget,
   type HoldVsDespatch,
-  type HoldSimulation,
 } from "@/lib/lossOptimizer";
 import { planBatchBlend, type BatchBlendResult } from "@/lib/batchBlend";
 import type { MillStateInput } from "@/lib/millStore";
@@ -247,43 +245,6 @@ function buildSingleTankPlan(
   const results = calculate(tanks, allocation, incomingCPO, incomingFFA);
   const excess = results.reduce((s, r) => s + Math.max(0, r.finalFFA - target) * r.finalStock, 0);
   return { allocation, results, score: excess };
-}
-
-/** The full "what to do about it, in RM terms" sentence for a tank that's
- *  over the limit — despatch-now cost (with the RM/MT rate and tonnage it
- *  applies to, plus how much dilution was actually tried and how far short
- *  it fell), or hold-and-dilute savings (with exactly what to transfer from
- *  where). Shared by the Allocation strategy card and Smart Recommendation
- *  so the two never phrase the same number two different ways. */
-function buildPenaltyDecisionText(
-  copy: Copy,
-  hasProfile: boolean,
-  singleTankFollowUp: HoldVsDespatch | null,
-  singleTankBlendPlan: { hold: HoldSimulation; dilutionTankName: string | null } | null,
-): string | null {
-  if (!hasProfile) return copy.routingStrategy.followUpNoProfile;
-  if (!singleTankFollowUp) return null;
-  if (singleTankFollowUp.recommendation === "hold" && singleTankFollowUp.bestDay > 0) {
-    const info = {
-      days: singleTankFollowUp.bestDay,
-      transferMt: singleTankFollowUp.bestDayTransferMt,
-      dilutionTank: singleTankBlendPlan?.dilutionTankName ?? copy.routingStrategy.unnamedTank,
-      incomingMt: singleTankFollowUp.bestDayIncomingMt,
-      finalFfaPct: singleTankFollowUp.bestDayFfaPct,
-      rm: singleTankFollowUp.savingsRm,
-    };
-    return singleTankFollowUp.bestDayFullyCompliant
-      ? copy.routingStrategy.followUpHold(info)
-      : copy.routingStrategy.followUpHoldPartial(info);
-  }
-  return copy.routingStrategy.followUpDespatchNow({
-    tonnageMt: singleTankFollowUp.tankStockMt,
-    ffaPct: singleTankFollowUp.tankFfaPct,
-    rmPerMt: singleTankFollowUp.despatchNowRmPerMt,
-    rm: singleTankFollowUp.despatchNowPenaltyRm,
-    triedMt: singleTankFollowUp.hold.transferUsedMt + singleTankFollowUp.hold.incomingUsedMt,
-    bestFfaPct: singleTankFollowUp.hold.finalFfaPct,
-  });
 }
 
 function planToAdvisePayload(
@@ -942,57 +903,6 @@ export default function Home() {
   // engineer cross-reference the table below.
   const despatchSourceTanks = topDespatchPlans[0]?.sources.map((s) => ({ name: s.name, mt: s.mt })) ?? [];
 
-  // If routing 100% into one tank leaves it over the limit, don't just say
-  // "sort it out later" — reuse the same despatch-vs-hold engine the Loss
-  // Optimizer uses, so the recommendation names a concrete number: despatch
-  // now for RM X, or hold and dilute over N days to save RM Y.
-  const singleTankFollowUp = useMemo<HoldVsDespatch | null>(() => {
-    if (!bestSingleTank || !activeProfile) return null;
-    const singleIndex = bestSingleTank.allocation.findIndex((v) => v === 100);
-    if (singleIndex < 0) return null;
-    const result = bestSingleTank.results[singleIndex];
-    if (result.finalFFA <= target) return null;
-    const resultingTank = { name: result.name, capacity: result.capacity, stock: result.finalStock, ffa: result.finalFFA };
-    const others = tanks.filter((_, j) => j !== singleIndex);
-    return compareHoldVsDespatch(
-      resultingTank,
-      others,
-      target,
-      incomingCPO,
-      incomingFFA,
-      maxTransferPerDayMt,
-      activeProfile.bands,
-      deadStockMt,
-    );
-  }, [bestSingleTank, tanks, target, incomingCPO, incomingFFA, maxTransferPerDayMt, activeProfile, deadStockMt]);
-
-  // The concrete "how much to blend and what FFA it lands on" plan for the
-  // single-tank route — available with or without a buyer profile, since it
-  // doesn't need pricing. Considers all three FFA readings the blend-later
-  // decision actually turns on: today's incoming FFA, the high-FFA tank being
-  // filled, and the good-FFA tank used to dilute it back down.
-  const singleTankBlendPlan = useMemo<{ hold: HoldSimulation; dilutionTankName: string | null } | null>(() => {
-    if (!bestSingleTank) return null;
-    const singleIndex = bestSingleTank.allocation.findIndex((v) => v === 100);
-    if (singleIndex < 0) return null;
-    const result = bestSingleTank.results[singleIndex];
-    if (result.finalFFA <= target) return null;
-    const resultingTank = { name: result.name, capacity: result.capacity, stock: result.finalStock, ffa: result.finalFFA };
-    const others = tanks.filter((_, j) => j !== singleIndex);
-    const dilutionTank = others.filter((t) => t.ffa < target).sort((a, b) => a.ffa - b.ffa)[0] ?? null;
-    const hold = simulateHoldToTarget(
-      resultingTank,
-      others,
-      target,
-      incomingCPO,
-      incomingFFA,
-      maxTransferPerDayMt,
-      30,
-      deadStockMt,
-    );
-    return { hold, dilutionTankName: dilutionTank?.name ?? null };
-  }, [bestSingleTank, tanks, target, incomingCPO, incomingFFA, maxTransferPerDayMt, deadStockMt]);
-
   const batchBlendTanks = useMemo(
     () => tanks.filter((_, i) => batchSelected.has(i)),
     [tanks, batchSelected],
@@ -1590,9 +1500,6 @@ export default function Home() {
           }}
           penaltyBands={activeProfile?.bands}
           bestSingleTank={bestSingleTank}
-          singleTankBlendPlan={singleTankBlendPlan}
-          singleTankFollowUp={singleTankFollowUp}
-          hasProfile={!!activeProfile}
           onApplySingle={() => bestSingleTank && applyPlan(bestSingleTank)}
           goodFfaDespatchTanks={goodFfaDespatchTanks}
           tankerLoadMt={tankerLoadMt}
@@ -3649,9 +3556,6 @@ function SmartRecommendation({
   onClearChat,
   penaltyBands,
   bestSingleTank,
-  singleTankBlendPlan,
-  singleTankFollowUp,
-  hasProfile,
   onApplySingle,
   goodFfaDespatchTanks,
   tankerLoadMt,
@@ -3678,9 +3582,6 @@ function SmartRecommendation({
   onClearChat: () => void;
   penaltyBands?: PenaltyBand[] | null;
   bestSingleTank: BlendPlan | null;
-  singleTankBlendPlan: { hold: HoldSimulation; dilutionTankName: string | null } | null;
-  singleTankFollowUp: HoldVsDespatch | null;
-  hasProfile: boolean;
   onApplySingle: () => void;
   // Smart Recommendation's own job: a single day-plan checklist tying
   // together routing, despatch, and blend-down — deliberately NOT the same
@@ -3697,29 +3598,6 @@ function SmartRecommendation({
   // always shows the standard top-plans view, regardless of the rule.
   const useConsolidate = !!bestSingleTank && sameAllocation(allocation, bestSingleTank.allocation);
   const singleIndex = useConsolidate ? bestSingleTank!.allocation.findIndex((v) => v === 100) : -1;
-  const singleResult = useConsolidate && singleIndex >= 0 ? bestSingleTank!.results[singleIndex] : null;
-
-  let blendDownText: string | null = null;
-  let penaltyText: string | null = null;
-  if (useConsolidate && singleResult) {
-    if (singleResult.finalFFA <= target) {
-      blendDownText = copy.routingStrategy.alreadyCompliant(n(singleResult.finalFFA, 2));
-    } else {
-      if (!singleTankBlendPlan?.dilutionTankName) {
-        blendDownText = copy.routingStrategy.consolidateNoDilutionTank;
-      } else if (singleTankBlendPlan.hold.feasible && singleTankBlendPlan.hold.days !== null) {
-        blendDownText = copy.routingStrategy.consolidateBlendPlan(
-          n(singleTankBlendPlan.hold.transferUsedMt, 0),
-          singleTankBlendPlan.dilutionTankName,
-          singleTankBlendPlan.hold.days,
-          n(singleTankBlendPlan.hold.finalFfaPct, 2),
-        );
-      } else {
-        blendDownText = copy.routingStrategy.consolidateBlendInfeasible;
-      }
-      penaltyText = buildPenaltyDecisionText(copy, hasProfile, singleTankFollowUp, singleTankBlendPlan);
-    }
-  }
 
   // Smart Recommendation's actual job: a short, ordered checklist that ties
   // together every decision the app already made — routing, despatch, and
@@ -3863,23 +3741,6 @@ function SmartRecommendation({
       <div className="p-4 sm:p-5">
         {useConsolidate ? (
           <>
-            {blendDownText && (
-              <div className="mt-4">
-                <p className="section-label">{copy.plan.blendDownPlan}</p>
-                <div className="mt-2 rounded-xl border border-[#efc7aa] bg-[#fff8f3] p-3.5 text-sm leading-relaxed text-[#92441f]">
-                  {blendDownText}
-                </div>
-              </div>
-            )}
-            {penaltyText && (
-              <div className="mt-3">
-                <p className="section-label">{copy.routingStrategy.penaltyExposure}</p>
-                <div className="mt-2 rounded-xl border border-[#d9c7a3] bg-[#fdf7ec] p-3.5 text-sm leading-relaxed text-[#6b4c14]">
-                  {penaltyText}
-                </div>
-              </div>
-            )}
-
             <div className="mt-4">{checklistBlock}</div>
 
             <button
