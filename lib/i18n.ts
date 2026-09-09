@@ -39,7 +39,7 @@ export const translations = {
       onTrackText: "Incoming CPO quality is manageable. Routing keeps stock within the good FFA limit.",
       incomingCpo: "Incoming CPO",
       highFfaStock: "High-FFA stock",
-      targetDispatchFfa: "Target dispatch FFA",
+      targetDispatchFfa: "Target despatch FFA",
       projectedAfterBlending: "Projected after allocation",
       confidence: "Confidence",
       confidenceHigh: "High",
@@ -197,8 +197,8 @@ export const translations = {
       tankerLoadHint: "Typical road tanker: 35–40 MT. Plans use projected stock after incoming CPO.",
       loadsNeeded: (loads: number, totalMt: string) =>
         loads === 0
-          ? "No dispatchable stock at this load size."
-          : `≈ ${loads} tanker load${loads === 1 ? "" : "s"} to clear ${totalMt} MT of dispatchable stock.`,
+          ? "No despatchable stock at this load size."
+          : `≈ ${loads} tanker load${loads === 1 ? "" : "s"} to clear ${totalMt} MT of despatchable stock.`,
       topPlans: "Top 3 despatch options",
       planRank: (rank: number) => (rank === 1 ? "Option 1 (best)" : `Option ${rank}`),
       loadFfa: (pct: number) => `Combined load FFA: ${n(pct, 2)}%`,
@@ -330,7 +330,7 @@ export const translations = {
     },
     despatchDecision: {
       title: "Despatch Decision",
-      dispatchNow: "Dispatch Now",
+      dispatchNow: "Despatch Now",
       holdBlend: "Hold and Blend",
       reviewRequired: "Review Required",
       insufficientData: "Insufficient Data",
@@ -342,7 +342,6 @@ export const translations = {
       reasonBlendFfaOver: (ffa: string, limit: string) => `Blend FFA ${ffa}% is above the ${limit}% limit.`,
       reasonDeduction: (rm: string) => `Estimated deduction is RM ${rm}/MT.`,
       reasonTankerReady: (mt: string) => `Tanker load is ready at ${mt} MT.`,
-      selectedRefinery: "Selected refinery",
       currentBlendFfa: "Current blend FFA",
       tankerQuantity: "Planned despatch",
       sourceTanks: "From tank(s)",
@@ -439,7 +438,7 @@ export const translations = {
     transferAuto: {
       badge: "Auto",
       useAuto: "Use auto",
-      hint: "Estimated from tank capacity (10% of the smaller tank's capacity/day) — a starting point, not a measured pump rate. Type your own number to override.",
+      hint: "Estimated from tank capacity (1% of the smaller tank's capacity/day, kept low at 5-20 MT/day) — a conservative starting point, not a measured pump rate. Type your own number to override.",
     },
     lossOptimizer: {
       title: "Sell now vs hold — loss optimiser",
@@ -467,11 +466,11 @@ export const translations = {
         "Not processing daily? Work out how many days of tank-to-tank transfers it takes to bring existing stock down to the good FFA limit.",
       selectTanks: "Tanks in this transfer group",
       maxTransferLabel: "Max transfer between tanks (MT/day)",
-      alreadyGood: "All selected tanks are already at or below the good FFA limit — ready to dispatch.",
+      alreadyGood: "All selected tanks are already at or below the good FFA limit — ready to despatch.",
       readyAfter: (days: number) =>
         days === 0
-          ? "Ready to dispatch now."
-          : `Ready to dispatch after ${days} day${days === 1 ? "" : "s"} of transfers.`,
+          ? "Ready to despatch now."
+          : `Ready to despatch after ${days} day${days === 1 ? "" : "s"} of transfers.`,
       notFeasible: "Not feasible within 30 days with the current tanks and transfer rate.",
       partialProgress: (days: number) =>
         `Blending gets partway there over ${days} day${days === 1 ? "" : "s"}, but doesn't reach the good FFA limit within 30 days with the current tanks and transfer rate.`,
@@ -966,7 +965,6 @@ export const translations = {
       reasonBlendFfaOver: (ffa: string, limit: string) => `FFA campuran ${ffa}% melebihi had ${limit}%.`,
       reasonDeduction: (rm: string) => `Anggaran potongan ialah RM ${rm}/MT.`,
       reasonTankerReady: (mt: string) => `Muatan tanker sedia pada ${mt} MT.`,
-      selectedRefinery: "Kilang penapisan dipilih",
       currentBlendFfa: "FFA campuran semasa",
       tankerQuantity: "Despatch dirancang",
       sourceTanks: "Dari tangki",
@@ -1063,7 +1061,7 @@ export const translations = {
     transferAuto: {
       badge: "Auto",
       useAuto: "Guna auto",
-      hint: "Dianggarkan daripada kapasiti tangki (10% kapasiti tangki lebih kecil/hari) — titik mula, bukan kadar pam diukur. Taip nombor sendiri untuk menggantikannya.",
+      hint: "Dianggarkan daripada kapasiti tangki (1% kapasiti tangki lebih kecil/hari, dikekalkan rendah pada 5-20 MT/hari) — titik mula berhati-hati, bukan kadar pam diukur. Taip nombor sendiri untuk menggantikannya.",
     },
     lossOptimizer: {
       title: "Jual sekarang vs tahan — pengoptimum kerugian",

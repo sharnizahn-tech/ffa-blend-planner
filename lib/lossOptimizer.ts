@@ -186,20 +186,23 @@ export function compareHoldVsDespatch(
 }
 
 const TRANSFER_RATE_KEY = "ffa-max-transfer-per-day-mt";
-export const DEFAULT_MAX_TRANSFER_PER_DAY_MT = 200;
+export const DEFAULT_MAX_TRANSFER_PER_DAY_MT = 10;
 
 /** Auto-recommended max transfer rate when no real pump/valve spec is known:
- *  10% of the smallest involved tank's capacity per day is a common
- *  conservative rule of thumb for gravity/pump transfers between adjacent
- *  process tanks, clamped to a sane 50-300 MT/day operating range. This is
- *  an estimate to get started with, not a measured pump rate — replace it
- *  by typing your own number if you know your actual transfer capacity. */
+ *  1% of the smallest involved tank's capacity per day, clamped to a
+ *  conservative 5-20 MT/day operating range — err small. Daily tank-to-tank
+ *  transfer is limited by pump/valve throughput, not tank size, so this
+ *  stays low regardless of how big the tanks are, and never rounds up past
+ *  the 20 MT/day ceiling — 200+ MT/day was never realistic for a
+ *  manually-run transfer. This is an estimate to get started with, not a
+ *  measured pump rate — replace it by typing your own number if you know
+ *  your actual transfer capacity. */
 export function autoMaxTransferPerDayMt(tanks: { capacity: number }[]): number {
   if (!tanks.length) return DEFAULT_MAX_TRANSFER_PER_DAY_MT;
   const minCapacity = Math.min(...tanks.map((t) => t.capacity));
-  const raw = minCapacity * 0.1;
-  const rounded = Math.round(raw / 10) * 10;
-  return Math.min(300, Math.max(50, rounded));
+  const raw = minCapacity * 0.01;
+  const rounded = Math.round(raw / 5) * 5;
+  return Math.min(20, Math.max(5, rounded));
 }
 
 export function loadMaxTransferPerDay(): number | null {

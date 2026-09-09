@@ -739,7 +739,7 @@ export default function Home() {
         ? "medium"
         : "low";
   const blendAtRisk = incomingFFA > target || highFFAStock > 0;
-  // Dispatchable stock excludes the dead stock reserve — the bottom layer of
+  // Despatchable stock excludes the dead stock reserve — the bottom layer of
   // a tank is never shipped, since quality near-empty is unreliable.
   const despatchTanks = useMemo(
     () =>
@@ -1617,7 +1617,6 @@ export default function Home() {
           copy={copy}
           status={despatchDecisionStatus}
           reasons={decisionReasons}
-          selectedRefineryName={activeProfile?.name ?? null}
           bandLabel={
             selectedRefineryRow
               ? selectedRefineryRow.bandIndex >= 0
@@ -4747,7 +4746,6 @@ function DespatchDecision({
   copy,
   status,
   reasons,
-  selectedRefineryName,
   bandLabel,
   rateRmPerMt,
   totalPenaltyRm,
@@ -4764,7 +4762,6 @@ function DespatchDecision({
   copy: Copy;
   status: DespatchStatus;
   reasons: string[];
-  selectedRefineryName: string | null;
   bandLabel: string;
   rateRmPerMt: number | null;
   totalPenaltyRm: number | null;
@@ -4839,10 +4836,6 @@ function DespatchDecision({
         )}
 
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-lg bg-[#f9fbf8] p-2.5">
-            <p className="text-[10px] font-bold uppercase text-[#7a867f]">{copy.despatchDecision.selectedRefinery}</p>
-            <p className="mt-0.5 truncate font-bold text-[#173f30]">{selectedRefineryName ?? "—"}</p>
-          </div>
           <div className="rounded-lg bg-[#f9fbf8] p-2.5">
             <p className="text-[10px] font-bold uppercase text-[#7a867f]">{copy.refineryComparison.bandColumn}</p>
             <p className="mt-0.5 truncate font-bold text-[#173f30]">{bandLabel}</p>

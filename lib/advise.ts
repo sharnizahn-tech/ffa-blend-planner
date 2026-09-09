@@ -381,9 +381,9 @@ export function buildOfflineOpinion(payload: AdviseRequest, lang: "en" | "bm" = 
   if (batchBlend) {
     const status = batchBlend.feasible
       ? batchBlend.days === 0
-        ? { en: "already ready to dispatch.", bm: "sudah sedia untuk despatch." }
+        ? { en: "already ready to despatch.", bm: "sudah sedia untuk despatch." }
         : {
-            en: `ready to dispatch after ${batchBlend.days} day(s) of tank-to-tank transfers.`,
+            en: `ready to despatch after ${batchBlend.days} day(s) of tank-to-tank transfers.`,
             bm: `sedia untuk despatch selepas ${batchBlend.days} hari pemindahan tangki-ke-tangki.`,
           }
       : { en: `not feasible within the planning horizon (${batchBlend.reason ?? "unknown reason"}).`, bm: `tidak munasabah dalam tempoh perancangan (${batchBlend.reason ?? "sebab tidak diketahui"}).` };
@@ -524,6 +524,7 @@ Rules:
 - Use ONLY the numbers and flags provided in the user message. Never invent tank readings, percentages, RM figures, or MT values.
 - NEVER write a raw field/variable name from the data in your response. The tell is simple: any single word with no spaces that mixes lowercase and uppercase letters (camelCase, e.g. "allocationValid", "hasOverflow", "penaltyRm", "maxSafeIncomingCpoMt", "holdDays", "loadFfaPct") is internal data plumbing, not something an engineer says out loud — always describe the underlying idea in plain words instead (see the translations below for the common ones). Before finishing, reread your own draft specifically hunting for camelCase and rewrite any you find.
 - Always say "blend" / "blend it down" / "blending" — never "dilute" / "diluting". Blending is the term this mill actually uses.
+- Always spell it "despatch" / "despatched" / "despatching" — never "dispatch". This app uses the British spelling everywhere; stay consistent with it.
 - Format every RM and MT figure with comma thousand-separators, the way a person would write it: "RM 69,440" and "1,181 MT", never "RM 69440" or "1181 MT".
 - Keep sentences short and simple — one idea per sentence. Do not stack a reason, a comparison, and a caveat into one long sentence joined by dashes, semicolons, or "while"/"though"/"which" — if you have two ideas, that's two separate sentences (or two separate bullets in concise mode), not one complex one. Plain words over technical ones where both say the same thing. An engineer should be able to read any single sentence in one breath.
 - ${formatRule}

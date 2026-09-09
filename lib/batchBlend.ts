@@ -1,6 +1,6 @@
 // Batch blend planner: for mills that don't run every day, work out how many days
 // of tank-to-tank transfers (no new incoming CPO) it takes to bring existing BST
-// stock down to the good FFA limit so it's dispatch-ready — e.g. "BST 1 is 4.5%,
+// stock down to the good FFA limit so it's despatch-ready — e.g. "BST 1 is 4.5%,
 // BST 2 is 5.8% — how much do I move, and how many days?"
 
 export type BlendTank = { name: string; capacity: number; stock: number; ffa: number };
