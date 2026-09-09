@@ -754,43 +754,14 @@ export default function Home() {
 
   // Despatch page: today's shared achieved-FFA/quantity figures every
   // refinery is compared against — sourced from the real despatch plan
-  // (findTopDespatchPlans), never invented.
-  const achievedFfaPct = topDespatchPlans[0]?.loadFfaPct ?? target;
-  const plannedDespatchMt = topDespatchPlans[0]?.totalMt ?? tankerLoadMt;
-  const refineryRows = useMemo(
-    () =>
-      buyerProfiles.map((p) => {
-        // Single blended FFA for a representative band/rate to display...
-        const displayExposure = calcPenaltyExposure(achievedFfaPct, plannedDespatchMt, p.bands);
-        // ...but the RM total uses each source tank's own FFA, exactly like
-        // despatchPenaltyRm above, so the number matches what despatching
-        // this exact plan to this buyer would actually cost.
-        const totalRm = topDespatchPlans[0]
-          ? calcTotalExposure(
-              topDespatchPlans[0].sources.map((s) => ({ ffaPct: s.ffaPct, tonnageMt: s.mt })),
-              p.bands,
-            )
-          : displayExposure.totalRm;
-        const bandIndex = displayExposure.band
-          ? sortedBands(p.bands).findIndex((b) => b.id === displayExposure.band!.id)
-          : -1;
-        return { profile: p, displayExposure, totalRm, bandIndex };
-      }),
-    [buyerProfiles, achievedFfaPct, plannedDespatchMt, topDespatchPlans],
-  );
-  const configuredRefineryRows = refineryRows.filter((r) => r.profile.bands.length > 0);
-  const cheapestRefineryRow = configuredRefineryRows.length
-    ? configuredRefineryRows.reduce((a, b) => (b.totalRm < a.totalRm ? b : a))
-    : null;
-  const selectedRefineryRow = refineryRows.find((r) => r.profile.id === activeProfileId) ?? refineryRows[0] ?? null;
-  // Today's actual planned total across ticked refineries — what the top
-  // summary card shows once the engineer starts planning, instead of just
-  // the static per-lorry tanker size.
-  const plannedDespatchTotalMt = refineryRows
-    .filter((r) => refinerySelected.has(r.profile.id))
-    .reduce((s, r) => s + (refineryVolumes[r.profile.id] ?? 0), 0);
-  const plannedDespatchTotalLorries =
-    plannedDespatchTotalMt > 0 && tankerLoadMt > 0 ? Math.ceil(plannedDespatchTotalMt / tankerLoadMt) : 0;
+  // (findTopDespatchPlans), never invented. When a tanker-blend option is
+  // ticked below, that becomes the real plan for today instead (see the
+  // override right after the tanker-blend block), so everything downstream
+  // — this table, the Despatch Decision card, "From Tank(s)" — stays one
+  // consistent picture rather than two plans disagreeing with each other.
+  const baseAchievedFfaPct = topDespatchPlans[0]?.loadFfaPct ?? target;
+  const basePlannedDespatchMt = topDespatchPlans[0]?.totalMt ?? tankerLoadMt;
+  const baseDespatchSources = topDespatchPlans[0]?.sources ?? [];
 
   const safeProduction = useMemo<SafeProductionSuggestion>(
     () => suggestSafeProduction(tanks, target, incomingFFA, millCapacity, hours, utilisation, oer),
@@ -824,8 +795,9 @@ export default function Home() {
   // storage tank. Built off tomorrow's post-allocation stock (despatchTanks),
   // the same figures the rest of this tab reasons about. Suppressed when the
   // Loss Optimizer already shows this same tank is better off held and
-  // blended in a tank — this only ever fires when that's not an option. The
-  // system decides one definite amount, not a menu of choices.
+  // blended in a tank — this only ever fires when that's not an option. Up
+  // to three ranked options are offered (see lib/tankerBlend.ts); the
+  // engineer ticks one below, and that tick becomes today's real plan.
   const tankerBlendSuggestion = useMemo<TankerBlendSuggestion | null>(
     () => suggestTankerBlend(despatchTanks, target, tankerLoadMt, 0),
     [despatchTanks, target, tankerLoadMt],
@@ -835,24 +807,103 @@ export default function Home() {
     : null;
   const showTankerBlend =
     !!tankerBlendSuggestion &&
-    !!tankerBlendSuggestion.option &&
+    tankerBlendSuggestion.options.length > 0 &&
     (!tankerBlendLossOptimizer || tankerBlendLossOptimizer.recommendation !== "hold");
-  // RM impact, when a buyer profile is configured — the baseline is
-  // despatching the same total tonnage straight from the problem tank at
+  // RM impact per option, when a buyer profile is configured — the baseline
+  // is despatching the same total tonnage straight from the problem tank at
   // its own FFA, so the comparison is apples-to-apples (same volume either
   // way, only the FFA/band differs).
-  const tankerBlendOptionWithPenalty = useMemo(() => {
-    if (!showTankerBlend || !tankerBlendSuggestion?.option) return null;
-    const opt = tankerBlendSuggestion.option;
+  const tankerBlendOptionsWithPenalty = useMemo(() => {
+    if (!showTankerBlend || !tankerBlendSuggestion) return [];
     const bands = activeProfile?.bands ?? null;
-    if (!bands || !bands.length) return { ...opt, penaltyRm: null, baselinePenaltyRm: null };
-    const penaltyRm = calcTotalExposure([{ ffaPct: opt.combinedFfaPct, tonnageMt: opt.totalMt }], bands);
-    const baselinePenaltyRm = calcTotalExposure(
-      [{ ffaPct: tankerBlendSuggestion.problemTankFfaPct, tonnageMt: opt.totalMt }],
-      bands,
-    );
-    return { ...opt, penaltyRm, baselinePenaltyRm };
+    return tankerBlendSuggestion.options.map((opt) => {
+      if (!bands || !bands.length) return { ...opt, penaltyRm: null, baselinePenaltyRm: null };
+      const penaltyRm = calcTotalExposure([{ ffaPct: opt.combinedFfaPct, tonnageMt: opt.totalMt }], bands);
+      const baselinePenaltyRm = calcTotalExposure(
+        [{ ffaPct: tankerBlendSuggestion.problemTankFfaPct, tonnageMt: opt.totalMt }],
+        bands,
+      );
+      return { ...opt, penaltyRm, baselinePenaltyRm };
+    });
   }, [showTankerBlend, tankerBlendSuggestion, activeProfile]);
+  // Which of the (up to 3) tanker-blend options the engineer has ticked —
+  // defaults to the first (safest-first order from suggestTankerBlend) once
+  // the suggestion becomes available, and resets whenever the underlying
+  // options genuinely change so a stale tick can't linger on a plan that no
+  // longer exists.
+  const [tankerBlendSelectedRisk, setTankerBlendSelectedRisk] = useState<
+    "max" | "balanced" | "safest" | null
+  >(null);
+  useEffect(() => {
+    if (!tankerBlendOptionsWithPenalty.length) {
+      if (tankerBlendSelectedRisk !== null) setTankerBlendSelectedRisk(null);
+      return;
+    }
+    if (!tankerBlendOptionsWithPenalty.some((o) => o.risk === tankerBlendSelectedRisk)) {
+      setTankerBlendSelectedRisk(tankerBlendOptionsWithPenalty[0].risk);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tankerBlendOptionsWithPenalty]);
+  const tankerBlendSelectedOption =
+    tankerBlendOptionsWithPenalty.find((o) => o.risk === tankerBlendSelectedRisk) ??
+    tankerBlendOptionsWithPenalty[0] ??
+    null;
+  // A ticked tanker-blend option overrides the plain despatch plan as
+  // today's real plan — same tanker load either way, just topped up with a
+  // bit of the problem tank instead of purely clean stock. Every figure
+  // downstream (Despatch Decision's Blend FFA/Planned Despatch/Deduction,
+  // and the Refinery Comparison table) reads through this single pair of
+  // variables, so "From Tank(s)" can never disagree with the numbers next
+  // to it.
+  const achievedFfaPct =
+    showTankerBlend && tankerBlendSelectedOption ? tankerBlendSelectedOption.combinedFfaPct : baseAchievedFfaPct;
+  const plannedDespatchMt =
+    showTankerBlend && tankerBlendSelectedOption ? tankerBlendSelectedOption.totalMt : basePlannedDespatchMt;
+  const effectiveDespatchSources: { name: string; mt: number; ffaPct: number }[] =
+    showTankerBlend && tankerBlendSelectedOption && tankerBlendSuggestion
+      ? [
+          {
+            name: tankerBlendSuggestion.problemTank,
+            mt: tankerBlendSelectedOption.problemTankMt,
+            ffaPct: tankerBlendSuggestion.problemTankFfaPct,
+          },
+          ...tankerBlendSelectedOption.cleanSources,
+        ]
+      : baseDespatchSources;
+  const refineryRows = useMemo(
+    () =>
+      buyerProfiles.map((p) => {
+        // Single blended FFA for a representative band/rate to display...
+        const displayExposure = calcPenaltyExposure(achievedFfaPct, plannedDespatchMt, p.bands);
+        // ...but the RM total uses each source tank's own FFA, exactly like
+        // despatchPenaltyRm above, so the number matches what despatching
+        // this exact plan to this buyer would actually cost.
+        const totalRm = effectiveDespatchSources.length
+          ? calcTotalExposure(
+              effectiveDespatchSources.map((s) => ({ ffaPct: s.ffaPct, tonnageMt: s.mt })),
+              p.bands,
+            )
+          : displayExposure.totalRm;
+        const bandIndex = displayExposure.band
+          ? sortedBands(p.bands).findIndex((b) => b.id === displayExposure.band!.id)
+          : -1;
+        return { profile: p, displayExposure, totalRm, bandIndex };
+      }),
+    [buyerProfiles, achievedFfaPct, plannedDespatchMt, effectiveDespatchSources],
+  );
+  const configuredRefineryRows = refineryRows.filter((r) => r.profile.bands.length > 0);
+  const cheapestRefineryRow = configuredRefineryRows.length
+    ? configuredRefineryRows.reduce((a, b) => (b.totalRm < a.totalRm ? b : a))
+    : null;
+  const selectedRefineryRow = refineryRows.find((r) => r.profile.id === activeProfileId) ?? refineryRows[0] ?? null;
+  // Today's actual planned total across ticked refineries — what the top
+  // summary card shows once the engineer starts planning, instead of just
+  // the static per-lorry tanker size.
+  const plannedDespatchTotalMt = refineryRows
+    .filter((r) => refinerySelected.has(r.profile.id))
+    .reduce((s, r) => s + (refineryVolumes[r.profile.id] ?? 0), 0);
+  const plannedDespatchTotalLorries =
+    plannedDespatchTotalMt > 0 && tankerLoadMt > 0 ? Math.ceil(plannedDespatchTotalMt / tankerLoadMt) : 0;
 
   const despatchDecisionStatus: "dispatch-now" | "hold-blend" | "review-required" | "insufficient-data" =
     !activeProfile || buyerProfiles.length === 0 || !topDespatchPlans[0]
@@ -900,8 +951,11 @@ export default function Home() {
   // Which tank(s) the planned despatch quantity actually comes from — the
   // engine's own despatch plan already knows this (it fills from the
   // lowest-FFA good tank first), so just surface it rather than making the
-  // engineer cross-reference the table below.
-  const despatchSourceTanks = topDespatchPlans[0]?.sources.map((s) => ({ name: s.name, mt: s.mt })) ?? [];
+  // engineer cross-reference the table below. When a tanker-blend option is
+  // ticked, that's a MORE current answer to "which tanks" than the plain
+  // despatch plan — it's the actual loading instruction for today — so it
+  // takes over here instead (via effectiveDespatchSources, above).
+  const despatchSourceTanks = effectiveDespatchSources.map((s) => ({ name: s.name, mt: s.mt }));
 
   const batchBlendTanks = useMemo(
     () => tanks.filter((_, i) => batchSelected.has(i)),
@@ -1083,16 +1137,20 @@ export default function Home() {
           ffaPct: incomingFFA,
         },
         tankerBlend:
-          showTankerBlend && tankerBlendSuggestion && tankerBlendOptionWithPenalty
+          showTankerBlend && tankerBlendSuggestion
             ? {
                 problemTank: tankerBlendSuggestion.problemTank,
                 problemTankFfaPct: tankerBlendSuggestion.problemTankFfaPct,
-                problemTankMt: tankerBlendOptionWithPenalty.problemTankMt,
-                cleanSources: tankerBlendOptionWithPenalty.cleanSources,
-                totalMt: tankerBlendOptionWithPenalty.totalMt,
-                combinedFfaPct: tankerBlendOptionWithPenalty.combinedFfaPct,
-                penaltyRm: tankerBlendOptionWithPenalty.penaltyRm,
-                baselinePenaltyRm: tankerBlendOptionWithPenalty.baselinePenaltyRm,
+                selectedRisk: tankerBlendSelectedOption?.risk ?? null,
+                options: tankerBlendOptionsWithPenalty.map((o) => ({
+                  risk: o.risk,
+                  problemTankMt: o.problemTankMt,
+                  cleanSources: o.cleanSources,
+                  totalMt: o.totalMt,
+                  combinedFfaPct: o.combinedFfaPct,
+                  penaltyRm: o.penaltyRm,
+                  baselinePenaltyRm: o.baselinePenaltyRm,
+                })),
               }
             : null,
         conversationHistory: history,
@@ -1568,11 +1626,13 @@ export default function Home() {
           onVolumesChange={setRefineryVolumes}
           penaltyEditor={penaltyPanel}
         />
-        {showTankerBlend && tankerBlendSuggestion && tankerBlendOptionWithPenalty && (
+        {showTankerBlend && tankerBlendSuggestion && (
           <TankerBlendCard
             copy={copy}
             problemTank={tankerBlendSuggestion.problemTank}
-            option={tankerBlendOptionWithPenalty}
+            options={tankerBlendOptionsWithPenalty}
+            selectedRisk={tankerBlendSelectedOption?.risk ?? null}
+            onSelect={setTankerBlendSelectedRisk}
           />
         )}
         </div>
@@ -3739,102 +3799,75 @@ function SmartRecommendation({
         </div>
       </div>
       <div className="p-4 sm:p-5">
-        {useConsolidate ? (
-          <>
-            <div className="mt-4">{checklistBlock}</div>
-
-            <button
-              type="button"
-              onClick={onApplySingle}
-              className="btn-touch mt-1 flex w-full bg-[#d4f7e2] text-[#00713a]"
-            >
-              <RefreshCw size={16} />
-              {copy.routingStrategy.applySingle}
-            </button>
-
-            <div className="mt-5 border-t border-[#e8ede8] pt-5">
-              <AiAdvisorPanel
-                copy={copy}
-                aiMessages={aiMessages}
-                aiLoading={aiLoading}
-                aiError={aiError}
-                aiCooldown={aiCooldown}
-                aiQuestion={aiQuestion}
-                onAiQuestionChange={onAiQuestionChange}
-                onGetAiOpinion={onGetAiOpinion}
-                onClearChat={onClearChat}
-              />
-            </div>
-          </>
-        ) : best ? (
-          <>
-            {topPlans.length > 1 && (
-              <div className="mt-4">
-                <p className="section-label">{copy.plan.topPlans}</p>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {topPlans.slice(1).map((plan, i) => (
-                    <PlanOption
-                      key={plan.allocation.join("-")}
-                      rank={i + 2}
-                      plan={plan}
-                      tanks={tanks}
-                      target={target}
-                      incomingCPO={incomingCPO}
-                      copy={copy}
-                      highlighted={false}
-                      compact
-                      onApply={() => onApplyPlan(plan)}
-                      penaltyBands={penaltyBands}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4">{checklistBlock}</div>
-
-            <button
-              type="button"
-              onClick={() => onApplyPlan(best)}
-              className="btn-touch mt-1 flex w-full bg-[#d4f7e2] text-[#00713a]"
-            >
-              <RefreshCw size={16} />
-              {copy.allocation.applyRecommended}
-            </button>
-
-            <div className="mt-5 border-t border-[#e8ede8] pt-5">
-              <AiAdvisorPanel
-                copy={copy}
-                aiMessages={aiMessages}
-                aiLoading={aiLoading}
-                aiError={aiError}
-                aiCooldown={aiCooldown}
-                aiQuestion={aiQuestion}
-                onAiQuestionChange={onAiQuestionChange}
-                onGetAiOpinion={onGetAiOpinion}
-                onClearChat={onClearChat}
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-sm leading-relaxed text-[#8a3d20]">{copy.plan.noFeasiblePlan}</p>
-            <div className="mt-4">{checklistBlock}</div>
-            <div className="border-t border-[#e8ede8] pt-5">
-              <AiAdvisorPanel
-                copy={copy}
-                aiMessages={aiMessages}
-                aiLoading={aiLoading}
-                aiError={aiError}
-                aiCooldown={aiCooldown}
-                aiQuestion={aiQuestion}
-                onAiQuestionChange={onAiQuestionChange}
-                onGetAiOpinion={onGetAiOpinion}
-                onClearChat={onClearChat}
-              />
-            </div>
-          </>
+        {!useConsolidate && !best && (
+          <p className="text-sm leading-relaxed text-[#8a3d20]">{copy.plan.noFeasiblePlan}</p>
         )}
+
+        {/* Top 3 Plans now shows regardless of whether the recommendation is
+           a single-tank consolidation or a split — picking any of them
+           (via PlanOption's own "Use this plan" button) applies it for
+           real, which is what makes the checklist below react to it: every
+           checklist line is computed from the live allocation/results, not
+           a fixed snapshot, so it always describes whichever plan is
+           currently applied. */}
+        {(useConsolidate || best) && topPlans.length > 1 && (
+          <div className="mt-4">
+            <p className="section-label">{copy.plan.topPlans}</p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {topPlans.slice(1).map((plan, i) => (
+                <PlanOption
+                  key={plan.allocation.join("-")}
+                  rank={i + 2}
+                  plan={plan}
+                  tanks={tanks}
+                  target={target}
+                  incomingCPO={incomingCPO}
+                  copy={copy}
+                  highlighted={false}
+                  compact
+                  onApply={() => onApplyPlan(plan)}
+                  penaltyBands={penaltyBands}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4">{checklistBlock}</div>
+
+        {useConsolidate ? (
+          <button
+            type="button"
+            onClick={onApplySingle}
+            className="btn-touch mt-1 flex w-full bg-[#d4f7e2] text-[#00713a]"
+          >
+            <RefreshCw size={16} />
+            {copy.routingStrategy.applySingle}
+          </button>
+        ) : best ? (
+          <button
+            type="button"
+            onClick={() => onApplyPlan(best)}
+            className="btn-touch mt-1 flex w-full bg-[#d4f7e2] text-[#00713a]"
+          >
+            <RefreshCw size={16} />
+            {copy.allocation.applyRecommended}
+          </button>
+        ) : null}
+
+        <div className="mt-5 border-t border-[#e8ede8] pt-5">
+          <AiAdvisorPanel
+            copy={copy}
+            aiMessages={aiMessages}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            aiCooldown={aiCooldown}
+            aiQuestion={aiQuestion}
+            onAiQuestionChange={onAiQuestionChange}
+            onGetAiOpinion={onGetAiOpinion}
+            onClearChat={onClearChat}
+          />
+        </div>
       </div>
     </section>
   );
@@ -4943,27 +4976,39 @@ function DespatchDecision({
   );
 }
 
-type TankerBlendOptionWithPenalty = NonNullable<TankerBlendSuggestion["option"]> & {
+type TankerBlendOptionWithPenalty = TankerBlendSuggestion["options"][number] & {
   penaltyRm: number | null;
   baselinePenaltyRm: number | null;
 };
 
 /** Shown only when a tank is over the limit and the Loss Optimizer already
- *  shows holding/blending it in a tank doesn't help. The system decides one
- *  definite amount to load straight into the tanker alongside clean stock
- *  from another tank, so the combined weight lands under the limit — not a
- *  menu of choices. Purely informational (there's nothing to "apply" — it's
- *  a loading instruction for the tanker crew, not a state change this app
- *  makes), so every number here is exact but there's no confirm button. */
+ *  shows holding/blending it in a tank doesn't help. Up to three ranked
+ *  ways to load some of it straight into the tanker alongside clean stock
+ *  from another tank, so the combined weight lands under the limit — the
+ *  engineer ticks one, and that choice is what "From tank(s)" on the
+ *  Despatch Decision card actually reflects (this is a loading instruction
+ *  for the tanker crew, not a state change this app makes on its own, so
+ *  there's no separate confirm button beyond the tick itself). */
 function TankerBlendCard({
   copy,
   problemTank,
-  option,
+  options,
+  selectedRisk,
+  onSelect,
 }: {
   copy: Copy;
   problemTank: string;
-  option: TankerBlendOptionWithPenalty;
+  options: TankerBlendOptionWithPenalty[];
+  selectedRisk: TankerBlendOptionWithPenalty["risk"] | null;
+  onSelect: (risk: TankerBlendOptionWithPenalty["risk"]) => void;
 }) {
+  if (!options.length) return null;
+  const riskLabel: Record<TankerBlendOptionWithPenalty["risk"], string> = {
+    max: copy.tankerBlend.riskMax,
+    balanced: copy.tankerBlend.riskBalanced,
+    safest: copy.tankerBlend.riskSafest,
+  };
+
   return (
     <section className="mt-4 overflow-hidden rounded-2xl border border-[#f0cfb9] bg-white/90 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
       <div className="p-4 sm:p-5">
@@ -4973,40 +5018,66 @@ function TankerBlendCard({
         </p>
         <p className="mt-1.5 text-xs leading-relaxed text-[#708078]">{copy.tankerBlend.subtitle}</p>
 
-        <div className="mt-3 rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-bold text-[#173f30]">{copy.tankerBlend.recommendation}</span>
-            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#3f4c46]">
-              {copy.tankerBlend.combinedResult(n(option.combinedFfaPct, 2))}
-            </span>
-          </div>
-          <ul className="mt-2 space-y-1">
-            <li className="flex items-center gap-1.5 text-xs text-[#3f4c46]">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#a64f24]" />
-              {copy.tankerBlend.problemSource(n(option.problemTankMt, 0), problemTank)}
-            </li>
-            {option.cleanSources.map((s) => (
-              <li key={s.name} className="flex items-center gap-1.5 text-xs text-[#3f4c46]">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00b14f]" />
-                {copy.tankerBlend.cleanSource(n(s.mt, 0), s.name)}
-              </li>
-            ))}
-          </ul>
-          {option.penaltyRm !== null && option.baselinePenaltyRm !== null && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#e8ede8] pt-2 text-[11px]">
-              <span className="text-[#708078]">
-                {copy.tankerBlend.penaltyWithout}: <strong className="text-[#3f4c46]">RM {n(option.baselinePenaltyRm, 0)}</strong>
-              </span>
-              <span className="text-[#708078]">
-                {copy.tankerBlend.penaltyWith}: <strong className="text-[#3f4c46]">RM {n(option.penaltyRm, 0)}</strong>
-              </span>
-              {option.baselinePenaltyRm > option.penaltyRm && (
-                <span className="font-bold text-[#00713a]">
-                  {copy.tankerBlend.savesRm(n(option.baselinePenaltyRm - option.penaltyRm, 0))}
-                </span>
-              )}
-            </div>
-          )}
+        <div className="mt-3 space-y-2.5">
+          {options.map((opt) => {
+            const isSelected = opt.risk === selectedRisk;
+            return (
+              <label
+                key={opt.risk}
+                className={`block cursor-pointer rounded-xl border p-3 transition-colors ${
+                  isSelected ? "border-[#00b14f] bg-[#f6fae9]" : "border-[#e8ede8] bg-[#f9fbf8] hover:bg-[#f4f8f5]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="tankerBlendOption"
+                      checked={isSelected}
+                      onChange={() => onSelect(opt.risk)}
+                      className="h-4 w-4 accent-[#00713a]"
+                    />
+                    <span className="text-xs font-bold text-[#173f30]">{riskLabel[opt.risk]}</span>
+                    {isSelected && (
+                      <span className="rounded-full bg-[#00713a] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                        {copy.tankerBlend.selectedBadge}
+                      </span>
+                    )}
+                  </span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#3f4c46]">
+                    {copy.tankerBlend.combinedResult(n(opt.combinedFfaPct, 2))}
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-1">
+                  <li className="flex items-center gap-1.5 text-xs text-[#3f4c46]">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#a64f24]" />
+                    {copy.tankerBlend.problemSource(n(opt.problemTankMt, 0), problemTank)}
+                  </li>
+                  {opt.cleanSources.map((s) => (
+                    <li key={s.name} className="flex items-center gap-1.5 text-xs text-[#3f4c46]">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00b14f]" />
+                      {copy.tankerBlend.cleanSource(n(s.mt, 0), s.name)}
+                    </li>
+                  ))}
+                </ul>
+                {opt.penaltyRm !== null && opt.baselinePenaltyRm !== null && (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#e8ede8] pt-2 text-[11px]">
+                    <span className="text-[#708078]">
+                      {copy.tankerBlend.penaltyWithout}: <strong className="text-[#3f4c46]">RM {n(opt.baselinePenaltyRm, 0)}</strong>
+                    </span>
+                    <span className="text-[#708078]">
+                      {copy.tankerBlend.penaltyWith}: <strong className="text-[#3f4c46]">RM {n(opt.penaltyRm, 0)}</strong>
+                    </span>
+                    {opt.baselinePenaltyRm > opt.penaltyRm && (
+                      <span className="font-bold text-[#00713a]">
+                        {copy.tankerBlend.savesRm(n(opt.baselinePenaltyRm - opt.penaltyRm, 0))}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </label>
+            );
+          })}
         </div>
       </div>
     </section>

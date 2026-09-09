@@ -360,8 +360,12 @@ export const translations = {
     tankerBlend: {
       title: "Blend at the tanker",
       subtitle:
-        "A tank-to-tank blend won't fix this in time, so load it straight into the tanker with clean stock instead — there's no lab check until it's loaded, so a small margin is kept below the limit.",
-      recommendation: "Recommended load",
+        "A tank-to-tank blend won't fix this in time, so load it straight into the tanker with clean stock instead — there's no lab check until it's loaded, so pick how much margin to keep below the limit.",
+      riskMax: "Clears the most",
+      riskBalanced: "Balanced",
+      riskSafest: "Safest",
+      selectOption: "Use this option",
+      selectedBadge: "Selected",
       problemSource: (mt: string, tank: string) => `${mt} MT from ${tank} — over limit`,
       cleanSource: (mt: string, tank: string) => `${mt} MT from ${tank} — clean`,
       combinedResult: (ffa: string) => `Combined load: ${ffa}% FFA`,
@@ -533,7 +537,7 @@ export const translations = {
       aiQuestionForceSplit: (tank: string) =>
         `${tank} — the tank that's already the highest FFA — has no spare capacity left for today's incoming batch, so routing everything into it isn't possible right now, which is why the plan splits the batch across tanks instead. Explain why splitting is the only real option here, using the actual capacity and FFA numbers.`,
       aiQuestionOptionsHint:
-        " If there's a genuinely reasonable alternative worth weighing (from the alternative plans provided), lay it out as a labelled Option 1 / Option 2 (a third only if it's actually worth considering) so I can compare at a glance — otherwise just give the one recommendation.",
+        " Compare every plan provided (the recommended one plus each alternative, up to 3 total) — lay them out as labelled Option 1 / Option 2 / Option 3, state plainly which one is the best decision and why, then explain in simple, plain language the real risk of going with it (what could actually go wrong, what to double-check) — not just the numbers.",
       aiThinking: "Working out the best move for today's batch…",
       aiFallbackNote: "AI explanation unavailable right now — showing the calculated recommendation instead.",
       aiOpinionLabel: "AI opinion",
@@ -919,8 +923,12 @@ export const translations = {
     tankerBlend: {
       title: "Blend di tanker",
       subtitle:
-        "Blend tangki-ke-tangki tidak dapat baiki dalam masa, jadi muatkan terus ke tanker bersama stok bersih — tiada semakan makmal sehingga dimuatkan, jadi margin kecil dikekalkan di bawah had.",
-      recommendation: "Muatan disyorkan",
+        "Blend tangki-ke-tangki tidak dapat baiki dalam masa, jadi muatkan terus ke tanker bersama stok bersih — tiada semakan makmal sehingga dimuatkan, jadi pilih berapa banyak margin untuk dikekalkan di bawah had.",
+      riskMax: "Bersihkan paling banyak",
+      riskBalanced: "Seimbang",
+      riskSafest: "Paling selamat",
+      selectOption: "Guna pilihan ini",
+      selectedBadge: "Dipilih",
       problemSource: (mt: string, tank: string) => `${mt} MT dari ${tank} — melebihi had`,
       cleanSource: (mt: string, tank: string) => `${mt} MT dari ${tank} — bersih`,
       combinedResult: (ffa: string) => `Muatan gabungan: ${ffa}% FFA`,
@@ -1089,7 +1097,7 @@ export const translations = {
       aiQuestionForceSplit: (tank: string) =>
         `${tank} — tangki yang sudah pun tertinggi FFA — tiada kapasiti lagi untuk kelompok masuk hari ini, jadi mengalirkan semua ke situ tidak mungkin sekarang, sebab itu pelan memisahkan kelompok merentasi tangki sebaliknya. Terangkan kenapa pisahan satu-satunya pilihan sebenar di sini, menggunakan nombor kapasiti/FFA sebenar.`,
       aiQuestionOptionsHint:
-        " Jika ada alternatif yang benar-benar munasabah untuk dipertimbangkan (daripada pelan alternatif yang diberikan), susun sebagai Pilihan 1 / Pilihan 2 berlabel (Pilihan 3 hanya jika benar-benar wajar) supaya saya boleh bandingkan sepintas lalu — jika tidak, berikan sahaja satu cadangan.",
+        " Bandingkan setiap pelan yang diberikan (pelan disyorkan serta setiap alternatif, sehingga 3 kesemuanya) — susun sebagai Pilihan 1 / Pilihan 2 / Pilihan 3 berlabel, nyatakan dengan jelas pilihan mana keputusan terbaik dan sebabnya, kemudian terangkan dalam bahasa mudah risiko sebenar jika mengambil pilihan itu (apa yang boleh tersilap, apa yang perlu disemak semula) — bukan sekadar nombor.",
       aiThinking: "Mengira langkah terbaik untuk kelompok hari ini…",
       aiFallbackNote: "Penjelasan AI tidak tersedia sekarang — menunjukkan cadangan yang dikira sebagai gantinya.",
       aiOpinionLabel: "Pendapat AI",
