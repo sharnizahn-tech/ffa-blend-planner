@@ -358,6 +358,21 @@ export const translations = {
       reasonVerification: "Acknowledge the verification checklist.",
       aiNotApproval: "AI guidance is decision support only — not management or engineer approval.",
     },
+    tankerBlend: {
+      title: "Blend at the tanker",
+      badge: "Last resort",
+      subtitle:
+        "Only if a tank-to-tank blend can't fix it in time. There's no lab check until it's already loaded, so this is less safe than blending in a tank first.",
+      riskMax: "Clears the most",
+      riskBalanced: "Balanced",
+      riskSafest: "Safest",
+      problemSource: (mt: string, tank: string) => `${mt} MT from ${tank} — over limit`,
+      cleanSource: (mt: string, tank: string) => `${mt} MT from ${tank} — clean`,
+      combinedResult: (ffa: string) => `Combined load: ${ffa}% FFA`,
+      penaltyWithout: "Without blending",
+      penaltyWith: "With this blend",
+      savesRm: (rm: string) => `Saves RM ${rm}`,
+    },
     prediction: {
       title: "FFA forecast",
       subtitle:
@@ -951,6 +966,21 @@ export const translations = {
       reasonBandErrors: "Betulkan ralat band penalti dahulu.",
       reasonVerification: "Sahkan senarai semak pengesahan.",
       aiNotApproval: "Panduan AI adalah sokongan keputusan sahaja — bukan kelulusan pengurusan atau jurutera.",
+    },
+    tankerBlend: {
+      title: "Blend di tanker",
+      badge: "Pilihan terakhir",
+      subtitle:
+        "Hanya jika blend tangki-ke-tangki tidak dapat baiki dalam masa. Tiada semakan makmal sehingga sudah dimuatkan, jadi ini kurang selamat berbanding blend dalam tangki dahulu.",
+      riskMax: "Bersihkan paling banyak",
+      riskBalanced: "Seimbang",
+      riskSafest: "Paling selamat",
+      problemSource: (mt: string, tank: string) => `${mt} MT dari ${tank} — melebihi had`,
+      cleanSource: (mt: string, tank: string) => `${mt} MT dari ${tank} — bersih`,
+      combinedResult: (ffa: string) => `Muatan gabungan: ${ffa}% FFA`,
+      penaltyWithout: "Tanpa blend",
+      penaltyWith: "Dengan blend ini",
+      savesRm: (rm: string) => `Jimat RM ${rm}`,
     },
     prediction: {
       title: "Ramalan FFA",

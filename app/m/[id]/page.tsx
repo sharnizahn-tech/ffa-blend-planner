@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import type { AdviseRequest } from "@/lib/advise";
 import { findTopDespatchPlans, planToDespatchPayload, type DespatchPlan } from "@/lib/despatch";
+import { suggestTankerBlend, type TankerBlendSuggestion } from "@/lib/tankerBlend";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
 import { FormattedOpinion } from "@/lib/format-opinion";
 import {
@@ -856,6 +857,42 @@ export default function Home() {
   }, [tanks, target, incomingCPO, incomingFFA, maxTransferPerDayMt, activeProfile, deadStockMt]);
 
   const primaryLossOptimizer = lossOptimizerResults[0] ?? null;
+
+  // Tanker-blend suggestions — the last-resort move for a tank that's still
+  // over the limit after today's allocation, blended directly at the tanker
+  // instead of in a storage tank. Built off tomorrow's post-allocation stock
+  // (despatchTanks), the same figures the rest of this tab reasons about.
+  // Suppressed when the Loss Optimizer already shows this same tank is
+  // better off held and blended in a tank — this is only ever a fallback.
+  const tankerBlendSuggestion = useMemo<TankerBlendSuggestion | null>(
+    () => suggestTankerBlend(despatchTanks, target, tankerLoadMt, 0),
+    [despatchTanks, target, tankerLoadMt],
+  );
+  const tankerBlendLossOptimizer = tankerBlendSuggestion
+    ? (lossOptimizerResults.find((r) => r.tankName === tankerBlendSuggestion.problemTank) ?? null)
+    : null;
+  const showTankerBlend =
+    !!tankerBlendSuggestion &&
+    tankerBlendSuggestion.options.length > 0 &&
+    (!tankerBlendLossOptimizer || tankerBlendLossOptimizer.recommendation !== "hold");
+  // RM impact per option, when a buyer profile is configured — the baseline
+  // is despatching the same total tonnage straight from the problem tank at
+  // its own FFA, so the comparison is apples-to-apples (same volume either
+  // way, only the FFA/band differs).
+  const tankerBlendOptionsWithPenalty = useMemo(() => {
+    if (!showTankerBlend || !tankerBlendSuggestion) return [];
+    const bands = activeProfile?.bands ?? null;
+    return tankerBlendSuggestion.options.map((opt) => {
+      if (!bands || !bands.length) return { ...opt, penaltyRm: null, baselinePenaltyRm: null };
+      const penaltyRm = calcTotalExposure([{ ffaPct: opt.combinedFfaPct, tonnageMt: opt.totalMt }], bands);
+      const baselinePenaltyRm = calcTotalExposure(
+        [{ ffaPct: tankerBlendSuggestion.problemTankFfaPct, tonnageMt: opt.totalMt }],
+        bands,
+      );
+      return { ...opt, penaltyRm, baselinePenaltyRm };
+    });
+  }, [showTankerBlend, tankerBlendSuggestion, activeProfile]);
+
   const despatchDecisionStatus: "dispatch-now" | "hold-blend" | "review-required" | "insufficient-data" =
     !activeProfile || buyerProfiles.length === 0 || !topDespatchPlans[0]
       ? "insufficient-data"
@@ -1135,6 +1172,22 @@ export default function Home() {
           availableMt: includeIncomingAsSource ? incomingCPO : 0,
           ffaPct: incomingFFA,
         },
+        tankerBlend:
+          showTankerBlend && tankerBlendSuggestion
+            ? {
+                problemTank: tankerBlendSuggestion.problemTank,
+                problemTankFfaPct: tankerBlendSuggestion.problemTankFfaPct,
+                options: tankerBlendOptionsWithPenalty.map((o) => ({
+                  risk: o.risk,
+                  problemTankMt: o.problemTankMt,
+                  cleanSources: o.cleanSources,
+                  totalMt: o.totalMt,
+                  combinedFfaPct: o.combinedFfaPct,
+                  penaltyRm: o.penaltyRm,
+                  baselinePenaltyRm: o.baselinePenaltyRm,
+                })),
+              }
+            : null,
         conversationHistory: history,
         userQuestion: question || undefined,
         language: lang,
@@ -1642,6 +1695,13 @@ export default function Home() {
         />
         </div>
       </div>
+      {showTankerBlend && tankerBlendSuggestion && (
+        <TankerBlendCard
+          copy={copy}
+          problemTank={tankerBlendSuggestion.problemTank}
+          options={tankerBlendOptionsWithPenalty}
+        />
+      )}
     </>
   );
 
@@ -1768,7 +1828,13 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen min-w-0 overflow-x-hidden bg-[#f4f6f2] text-[#17231d]">
+    <main
+      className="min-h-screen min-w-0 overflow-x-hidden bg-[#f4f6f2] bg-cover bg-top text-[#17231d]"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(244,246,242,0.88), rgba(244,246,242,0.88)), url(/Background.png)",
+      }}
+    >
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#123c2c] text-white">
         <div className="mx-auto flex max-w-[1440px] items-center gap-3 px-4 py-3 sm:px-8 xl:h-[88px] xl:gap-4 xl:px-12 xl:py-0">
           {/* Left: branding */}
@@ -4801,18 +4867,7 @@ function DespatchDecision({
 
   return (
     <div className="lg:sticky lg:top-4">
-    <section className="overflow-hidden rounded-2xl border border-[#dde5df] bg-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
-      <div className="relative h-28 w-full overflow-hidden">
-        <Image
-          src="/BST-Storage.png"
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 38vw, 100vw"
-          style={{ objectPosition: "10% 75%" }}
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-white via-white/10 to-transparent" />
-      </div>
+    <section className="overflow-hidden rounded-2xl border border-[#dde5df] bg-white/90 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
       <div className="p-4 sm:p-5">
         <p className="flex items-center gap-2 text-sm font-extrabold tracking-tight text-[#123c2c]">
           <Truck size={17} className="text-[#00713a]" />
@@ -4924,6 +4979,92 @@ function DespatchDecision({
       </div>
     </section>
     </div>
+  );
+}
+
+type TankerBlendOptionWithPenalty = TankerBlendSuggestion["options"][number] & {
+  penaltyRm: number | null;
+  baselinePenaltyRm: number | null;
+};
+
+/** Shown only when a tank is over the limit and the Loss Optimizer already
+ *  shows holding/blending it in a tank doesn't help — the true last resort:
+ *  load some of it straight into the tanker alongside clean stock from
+ *  another tank so the combined weight lands under the limit. Purely
+ *  informational (there's nothing to "apply" — it's a loading instruction
+ *  for the tanker crew, not a state change this app makes), so every
+ *  number here is exact but there's no confirm button. */
+function TankerBlendCard({
+  copy,
+  problemTank,
+  options,
+}: {
+  copy: Copy;
+  problemTank: string;
+  options: TankerBlendOptionWithPenalty[];
+}) {
+  if (!options.length) return null;
+  const riskLabel: Record<TankerBlendOptionWithPenalty["risk"], string> = {
+    max: copy.tankerBlend.riskMax,
+    balanced: copy.tankerBlend.riskBalanced,
+    safest: copy.tankerBlend.riskSafest,
+  };
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-2xl border border-[#f0cfb9] bg-white/90 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="flex items-center gap-2 text-sm font-extrabold tracking-tight text-[#123c2c]">
+            <AlertTriangle size={17} className="text-[#a64f24]" />
+            {copy.tankerBlend.title}
+          </p>
+          <span className="rounded-full bg-[#fff0e4] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#a64f24]">
+            {copy.tankerBlend.badge}
+          </span>
+        </div>
+        <p className="mt-1.5 text-xs leading-relaxed text-[#708078]">{copy.tankerBlend.subtitle}</p>
+
+        <div className="mt-3 space-y-2.5">
+          {options.map((opt) => (
+            <div key={opt.risk} className="rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-[#173f30]">{riskLabel[opt.risk]}</span>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#3f4c46]">
+                  {copy.tankerBlend.combinedResult(n(opt.combinedFfaPct, 2))}
+                </span>
+              </div>
+              <ul className="mt-2 space-y-1">
+                <li className="flex items-center gap-1.5 text-xs text-[#3f4c46]">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#a64f24]" />
+                  {copy.tankerBlend.problemSource(n(opt.problemTankMt, 0), problemTank)}
+                </li>
+                {opt.cleanSources.map((s) => (
+                  <li key={s.name} className="flex items-center gap-1.5 text-xs text-[#3f4c46]">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00b14f]" />
+                    {copy.tankerBlend.cleanSource(n(s.mt, 0), s.name)}
+                  </li>
+                ))}
+              </ul>
+              {opt.penaltyRm !== null && opt.baselinePenaltyRm !== null && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#e8ede8] pt-2 text-[11px]">
+                  <span className="text-[#708078]">
+                    {copy.tankerBlend.penaltyWithout}: <strong className="text-[#3f4c46]">RM {n(opt.baselinePenaltyRm, 0)}</strong>
+                  </span>
+                  <span className="text-[#708078]">
+                    {copy.tankerBlend.penaltyWith}: <strong className="text-[#3f4c46]">RM {n(opt.penaltyRm, 0)}</strong>
+                  </span>
+                  {opt.baselinePenaltyRm > opt.penaltyRm && (
+                    <span className="font-bold text-[#00713a]">
+                      {copy.tankerBlend.savesRm(n(opt.baselinePenaltyRm - opt.penaltyRm, 0))}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 

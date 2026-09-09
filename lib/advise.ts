@@ -142,6 +142,28 @@ export const adviseRequestSchema = z.object({
       ffaPct: z.number(),
     })
     .optional(),
+  // Calculated "blend at the tanker" options — present only when a tank is
+  // genuinely over the limit AND holding/blending it in a tank first
+  // doesn't help (checked before this is ever sent). Null/absent means
+  // don't bring this up at all right now.
+  tankerBlend: z
+    .object({
+      problemTank: z.string(),
+      problemTankFfaPct: z.number(),
+      options: z.array(
+        z.object({
+          risk: z.enum(["max", "balanced", "safest"]),
+          problemTankMt: z.number(),
+          cleanSources: z.array(z.object({ name: z.string(), mt: z.number(), ffaPct: z.number() })),
+          totalMt: z.number(),
+          combinedFfaPct: z.number(),
+          penaltyRm: z.number().nullable(),
+          baselinePenaltyRm: z.number().nullable(),
+        }),
+      ),
+    })
+    .nullable()
+    .optional(),
   conversationHistory: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
     .max(20)
@@ -537,6 +559,7 @@ Rules:
   - "lossOptimizer" is a per-tank comparison of despatching a high-FFA tank now versus holding it to blend the FFA down first — call it "the sell-now-vs-hold comparison". Always state which one the engine recommends and the RM saved, exactly as given — this is a core decision, don't soften it into vague advice. A "hold" recommendation is not always a full fix: when the data marks it not fully compliant, the hold only moves the tank into a cheaper penalty band by the given number of days — it does NOT bring it under the good FFA limit — say that plainly (e.g. "still over the limit, but the deduction band drops"), never imply the tank becomes fully compliant when it doesn't.
   - "batchBlend" is a day-by-day tank-to-tank transfer plan to bring existing stock to good FFA with no new incoming CPO — call it "the blend-down plan". State whether it's feasible, over how many days, exactly as given. This is only ONE of two ways the engineer can actually blend: they also have a manual one-off transfer tool (pick any source tank, any destination tank, any amount, right now) that isn't itself a computed "plan" — when asked how much to blend today, consider both: recommend a specific source tank → destination tank → amount using the same lowest-FFA-source / highest-FFA-destination logic "batchBlend" itself uses, even if no formal multi-day plan is shown. If NEITHER a tank-to-tank transfer NOR the blend-down plan gets the load compliant (no clean stock left, or not enough transfer capacity/time), only then mention blending directly at the tanker — loading from multiple source tanks into the same tanker so the combined load's FFA averages out. This mill treats it as risky and avoids it: there's no lab check on the blend until it's already loaded, and it's far less precise than blending in a tank first. Always call it out explicitly as the LAST RESORT and name the risk when you do — say something like "as a last resort, since it can't be lab-checked before loading" — never present it as just another equal option next to tank-to-tank blending or holding, and never suggest it while a tank-to-tank option is still available.
   - "incomingAsSource" tells you whether the engineer has ticked "include incoming CPO as a source" in the Transfer calculator. When "included" is true, the incoming CPO amount and FFA given there is ALSO available today as a blending source (in addition to tank-to-tank transfers) — factor it into your suggestion. When false, do not suggest using incoming CPO as a blend source; only tank-to-tank transfers are available today. Always mention which case you're in if it changes your answer.
+  - "tankerBlend" is the ONLY source of real numbers for blending at the tanker — never invent your own tanker-blend split. When it's null, don't bring up tanker-blending at all (a tank-to-tank blend is still available, or there's no problem tank right now). When it's present, "problemTank" is the tank that's over the limit and can't be cured in a tank first, and "options" is a ranked list ("max" clears the most of it but lands right at the limit with zero margin; "balanced" and "safest" clear less but leave real headroom under the limit, since this blend can't be lab-checked before the tanker leaves) — each option already states exactly how many MT from the problem tank plus how many MT from which clean tank(s) to load together, the resulting combined FFA, and (when a buyer profile is set up) the RM penalty with vs without the blend. Quote these numbers exactly; present 1-2 of the most relevant options (usually "max" and one safer one), not necessarily all of them, and always repeat the last-resort/risk framing from the rule above when you use it.
   - "allocationValid" / "hasOverflow" / "currentPlanValid" are pass/fail flags on the CURRENT allocation — never name them; just say plainly whether the current plan is workable and why (adds to 100%, no tank overflowing) if it isn't.
   - Every plan may carry its own penalty figure — when comparing plans, mention the RM difference between them, not just the FFA difference, but call it "the penalty for this option".
   - "targetFfaPct" is the GOOD FFA LIMIT — a ceiling, not a target to reach. At or below it is good; lower is always better. Call it "the good FFA limit".
