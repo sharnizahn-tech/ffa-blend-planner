@@ -4482,7 +4482,47 @@ function DespatchSummaryCards({
   );
 }
 
-function RefineryMobileCard({
+/** Shared bits between the desktop table row and the mobile compact row —
+ *  keeps the "Lowest Cost" badge, status pill, and red/green penalty text
+ *  visually identical between the two layouts. */
+function RefineryNameCell({ copy, name, isCheapest }: { copy: Copy; name: string; isCheapest: boolean }) {
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="break-words font-bold text-[#173f30]">{name}</span>
+      {isCheapest && (
+        <span className="shrink-0 rounded-full bg-[#d4f7e2] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#00713a]">
+          {copy.refineryComparison.lowestCostBadge}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function RefineryStatusPill({ copy, eligible }: { copy: Copy; eligible: boolean }) {
+  return (
+    <span
+      className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-bold ${
+        eligible ? "bg-[#e3f3e8] text-[#187449]" : "bg-[#f4f6f2] text-[#6c7971]"
+      }`}
+    >
+      {eligible ? copy.refineryComparison.eligible : copy.refineryComparison.notConfigured}
+    </span>
+  );
+}
+
+function PenaltyAmount({ rm, size = "text-xs" }: { rm: number; size?: string }) {
+  return (
+    <span className={`font-extrabold ${size}`} style={{ color: rm > 0 ? PENALTY_STAT_COLOR : "#00713a" }}>
+      RM {n(rm, 0)}
+    </span>
+  );
+}
+
+/** One refinery, as a single <tr> — used from md: up (tablet and desktop).
+ *  table-layout: fixed on the parent <table> means every cell here wraps
+ *  instead of forcing the table wider than its container; nothing is ever
+ *  truncated or pushed behind a horizontal scrollbar. */
+function RefineryTableRow({
   copy,
   row,
   isChecked,
@@ -4508,66 +4548,119 @@ function RefineryMobileCard({
   onToggle: () => void;
 }) {
   return (
-    <div
-      className={`rounded-xl border p-3.5 ${
-        isChecked ? "border-[#00b14f] bg-[#f6fae9]" : isCheapest ? "border-[#bfe3cc] bg-[#f0faf3]" : "border-[#e8ede8] bg-white"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={isChecked}
-            onChange={onToggle}
-            className="h-4 w-4 accent-[#00713a]"
-          />
-          <span className="font-bold text-[#173f30]">{row.profile.name}</span>
-        </label>
-        {isCheapest && (
-          <span className="shrink-0 rounded-full bg-[#d4f7e2] px-2 py-0.5 text-[10px] font-bold text-[#00713a]">
-            {copy.refineryComparison.lowestCostBadge}
-          </span>
-        )}
-      </div>
-      <div className="mt-2.5 grid grid-cols-2 items-center gap-x-3 gap-y-1.5 text-xs">
-        <span className="text-[#7a867f]">{copy.refineryComparison.bandColumn}</span>
-        <span className="text-right font-semibold text-[#3f4c46]">{bandLabel}</span>
-        <span className="text-[#7a867f]">{copy.refineryComparison.despatchColumn}</span>
-        <span className="flex items-center justify-end gap-1">
+    <tr className={`border-b border-[#eef1ee] align-middle transition-colors hover:bg-[#f4f8f5] ${isCheapest ? "bg-[#f0faf3]" : ""}`}>
+      <td className="px-1.5 py-2 lg:px-2 lg:py-2.5">
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={onToggle}
+          className="h-4 w-4 accent-[#00713a]"
+          aria-label={row.profile.name}
+        />
+      </td>
+      <td className="px-1.5 py-2 lg:px-2 lg:py-2.5">
+        <RefineryNameCell copy={copy} name={row.profile.name} isCheapest={isCheapest} />
+      </td>
+      <td className="whitespace-normal break-words px-1.5 py-2 text-[#3f4c46] lg:px-2 lg:py-2.5">{bandLabel}</td>
+      <td className="px-1.5 py-2 lg:px-2 lg:py-2.5">
+        <div className="flex items-center gap-1">
           <NumericInput
             label={copy.refineryComparison.despatchColumn}
             value={volumeMt}
             onChange={(v) => onVolumeChange(Math.max(0, v))}
-            className="numeric-input w-16"
+            className="numeric-input text-right"
           />
-          MT
-        </span>
-        <span className="text-[#7a867f]">{copy.refineryDespatch.lorriesColumn}</span>
-        <span className="text-right font-semibold text-[#3f4c46]">
-          {lorries > 0 ? copy.refineryDespatch.lorryCount(lorries) : "—"}
-        </span>
-        <span className="text-[#7a867f]">{copy.refineryComparison.ffaColumn}</span>
-        <span className="text-right font-semibold text-[#3f4c46]">{n(achievedFfaPct, 2)}%</span>
-        <span className="text-[#7a867f]">{copy.refineryComparison.rateColumn}</span>
-        <span className="text-right font-semibold text-[#3f4c46]">
-          {row.profile.bands.length ? `RM ${n(exposure.rmPerMt, 2)}/MT` : "—"}
-        </span>
-        <span className="text-[#7a867f]">{copy.refineryComparison.statusColumn}</span>
-        <span className="flex justify-end">
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              row.profile.bands.length ? "bg-[#e3f3e8] text-[#187449]" : "bg-[#f4f6f2] text-[#6c7971]"
-            }`}
-          >
-            {row.profile.bands.length ? copy.refineryComparison.eligible : copy.refineryComparison.notConfigured}
-          </span>
-        </span>
+          <span className="shrink-0 text-[#8a9690]">MT</span>
+        </div>
+      </td>
+      <td className="break-words px-1.5 py-2 text-right text-[#3f4c46] lg:px-2 lg:py-2.5">
+        {lorries > 0 ? copy.refineryDespatch.lorryCount(lorries) : "—"}
+      </td>
+      <td className="break-words px-1.5 py-2 text-right text-[#3f4c46] lg:px-2 lg:py-2.5">{n(achievedFfaPct, 2)}%</td>
+      <td className="whitespace-normal break-words px-1.5 py-2 text-right text-[#3f4c46] lg:px-2 lg:py-2.5">
+        {row.profile.bands.length ? `RM ${n(exposure.rmPerMt, 2)}/MT` : "—"}
+      </td>
+      <td className="px-1.5 py-2 lg:px-2 lg:py-2.5">
+        <RefineryStatusPill copy={copy} eligible={row.profile.bands.length > 0} />
+      </td>
+      <td className="px-1.5 py-2 text-right lg:px-2 lg:py-2.5">
+        <PenaltyAmount rm={exposure.totalRm} size="text-xs lg:text-sm" />
+      </td>
+    </tr>
+  );
+}
+
+/** One refinery, as two compact stacked rows — below md:, where 9 columns
+ *  side by side (even wrapped) would make every cell too cramped to read.
+ *  Styled to still read as a table (shared border, header-less field
+ *  labels, soft-green highlight for the recommended refinery), just laid
+ *  out as two grouped rows instead of one wide one. */
+function RefineryMobileRow({
+  copy,
+  row,
+  isChecked,
+  isCheapest,
+  volumeMt,
+  onVolumeChange,
+  lorries,
+  achievedFfaPct,
+  exposure,
+  onToggle,
+}: {
+  copy: Copy;
+  row: RefineryRow;
+  isChecked: boolean;
+  isCheapest: boolean;
+  volumeMt: number;
+  onVolumeChange: (v: number) => void;
+  lorries: number;
+  achievedFfaPct: number;
+  exposure: { rmPerMt: number; totalRm: number };
+  onToggle: () => void;
+}) {
+  return (
+    <div className={isCheapest ? "bg-[#f0faf3]" : "bg-white"}>
+      <div className="flex items-center gap-2 px-2.5 py-2">
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={onToggle}
+          className="h-4 w-4 shrink-0 accent-[#00713a]"
+          aria-label={row.profile.name}
+        />
+        <div className="min-w-0 flex-1 text-xs">
+          <RefineryNameCell copy={copy} name={row.profile.name} isCheapest={isCheapest} />
+        </div>
+        <RefineryStatusPill copy={copy} eligible={row.profile.bands.length > 0} />
+        <PenaltyAmount rm={exposure.totalRm} />
       </div>
-      <div className="mt-2.5 flex items-center justify-between border-t border-black/5 pt-2.5">
-        <span className="text-xs font-bold text-[#7a867f]">{copy.refineryComparison.penaltyColumn}</span>
-        <span className="text-base font-extrabold" style={{ color: PENALTY_STAT_COLOR }}>
-          RM {n(exposure.totalRm, 0)}
-        </span>
+      <div className="grid grid-cols-4 gap-1.5 border-t border-[#eef1ee] bg-[#fafbfa] px-2.5 py-1.5 text-[10px]">
+        <div className="min-w-0">
+          <p className="break-words leading-tight text-[#8a9690]">{copy.refineryComparison.despatchColumn}</p>
+          <div className="mt-1 flex items-center gap-0.5">
+            <NumericInput
+              label={copy.refineryComparison.despatchColumn}
+              value={volumeMt}
+              onChange={(v) => onVolumeChange(Math.max(0, v))}
+              className="numeric-input"
+            />
+            <span className="shrink-0 text-[#8a9690]">MT</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="break-words leading-tight text-[#8a9690]">{copy.refineryDespatch.lorriesColumn}</p>
+          <p className="mt-1 font-semibold text-[#3f4c46]">{lorries > 0 ? lorries : "—"}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="break-words leading-tight text-[#8a9690]">{copy.refineryComparison.ffaColumn}</p>
+          <p className="mt-1 font-semibold text-[#3f4c46]">{n(achievedFfaPct, 2)}%</p>
+        </div>
+        <div className="min-w-0">
+          <p className="break-words leading-tight text-[#8a9690]">{copy.refineryComparison.rateColumn}</p>
+          <p className="mt-1 break-words font-semibold text-[#3f4c46]">
+            {row.profile.bands.length ? `RM ${n(exposure.rmPerMt, 2)}` : "—"}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -4695,27 +4788,75 @@ function RefineryComparison({
             </label>
           </div>
 
-          {/* Always the card layout, at every width — a table here always
-             needed either horizontal scrolling or truncating the refinery
-             name behind the "Lowest Cost" badge to fit a fixed min-width.
-             Cards stack every field vertically instead, so nothing is ever
-             cut off or hidden behind a scrollbar. */}
-          <div className="mt-4 space-y-2.5">
-            {rows.map((row) => (
-              <RefineryMobileCard
-                key={row.profile.id}
-                copy={copy}
-                row={row}
-                isChecked={selected.has(row.profile.id)}
-                isCheapest={cheapestId === row.profile.id}
-                volumeMt={volumes[row.profile.id] ?? 0}
-                onVolumeChange={(v) => onVolumesChange((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
-                lorries={rowLorries(row)}
-                achievedFfaPct={achievedFfa}
-                bandLabel={rowBandLabel(row)}
-                exposure={rowExposure(row)}
-                onToggle={() => toggle(row.profile.id)}
-              />
+          {/* md: and up — one <tr> per refinery, table-layout: fixed with
+             percentage-width columns so it always fits its container: no
+             horizontal scroll, no truncation, long text wraps instead.
+             Below md: a compact two-row-per-refinery layout instead — see
+             RefineryMobileRow — since 9 columns side by side would be
+             unreadably cramped on a phone even with wrapping. */}
+          <div className="mt-4 hidden overflow-hidden rounded-xl border border-[#e2e8e3] md:block">
+            <table className="w-full table-fixed border-collapse text-[11px] lg:text-xs">
+              <colgroup>
+                <col className="w-[7%]" />
+                <col className="w-[15%]" />
+                <col className="w-[13%]" />
+                <col className="w-[12%]" />
+                <col className="w-[8%]" />
+                <col className="w-[9%]" />
+                <col className="w-[11%]" />
+                <col className="w-[11%]" />
+                <col className="w-[14%]" />
+              </colgroup>
+              <thead>
+                <tr className="bg-[#eaf7ee] text-left text-[10px] font-bold uppercase tracking-wide text-[#187449] lg:text-[11px]">
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.selectColumn}</th>
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.refineryColumn}</th>
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.bandColumn}</th>
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.despatchColumn}</th>
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryDespatch.lorriesColumn}</th>
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.ffaColumn}</th>
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.rateColumn}</th>
+                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.statusColumn}</th>
+                  <th className="break-words px-1.5 py-2 text-right lg:px-2 lg:py-2.5">{copy.refineryComparison.penaltyColumn}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <RefineryTableRow
+                    key={row.profile.id}
+                    copy={copy}
+                    row={row}
+                    isChecked={selected.has(row.profile.id)}
+                    isCheapest={cheapestId === row.profile.id}
+                    volumeMt={volumes[row.profile.id] ?? 0}
+                    onVolumeChange={(v) => onVolumesChange((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
+                    lorries={rowLorries(row)}
+                    achievedFfaPct={achievedFfa}
+                    bandLabel={rowBandLabel(row)}
+                    exposure={rowExposure(row)}
+                    onToggle={() => toggle(row.profile.id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-xl border border-[#e2e8e3] md:hidden">
+            {rows.map((row, i) => (
+              <div key={row.profile.id} className={i > 0 ? "border-t border-[#eef1ee]" : ""}>
+                <RefineryMobileRow
+                  copy={copy}
+                  row={row}
+                  isChecked={selected.has(row.profile.id)}
+                  isCheapest={cheapestId === row.profile.id}
+                  volumeMt={volumes[row.profile.id] ?? 0}
+                  onVolumeChange={(v) => onVolumesChange((prev) => ({ ...prev, [row.profile.id]: Math.max(0, v) }))}
+                  lorries={rowLorries(row)}
+                  achievedFfaPct={achievedFfa}
+                  exposure={rowExposure(row)}
+                  onToggle={() => toggle(row.profile.id)}
+                />
+              </div>
             ))}
           </div>
 

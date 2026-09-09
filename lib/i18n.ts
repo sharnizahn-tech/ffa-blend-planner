@@ -308,6 +308,8 @@ export const translations = {
     refineryComparison: {
       title: "Refinery Comparison",
       managePenaltyBands: "Manage Penalty Bands",
+      selectColumn: "Select",
+      refineryColumn: "Refinery",
       bandColumn: "Applicable Band",
       despatchColumn: "Planned Despatch",
       ffaColumn: "Achieved FFA",
@@ -912,6 +914,8 @@ export const translations = {
     refineryComparison: {
       title: "Perbandingan Kilang Penapisan",
       managePenaltyBands: "Urus Band Penalti",
+      selectColumn: "Pilih",
+      refineryColumn: "Kilang Penapisan",
       bandColumn: "Band Berkenaan",
       despatchColumn: "Despatch Dirancang",
       ffaColumn: "FFA Dicapai",
