@@ -15,8 +15,8 @@ export const translations = {
     flow: {
       overview: "Step 1 of 4 — Check today's status and the AI recommendation.",
       production: "Step 2 of 4 — Decide which BST incoming CPO should go into.",
-      transfer: "Step 3 of 4 — Blend stock down today so it's ready to ship.",
-      despatch: "Step 4 of 4 — Despatch tomorrow based on today's blending.",
+      despatch: "Step 3 of 4 — Compare refinery exposure and choose today's despatch.",
+      transfer: "Step 4 of 4 — Blend any remaining high-FFA stock down before next time.",
     },
     metrics: {
       currentStock: "Current stock",
@@ -621,8 +621,8 @@ export const translations = {
     flow: {
       overview: "Langkah 1/4 — Semak status hari ini dan cadangan AI.",
       production: "Langkah 2/4 — Tentukan tangki BST mana CPO masuk patut pergi.",
-      transfer: "Langkah 3/4 — Blend stok hari ini supaya sedia untuk dihantar.",
-      despatch: "Langkah 4/4 — Despatch esok berdasarkan blending hari ini.",
+      despatch: "Langkah 3/4 — Bandingkan pendedahan kilang penapisan dan pilih despatch hari ini.",
+      transfer: "Langkah 4/4 — Blend baki stok FFA tinggi sebelum kali seterusnya.",
     },
     metrics: {
       currentStock: "Stok semasa",

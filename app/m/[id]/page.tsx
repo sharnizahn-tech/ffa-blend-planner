@@ -1756,8 +1756,8 @@ export default function Home() {
   const navItems: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: copy.nav.overview, icon: <LayoutDashboard size={20} /> },
     { id: "production", label: copy.nav.production, icon: <Droplets size={20} /> },
-    { id: "transfer", label: copy.nav.transfer, icon: <ArrowRightLeft size={20} /> },
     { id: "despatch", label: copy.nav.despatch, icon: <Truck size={20} /> },
+    { id: "transfer", label: copy.nav.transfer, icon: <ArrowRightLeft size={20} /> },
   ];
 
   if (millLoadState === "loading") {
@@ -1825,13 +1825,22 @@ export default function Home() {
   }
 
   return (
-    <main
-      className="min-h-screen min-w-0 overflow-x-hidden bg-[#f4f6f2] bg-cover bg-top text-[#17231d]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(244,246,242,0.5), rgba(244,246,242,0.5)), url(/Background.png)",
-      }}
-    >
+    <main className="relative min-h-screen min-w-0 overflow-x-hidden text-[#17231d]">
+      {/* Fixed to the viewport, not the document, so every tab shows the
+         SAME crop/scale of the photo regardless of how tall that tab's
+         content is — a `background-size: cover` tied to the scrolling
+         element itself would zoom in more on tall tabs (Production) than
+         short ones (Transfer), which is exactly the inconsistency this
+         fixes. Plain `position: fixed` (not `background-attachment: fixed`)
+         so it also behaves correctly on iOS Safari. */}
+      <div
+        className="fixed inset-0 -z-10 bg-cover bg-center"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(244,246,242,0.42), rgba(244,246,242,0.42)), url(/Background.png)",
+        }}
+        aria-hidden
+      />
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#123c2c] text-white">
         <div className="mx-auto flex max-w-[1440px] items-center gap-3 px-4 py-3 sm:px-8 xl:h-[88px] xl:gap-4 xl:px-12 xl:py-0">
           {/* Left: branding */}
@@ -2070,7 +2079,7 @@ export default function Home() {
   );
 }
 
-const FLOW_ORDER: MobileTab[] = ["overview", "production", "transfer", "despatch"];
+const FLOW_ORDER: MobileTab[] = ["overview", "production", "despatch", "transfer"];
 
 function FlowHint({ copy, activeTab }: { copy: Copy; activeTab: MobileTab }) {
   const stepIndex = FLOW_ORDER.indexOf(activeTab);
@@ -4864,7 +4873,18 @@ function DespatchDecision({
 
   return (
     <div className="lg:sticky lg:top-4">
-    <section className="overflow-hidden rounded-2xl border border-[#dde5df] bg-white/90 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
+    <section className="overflow-hidden rounded-2xl border border-[#dde5df] bg-white shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)]">
+      <div className="relative h-28 w-full overflow-hidden">
+        <Image
+          src="/BST-Storage.png"
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 38vw, 100vw"
+          style={{ objectPosition: "10% 75%" }}
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-white via-white/10 to-transparent" />
+      </div>
       <div className="p-4 sm:p-5">
         <p className="flex items-center gap-2 text-sm font-extrabold tracking-tight text-[#123c2c]">
           <Truck size={17} className="text-[#00713a]" />
