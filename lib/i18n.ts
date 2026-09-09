@@ -360,12 +360,9 @@ export const translations = {
     },
     tankerBlend: {
       title: "Blend at the tanker",
-      badge: "Last resort",
       subtitle:
-        "Only if a tank-to-tank blend can't fix it in time. There's no lab check until it's already loaded, so this is less safe than blending in a tank first.",
-      riskMax: "Clears the most",
-      riskBalanced: "Balanced",
-      riskSafest: "Safest",
+        "A tank-to-tank blend won't fix this in time, so load it straight into the tanker with clean stock instead — there's no lab check until it's loaded, so a small margin is kept below the limit.",
+      recommendation: "Recommended load",
       problemSource: (mt: string, tank: string) => `${mt} MT from ${tank} — over limit`,
       cleanSource: (mt: string, tank: string) => `${mt} MT from ${tank} — clean`,
       combinedResult: (ffa: string) => `Combined load: ${ffa}% FFA`,
@@ -969,12 +966,9 @@ export const translations = {
     },
     tankerBlend: {
       title: "Blend di tanker",
-      badge: "Pilihan terakhir",
       subtitle:
-        "Hanya jika blend tangki-ke-tangki tidak dapat baiki dalam masa. Tiada semakan makmal sehingga sudah dimuatkan, jadi ini kurang selamat berbanding blend dalam tangki dahulu.",
-      riskMax: "Bersihkan paling banyak",
-      riskBalanced: "Seimbang",
-      riskSafest: "Paling selamat",
+        "Blend tangki-ke-tangki tidak dapat baiki dalam masa, jadi muatkan terus ke tanker bersama stok bersih — tiada semakan makmal sehingga dimuatkan, jadi margin kecil dikekalkan di bawah had.",
+      recommendation: "Muatan disyorkan",
       problemSource: (mt: string, tank: string) => `${mt} MT dari ${tank} — melebihi had`,
       cleanSource: (mt: string, tank: string) => `${mt} MT dari ${tank} — bersih`,
       combinedResult: (ffa: string) => `Muatan gabungan: ${ffa}% FFA`,

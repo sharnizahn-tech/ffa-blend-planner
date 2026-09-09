@@ -1,22 +1,17 @@
-// "Blend at the tanker" — the last-resort move for a high-FFA tank that
-// can't be cured in a storage tank first (no time, no spare capacity, or
-// the Loss Optimizer already shows holding doesn't help): load some of its
-// stock straight into the tanker together with clean stock from other
-// tanks, so the COMBINED load's FFA averages out. This mill treats it as
-// risky — there's no lab check on the blend until it's already loaded, far
-// less precise than blending in a tank first — so it's only ever a
-// fallback, and every suggestion here trades off how much of the problem
-// tank gets cleared against how much safety margin is left under the limit.
+// "Blend at the tanker" — for a high-FFA tank that can't be cured in a
+// storage tank first (the Loss Optimizer already shows holding doesn't
+// help), work out exactly how much of it to load straight into the tanker
+// together with clean stock from another tank, so the COMBINED load's FFA
+// averages back under the limit. The system decides one definite answer —
+// not a menu of options — but keeps a small safety margin below the limit
+// by default, since this blend can't be lab-checked until it's already
+// loaded, so it's less precise than blending in a tank first.
 
 export type TankerBlendTank = { name: string; stockMt: number; ffaPct: number };
 
 export type TankerBlendSource = { name: string; mt: number; ffaPct: number };
 
 export type TankerBlendOption = {
-  /** "max" clears the most problem-tank stock (zero margin — landing right
-   *  at the limit); "balanced" and "safest" trade some of that clearance
-   *  for a buffer, since the blend can't be lab-verified before loading. */
-  risk: "max" | "balanced" | "safest";
   problemTankMt: number;
   cleanSources: TankerBlendSource[];
   totalMt: number;
@@ -27,7 +22,7 @@ export type TankerBlendOption = {
 export type TankerBlendSuggestion = {
   problemTank: string;
   problemTankFfaPct: number;
-  options: TankerBlendOption[];
+  option: TankerBlendOption | null;
 };
 
 type EvalResult = { combinedFfaPct: number; totalMt: number; sources: TankerBlendSource[] };
@@ -95,7 +90,6 @@ function solveMaxProblemMt(
  *  only improve the margin, never break compliance) and recomputes the
  *  clean-source split for that rounded amount. */
 function roundOption(
-  risk: TankerBlendOption["risk"],
   problemFfaPct: number,
   cleanPoolMt: { name: string; ffaPct: number; availableMt: number }[],
   tankerLoadMt: number,
@@ -114,7 +108,6 @@ function roundOption(
     problemTankMt * problemFfaPct + cleanSources.reduce((sum, s) => sum + s.mt * s.ffaPct, 0);
   const combinedFfaPct = weighted / totalMt;
   return {
-    risk,
     problemTankMt,
     cleanSources,
     totalMt,
@@ -124,11 +117,13 @@ function roundOption(
 }
 
 /** Finds the worst tank currently over the good FFA limit and, if there's
- *  spare clean stock elsewhere, works out a handful of ranked ways to blend
- *  some of it away directly at the tanker — from the most aggressive
- *  (clears the most, zero safety margin) to the safest (clears less, but
- *  well clear of the limit). Returns null when there's no problem tank, or
- *  no clean stock anywhere to blend it with. */
+ *  spare clean stock elsewhere, decides one definite way to blend some of
+ *  it away directly at the tanker. Prefers a real safety margin (0.1 point
+ *  under the limit) since the blend can't be lab-checked before the tanker
+ *  leaves; falls back to the maximum feasible amount (landing right at the
+ *  limit) only if that safer margin can't clear a meaningful amount at all.
+ *  Returns null when there's no problem tank, or no clean stock anywhere to
+ *  blend it with. */
 export function suggestTankerBlend(
   tanks: TankerBlendTank[],
   target: number,
@@ -146,31 +141,19 @@ export function suggestTankerBlend(
     .filter((t) => t !== problem && t.ffaPct <= target && t.stockMt - deadStockMt > 0.5)
     .sort((a, b) => a.ffaPct - b.ffaPct)
     .map((t) => ({ name: t.name, ffaPct: t.ffaPct, availableMt: t.stockMt - deadStockMt }));
-  if (!cleanPool.length) return { problemTank: problem.name, problemTankFfaPct: problem.ffaPct, options: [] };
+  if (!cleanPool.length) return { problemTank: problem.name, problemTankFfaPct: problem.ffaPct, option: null };
 
   const problemAvailableMt = problem.stockMt - deadStockMt;
-  // Zero margin (right at the limit), then two safer tiers — each a real
-  // percentage-point buffer, not a token gesture, since this is the blend
-  // that can't be checked in a lab before the tanker leaves.
-  const tiers: { risk: TankerBlendOption["risk"]; marginPct: number }[] = [
-    { risk: "max", marginPct: 0 },
-    { risk: "balanced", marginPct: 0.1 },
-    { risk: "safest", marginPct: 0.2 },
-  ];
-
-  const options: TankerBlendOption[] = [];
-  const seen = new Set<string>();
-  for (const tier of tiers) {
-    const effectiveTarget = target - tier.marginPct;
+  // Try the safer margin first; only drop to zero margin (right at the
+  // limit) if that safer blend can't clear a meaningful amount at all.
+  const margins = [0.1, 0];
+  for (const marginPct of margins) {
+    const effectiveTarget = target - marginPct;
     if (effectiveTarget <= 0) continue;
     const raw = solveMaxProblemMt(problemAvailableMt, problem.ffaPct, cleanPool, tankerLoadMt, effectiveTarget);
-    const option = roundOption(tier.risk, problem.ffaPct, cleanPool, tankerLoadMt, target, raw);
-    if (!option) continue;
-    const key = `${option.problemTankMt}:${option.cleanSources.map((s) => `${s.name}${s.mt}`).join(",")}`;
-    if (seen.has(key)) continue; // a smaller margin tier can land on the same whole-MT numbers
-    seen.add(key);
-    options.push(option);
+    const option = roundOption(problem.ffaPct, cleanPool, tankerLoadMt, target, raw);
+    if (option) return { problemTank: problem.name, problemTankFfaPct: problem.ffaPct, option };
   }
 
-  return { problemTank: problem.name, problemTankFfaPct: problem.ffaPct, options };
+  return { problemTank: problem.name, problemTankFfaPct: problem.ffaPct, option: null };
 }
