@@ -873,23 +873,42 @@ export default function Home() {
   const refineryRows = useMemo(
     () =>
       buyerProfiles.map((p) => {
-        // Single blended FFA for a representative band/rate to display...
+        // Single blended FFA for a representative band/rate to display.
         const displayExposure = calcPenaltyExposure(achievedFfaPct, plannedDespatchMt, p.bands);
-        // ...but the RM total uses each source tank's own FFA, exactly like
-        // despatchPenaltyRm above, so the number matches what despatching
-        // this exact plan to this buyer would actually cost.
-        const totalRm = effectiveDespatchSources.length
-          ? calcTotalExposure(
-              effectiveDespatchSources.map((s) => ({ ffaPct: s.ffaPct, tonnageMt: s.mt })),
-              p.bands,
-            )
-          : displayExposure.totalRm;
+        // The RM total normally uses each source tank's own FFA rather than
+        // one blended figure, so it matches what despatching this exact
+        // plan would actually cost — genuinely separate lots (e.g. tank A's
+        // stock in one part of the load, tank B's in another) get tested
+        // and deducted separately. A ticked tanker-blend option is
+        // different: that stock is deliberately mixed together in the SAME
+        // tanker before it's ever tested, so the buyer only ever sees one
+        // combined FFA for the whole load — use displayExposure's single
+        // blended figure for that case instead, or the per-source total
+        // would wrongly charge the problem tank's own high FFA on its
+        // slice, even though blending is exactly what keeps the combined
+        // load compliant.
+        const totalRm =
+          showTankerBlend && tankerBlendSelectedOption
+            ? displayExposure.totalRm
+            : effectiveDespatchSources.length
+              ? calcTotalExposure(
+                  effectiveDespatchSources.map((s) => ({ ffaPct: s.ffaPct, tonnageMt: s.mt })),
+                  p.bands,
+                )
+              : displayExposure.totalRm;
         const bandIndex = displayExposure.band
           ? sortedBands(p.bands).findIndex((b) => b.id === displayExposure.band!.id)
           : -1;
         return { profile: p, displayExposure, totalRm, bandIndex };
       }),
-    [buyerProfiles, achievedFfaPct, plannedDespatchMt, effectiveDespatchSources],
+    [
+      buyerProfiles,
+      achievedFfaPct,
+      plannedDespatchMt,
+      effectiveDespatchSources,
+      showTankerBlend,
+      tankerBlendSelectedOption,
+    ],
   );
   const configuredRefineryRows = refineryRows.filter((r) => r.profile.bands.length > 0);
   const cheapestRefineryRow = configuredRefineryRows.length
@@ -931,7 +950,11 @@ export default function Home() {
     return errors;
   }, [activeProfile]);
 
-  const despatchExceedsStock = topDespatchPlans[0] ? topDespatchPlans[0].shortfallMt > 0.5 : false;
+  // Shortfall against the EFFECTIVE plan (plannedDespatchMt), not just the
+  // plain clean-tank plan — a ticked tanker-blend option that tops the
+  // tanker up to a full load already fixes a clean-stock shortfall, and
+  // shouldn't still block confirmation as if it hadn't.
+  const despatchExceedsStock = plannedDespatchMt < tankerLoadMt - 0.5;
   const confirmDisabledReasons: string[] = [];
   if (!activeProfile) confirmDisabledReasons.push(copy.despatchDecision.reasonNoRefinery);
   if (!(plannedDespatchMt > 0)) confirmDisabledReasons.push(copy.despatchDecision.reasonNoQuantity);
