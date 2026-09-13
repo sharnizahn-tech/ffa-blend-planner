@@ -2398,7 +2398,7 @@ function TankStatusCard({
         </button>
       </div>
 
-      <div className="mt-4 space-y-2.5">
+      <div className="mt-5 space-y-4">
         {tanks.map((tank, i) => {
           const tier = currentFfaTier(tank.ffa, target);
           const label = currentFfaLabel(tier, copy);
@@ -2412,20 +2412,20 @@ function TankStatusCard({
           return (
             <div
               key={i}
-              className="flex items-center gap-3 rounded-xl border border-[#e8ede8] bg-[#f9fbf8] p-3"
+              className="flex items-center gap-4 rounded-2xl border border-[#e8ede8] bg-[#f9fbf8] p-4 sm:gap-5 sm:p-5"
             >
-              <TankCylinder fillPct={fillPct} state={tier} compact />
+              <TankCylinder fillPct={fillPct} state={tier} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                  <span className="font-bold text-[#123c2c]">{tank.name}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
+                  <span className="text-lg font-bold text-[#123c2c] sm:text-xl">{tank.name}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${badgeClass}`}>
                     {label}
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-[#7a867f]">
+                <p className="mt-1 text-sm text-[#7a867f] sm:text-base">
                   {n(tank.stock, 0)} MT · {n(tank.ffa, 2)}% FFA
                 </p>
-                <p className="text-[10px] text-[#a2ada4]">{copy.tankStatus.filled(fillPct)}</p>
+                <p className="text-xs text-[#a2ada4] sm:text-sm">{copy.tankStatus.filled(fillPct)}</p>
               </div>
             </div>
           );
