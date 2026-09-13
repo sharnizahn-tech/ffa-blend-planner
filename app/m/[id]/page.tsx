@@ -3690,11 +3690,15 @@ function SmartRecommendation({
   // together every decision the app already made — routing, despatch, and
   // blend-down — into one place, instead of re-explaining routing alone the
   // way the Allocation strategy card above already does.
+  // Reads the ACTUAL applied allocation (the `allocation` prop), never
+  // `best`/topPlans[0] — this checklist describes what's really routed
+  // right now, which after "Use this plan" on Plan 2/3 (or a manual edit)
+  // is whatever the engineer picked, not the split-optimizer's own top pick.
   const routeLine = useConsolidate
     ? copy.plan.checklistRouteSingle(tanks[singleIndex].name)
-    : best
+    : allocation.some((x) => x > 0)
       ? copy.plan.checklistRouteSplit(
-          best.allocation
+          allocation
             .map((x, i) => (x > 0 ? `${x}% ${tanks[i].name}` : null))
             .filter((s): s is string => !!s)
             .join(", "),
