@@ -50,6 +50,85 @@ function buildDespatchPlan(
   };
 }
 
+// The brute force below enumerates every whole-MT split of `targetFill`
+// across all tanks — that's C(targetFill + tanks.length - 1, tanks.length - 1)
+// combinations (stars and bars). Fine for a couple of tanks and a normal
+// tanker load, but it grows combinatorially with BOTH tank count and load
+// size: 6 tanks at a 40 MT load is already ~1.2 million combinations. The
+// app's own schema allows up to 30 tanks, where this would need tens of
+// millions — a real timeout risk, not a theoretical one. Past this many
+// combinations we skip enumeration entirely and use a greedy fallback
+// instead (see greedyTopPlans) rather than let a request hang.
+const SAFE_ENUMERATION_LIMIT = 200_000;
+
+/** Stars-and-bars combination count C(budget + slots - 1, slots - 1),
+ *  computed incrementally so it can bail out the moment it's clearly past
+ *  `cap` instead of risking overflow on a huge exact value. Shared by any
+ *  planner that brute-forces "every way to split N units across k slots in
+ *  fixed-size steps" — see also findTopPlans in app/m/[id]/page.tsx. */
+export function estimateCombinationsOver(budget: number, slots: number, cap: number): boolean {
+  if (slots <= 1) return false;
+  let result = 1;
+  const n = budget + slots - 1;
+  const k = slots - 1;
+  for (let i = 0; i < k; i += 1) {
+    result = (result * (n - i)) / (i + 1);
+    if (result > cap) return true;
+  }
+  return false;
+}
+
+/** Fallback for tank counts where full enumeration isn't safe. Fills the
+ *  load from the cleanest (lowest-FFA) tank(s) first — which is provably
+ *  optimal for minimizing the load's blended FFA, the same thing the
+ *  brute-force scorer weights most heavily — then offers a couple of
+ *  "reserve your cleanest stock" alternatives so there's still a genuine
+ *  choice, not just one plan. */
+function greedyTopPlans(
+  tanks: DespatchTank[],
+  loadMt: number,
+  target: number,
+  limit: number,
+  tankCountWeight: number,
+  targetFill: number,
+): DespatchPlan[] {
+  const byFfaAsc = tanks
+    .map((t, index) => ({ ...t, index }))
+    .sort((a, b) => a.ffaPct - b.ffaPct);
+
+  const fillSkipping = (skipCount: number): DespatchPlan | null => {
+    const pool = byFfaAsc.slice(skipCount);
+    if (!pool.length) return null;
+    const amounts = new Array(tanks.length).fill(0);
+    let remaining = targetFill;
+    for (const t of pool) {
+      if (remaining <= 0) break;
+      const take = Math.min(Math.max(0, t.stockMt), remaining);
+      amounts[t.index] = take;
+      remaining -= take;
+    }
+    const sources = tanks.map((t, i) => ({ name: t.name, mt: amounts[i], ffaPct: t.ffaPct }));
+    const plan = buildDespatchPlan(sources, loadMt, target, tankCountWeight);
+    return plan.totalMt > 0 ? plan : null;
+  };
+
+  const candidates: DespatchPlan[] = [];
+  // Reserve 0, 1, 2, ... of the cleanest tanks in turn — each is a genuinely
+  // different, sensible strategy ("use your best stock" vs. "keep it in
+  // reserve, use the next-best combination instead"), not an arbitrary
+  // perturbation.
+  for (let skip = 0; skip < byFfaAsc.length; skip += 1) {
+    const plan = fillSkipping(skip);
+    if (plan && !candidates.some((p) => sameSources(p.sources, plan.sources))) {
+      candidates.push(plan);
+    }
+    if (candidates.length >= limit * 2) break; // plenty of candidates to rank from
+  }
+
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates.slice(0, limit);
+}
+
 export function findTopDespatchPlans(
   tanks: DespatchTank[],
   loadMt: number,
@@ -62,11 +141,16 @@ export function findTopDespatchPlans(
   const tankCountWeight = preferFewerTanks
     ? TANK_COUNT_WEIGHT_PREFER_FEWER
     : TANK_COUNT_WEIGHT_DEFAULT;
-  const top: DespatchPlan[] = [];
   const totalAvailable = tanks.reduce((s, t) => s + Math.max(0, t.stockMt), 0);
   if (totalAvailable <= 0) return [];
 
   const targetFill = Math.min(loadMt, totalAvailable);
+
+  if (estimateCombinationsOver(targetFill, tanks.length, SAFE_ENUMERATION_LIMIT)) {
+    return greedyTopPlans(tanks, loadMt, target, limit, tankCountWeight, targetFill);
+  }
+
+  const top: DespatchPlan[] = [];
 
   const assess = (amounts: number[]) => {
     const sources = tanks.map((t, i) => ({

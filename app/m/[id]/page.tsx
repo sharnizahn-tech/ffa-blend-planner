@@ -34,7 +34,12 @@ import {
   X,
 } from "lucide-react";
 import type { AdviseRequest } from "@/lib/advise";
-import { findTopDespatchPlans, planToDespatchPayload, type DespatchPlan } from "@/lib/despatch";
+import {
+  estimateCombinationsOver,
+  findTopDespatchPlans,
+  planToDespatchPayload,
+  type DespatchPlan,
+} from "@/lib/despatch";
 import { suggestTankerBlend, type TankerBlendSuggestion } from "@/lib/tankerBlend";
 import { getCopy, type Copy, type Lang } from "@/lib/i18n";
 import { FormattedOpinion } from "@/lib/format-opinion";
@@ -169,6 +174,26 @@ function scorePlan(
   return { allocation: [...allocation], results, score };
 }
 
+// Steps that evenly divide 100%, from finest to coarsest. This brute-forces
+// every way to split 100% across tanks in `step`-sized increments — that's
+// C(100/step + tanks.length - 1, tanks.length - 1) combinations (stars and
+// bars), same shape of blowup as findTopDespatchPlans in lib/despatch.ts.
+// 5% steps (the original, unconditional step size) stay exact for any tank
+// count this app has ever actually seen; the coarsening below only kicks in
+// once a tank count would make that unsafe, so today's real mills see zero
+// behavior change.
+const ALLOCATION_STEP_CANDIDATES = [5, 10, 20, 25, 50, 100];
+const SAFE_ALLOCATION_COMBINATION_LIMIT = 200_000;
+
+function chooseAllocationStep(tankCount: number): number {
+  for (const step of ALLOCATION_STEP_CANDIDATES) {
+    if (!estimateCombinationsOver(100 / step, tankCount, SAFE_ALLOCATION_COMBINATION_LIMIT)) {
+      return step;
+    }
+  }
+  return 100;
+}
+
 function findTopPlans(
   tanks: Tank[],
   incomingCPO: number,
@@ -184,12 +209,13 @@ function findTopPlans(
     top.sort((a, b) => a.score - b.score);
     if (top.length > limit) top.length = limit;
   };
+  const step = chooseAllocationStep(tanks.length);
   const build = (index: number, remaining: number, values: number[]) => {
     if (index === tanks.length - 1) {
       assess([...values, remaining]);
       return;
     }
-    for (let value = 0; value <= remaining; value += 5)
+    for (let value = 0; value <= remaining; value += step)
       build(index + 1, remaining - value, [...values, value]);
   };
   build(0, 100, []);

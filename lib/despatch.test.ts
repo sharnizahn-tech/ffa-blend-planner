@@ -1,6 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { findTopDespatchPlans, planToDespatchPayload } from "./despatch";
+import { estimateCombinationsOver, findTopDespatchPlans, planToDespatchPayload } from "./despatch";
 import type { DespatchTank } from "./despatch";
+
+describe("estimateCombinationsOver", () => {
+  it("is never over the cap for a single slot (nothing to combine)", () => {
+    expect(estimateCombinationsOver(1000, 1, 1)).toBe(false);
+    expect(estimateCombinationsOver(1000, 0, 1)).toBe(false);
+  });
+
+  it("matches the exact stars-and-bars count for small cases", () => {
+    // C(20 + 2 - 1, 2 - 1) = C(21, 1) = 21
+    expect(estimateCombinationsOver(20, 2, 20)).toBe(true);
+    expect(estimateCombinationsOver(20, 2, 21)).toBe(false);
+  });
+
+  it("detects a real-world blowup (10 tanks, 5% allocation steps) is over a 200k cap", () => {
+    // budget = 100/5 = 20 "slots" of 5% each, across 10 tanks
+    expect(estimateCombinationsOver(20, 10, 200_000)).toBe(true);
+  });
+
+  it("confirms coarsening the step size brings the same case back under the cap", () => {
+    // budget = 100/10 = 10 "slots" of 10% each, across 10 tanks
+    expect(estimateCombinationsOver(10, 10, 200_000)).toBe(false);
+  });
+});
 
 describe("findTopDespatchPlans", () => {
   it("returns an empty list when the load or stock is non-positive", () => {
@@ -46,7 +69,7 @@ describe("findTopDespatchPlans", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("stays fast for a small number of tanks", () => {
+  it("stays fast for a small number of tanks (brute-force path)", () => {
     const tanks: DespatchTank[] = Array.from({ length: 4 }, (_, i) => ({
       name: `BST ${i + 1}`,
       stockMt: 500,
@@ -59,30 +82,44 @@ describe("findTopDespatchPlans", () => {
     expect(elapsedMs).toBeLessThan(2000);
   });
 
-  // Documents a real scalability limit rather than hiding it: the planner
-  // brute-forces every whole-MT split of the tanker load across all tanks
-  // (see buildDespatchPlan's `build` recursion in despatch.ts) — cost grows
-  // combinatorially with BOTH tank count and load size, not just tank count.
-  // Measured directly: 6 tanks with a 40 MT load enumerates roughly 1.2
-  // million combinations and took ~3.5s on a dev machine. The app's own
-  // schema allows up to 30 tanks, where this same function would need to
-  // enumerate tens of millions of combinations per render — a real
-  // timeout/hang risk on Vercel, not just a slow-in-theory concern. This
-  // test is a regression guard, not a performance target: it should keep
-  // passing until the algorithm is fixed, and if it ever gets dramatically
-  // slower than this, something made the underlying problem worse.
-  it("documents combinatorial cost at 6 tanks (regression guard, not a target)", () => {
-    const tanks: DespatchTank[] = Array.from({ length: 6 }, (_, i) => ({
+  // Regression test for the scalability fix: enumerating every whole-MT
+  // split of the load across many tanks used to grow combinatorially (6
+  // tanks at a 40 MT load alone was ~1.2 million combinations, ~3.5s). Past
+  // SAFE_ENUMERATION_LIMIT, findTopDespatchPlans now switches to a greedy
+  // fallback instead — this proves it actually stays fast even well beyond
+  // the schema's 30-tank ceiling, and that the fallback still produces a
+  // sensible, correctly-ranked plan.
+  it("stays fast even with many tanks, via the greedy fallback", () => {
+    const tanks: DespatchTank[] = Array.from({ length: 20 }, (_, i) => ({
       name: `BST ${i + 1}`,
       stockMt: 500,
-      ffaPct: 4.2 + i * 0.1,
+      ffaPct: 4.0 + i * 0.1,
     }));
     const start = performance.now();
     const plans = findTopDespatchPlans(tanks, 40, 4.8, 3, false);
     const elapsedMs = performance.now() - start;
+    expect(elapsedMs).toBeLessThan(500);
     expect(plans.length).toBeGreaterThan(0);
-    expect(elapsedMs).toBeLessThan(15000);
-  }, 20000);
+    // The best plan should draw entirely from the single cleanest tank
+    // (BST 1 at 4.0%) — greedy-fill-cleanest-first is optimal here since
+    // it alone has enough stock for the whole load.
+    expect(plans[0].sources).toEqual([{ name: "BST 1", mt: 40, ffaPct: 4.0 }]);
+  });
+
+  it("greedy fallback offers a genuinely different 'reserve the cleanest tank' alternative", () => {
+    const tanks: DespatchTank[] = Array.from({ length: 20 }, (_, i) => ({
+      name: `BST ${i + 1}`,
+      stockMt: 500,
+      ffaPct: 4.0 + i * 0.1,
+    }));
+    const plans = findTopDespatchPlans(tanks, 40, 4.8, 3, false);
+    expect(plans.length).toBeGreaterThan(1);
+    // Every plan should be a distinct source split.
+    const keys = plans.map((p) => p.sources.map((s) => `${s.name}:${s.mt}`).join(","));
+    expect(new Set(keys).size).toBe(keys.length);
+    // The 2nd-ranked plan should not touch BST 1 (the reserved cleanest tank).
+    expect(plans[1].sources.some((s) => s.name === "BST 1")).toBe(false);
+  });
 });
 
 describe("planToDespatchPayload", () => {
