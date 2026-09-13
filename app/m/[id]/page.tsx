@@ -4875,7 +4875,9 @@ function RefineryComparison({
               </colgroup>
               <thead>
                 <tr className="bg-[#eaf7ee] text-left text-[10px] font-bold uppercase tracking-wide text-[#187449] lg:text-[11px]">
-                  <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.selectColumn}</th>
+                  <th className="px-1.5 py-2 lg:px-2 lg:py-2.5">
+                    <span className="sr-only">{copy.refineryComparison.selectColumn}</span>
+                  </th>
                   <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.refineryColumn}</th>
                   <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.bandColumn}</th>
                   <th className="break-words px-1.5 py-2 lg:px-2 lg:py-2.5">{copy.refineryComparison.despatchColumn}</th>
