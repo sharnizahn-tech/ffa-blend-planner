@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Clock,
   Coins,
+  Database,
   Droplets,
   Gauge,
   Info,
@@ -1459,10 +1460,11 @@ export default function Home() {
   const metrics = (
     <section className="grid grid-cols-2 gap-1.5 sm:gap-3 lg:grid-cols-4">
       <Metric
-        icon={<Gauge size={18} />}
+        icon={<Database size={18} />}
         label={copy.metrics.currentStock}
         value={`${n(currentStock, 0)} MT`}
         note={copy.metrics.acrossTanks(tanks.length)}
+        tone="green"
       />
       <Metric
         icon={<AlertTriangle size={18} />}
@@ -1470,12 +1472,14 @@ export default function Home() {
         value={`${n(highFFAStock, 0)} MT`}
         note={highFFAStock ? copy.metrics.actionRequired : copy.metrics.goodQuality}
         warning={!!highFFAStock}
+        tone="green"
       />
       <Metric
         icon={<Droplets size={18} />}
         label={copy.metrics.expectedCpo}
         value={`${n(incomingCPO)} MT`}
         note={copy.metrics.fromFfb(estimatedFFB)}
+        tone="purple"
       />
       <Metric
         icon={<Beaker size={18} />}
@@ -1483,6 +1487,7 @@ export default function Home() {
         value={`${n(incomingFFA, 2)}%`}
         note={copy.metrics.ffaLimitNote(target)}
         warning={incomingFFA > target}
+        tone="orange"
       />
     </section>
   );
@@ -2430,37 +2435,62 @@ function TankStatusCard({
   );
 }
 
+// Shared accent palette for the Overview/Despatch summary cards — a
+// distinct hue per card gives each metric its own visual identity instead
+// of nine identical white boxes, while staying subtle enough (light tint,
+// no color on the number itself) not to fight the data for attention. Red
+// is reserved for an actual warning/cost, never assigned as a base tone.
+type CardTone = "blue" | "green" | "teal" | "amber" | "purple" | "orange" | "red";
+const CARD_TONES: Record<CardTone, { bg: string; iconBg: string; iconText: string }> = {
+  blue: { bg: "bg-[#f4f8fe]", iconBg: "bg-[#dbeafe]", iconText: "text-[#1d4ed8]" },
+  // Green/red/purple/orange match the operational-meaning palette used by
+  // the Overview KPI cards exactly (healthy / critical / forecast /
+  // quality-attention) — kept here so despatch's summary cards, which
+  // share the same semantic categories, stay visually consistent with it.
+  green: { bg: "bg-[#f3faf5]", iconBg: "bg-[#EAF7F0]", iconText: "text-[#159447]" },
+  teal: { bg: "bg-[#f2fbfa]", iconBg: "bg-[#ccfbf1]", iconText: "text-[#0f766e]" },
+  amber: { bg: "bg-[#fefbf1]", iconBg: "bg-[#fef3c7]", iconText: "text-[#92660a]" },
+  purple: { bg: "bg-[#faf8fd]", iconBg: "bg-[#F2EDFA]", iconText: "text-[#7B4CC2]" },
+  orange: { bg: "bg-[#fffaf5]", iconBg: "bg-[#FFF3E6]", iconText: "text-[#F2994A]" },
+  red: { bg: "bg-[#fff5f5]", iconBg: "bg-[#FDECEC]", iconText: "text-[#E5484D]" },
+};
+
 function Metric({
   icon,
   label,
   value,
   note,
   warning = false,
+  tone = "green",
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   note: string;
   warning?: boolean;
+  tone?: CardTone;
 }) {
+  // Every card is white (a touch translucent, so the plantation background
+  // stays visible as a subtle layer behind it) — the semantic color lives
+  // ONLY in the icon badge and the status line, never the card body, so
+  // four colors read as "premium dashboard" rather than "coloring book."
+  const t = CARD_TONES[warning ? "red" : tone];
   return (
-    <article
-      className={`rounded-xl border bg-white p-2 shadow-sm sm:rounded-2xl sm:p-4 ${
-        warning ? "border-[#efc7aa]" : "border-[#dfe5dc]"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-1">
-        <span className="text-[9px] font-semibold leading-tight text-[#6c7971] sm:text-xs">{label}</span>
-        <span className={`shrink-0 scale-75 sm:scale-100 ${warning ? "text-[#c36331]" : "text-[#2e7652]"}`}>
+    <article className="rounded-2xl border border-[#E3ECE7] bg-white/90 p-3 shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.22)] sm:p-4">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[9px] font-semibold uppercase leading-tight tracking-wide text-[#6c7971] sm:text-[11px]">
+          {label}
+        </span>
+        <span
+          className={`grid h-9 w-9 shrink-0 place-items-center rounded-full sm:h-11 sm:w-11 ${t.iconBg} ${t.iconText}`}
+        >
           {icon}
         </span>
       </div>
-      <p className="mt-1 text-sm font-extrabold leading-tight sm:mt-2 sm:text-xl lg:text-2xl">{value}</p>
-      <p
-        className={`mt-0.5 hidden text-[10px] leading-tight sm:mt-1 sm:block sm:text-xs ${
-          warning ? "text-[#b55a2d]" : "text-[#7a867f]"
-        }`}
-      >
+      <p className="mt-2 text-lg font-extrabold leading-tight text-[#123c2c] sm:mt-3 sm:text-2xl lg:text-3xl">
+        {value}
+      </p>
+      <p className={`mt-1 hidden text-[10px] font-semibold leading-tight sm:block sm:text-xs ${t.iconText}`}>
         {note}
       </p>
     </article>
@@ -4465,16 +4495,19 @@ function SummaryCard({
   value,
   status,
   ok,
+  tone = "green",
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   status?: string;
   ok: boolean;
+  tone?: CardTone;
 }) {
+  const t = CARD_TONES[ok ? tone : "red"];
   return (
-    <article className="min-w-0 rounded-2xl border border-[#dfe5dc] bg-white p-3.5 shadow-sm sm:p-4">
-      <span className="text-[#287451]">{icon}</span>
+    <article className={`min-w-0 rounded-2xl border border-[#dfe5dc] p-3.5 shadow-sm sm:p-4 ${t.bg}`}>
+      <span className={`grid h-8 w-8 place-items-center rounded-full ${t.iconBg} ${t.iconText}`}>{icon}</span>
       <p className="mt-2 truncate text-xs font-semibold text-[#6c7971]">{label}</p>
       <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-[#123c2c] sm:text-2xl">{value}</p>
       {status && (
@@ -4516,6 +4549,7 @@ function DespatchSummaryCards({
         value={`${n(blendFfaPct, 2)}%`}
         status={ffaOk ? copy.despatchSummary.belowThreshold : copy.tanks.aboveLimit}
         ok={ffaOk}
+        tone="teal"
       />
       <SummaryCard
         icon={<Truck size={18} />}
@@ -4529,6 +4563,7 @@ function DespatchSummaryCards({
             : copy.despatchSummary.readyForDespatch
         }
         ok
+        tone="blue"
       />
       <SummaryCard
         icon={<Award size={18} />}
@@ -4536,6 +4571,7 @@ function DespatchSummaryCards({
         value={bestRow ? bestRow.profile.name : "—"}
         status={bestRow ? copy.refineryComparison.lowestCostBadge : copy.despatchSummary.noRefineryYet}
         ok={!!bestRow}
+        tone="amber"
       />
       <SummaryCard
         icon={<Coins size={18} />}
@@ -4543,6 +4579,7 @@ function DespatchSummaryCards({
         value={bestRow ? `RM ${n(bestRow.totalRm, 0)}` : "—"}
         status={bestRow ? (bestBelowThreshold ? copy.despatchSummary.noDeduction : undefined) : undefined}
         ok={bestBelowThreshold || bestRow?.totalRm === 0}
+        tone="green"
       />
     </div>
   );
