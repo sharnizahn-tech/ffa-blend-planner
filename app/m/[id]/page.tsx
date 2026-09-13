@@ -1052,16 +1052,20 @@ export default function Home() {
     // `best` (the split-scored plan) — used for the Allocation strategy
     // auto-suggestion so the AI is told the SAME thing the card is
     // actually showing, and can't reason its way to a contradictory
-    // answer. `best` is still included as an alternative either way.
+    // answer. Alternatives are always topPlans.slice(1) — exactly the
+    // "Top 3 Plans" cards the engineer can actually see — never `best`
+    // itself: when a single-tank recommendation (bestSingleTank) is
+    // overriding the split-optimizer's own top pick (`best`, i.e.
+    // topPlans[0]), that pick isn't shown anywhere in the UI, so telling
+    // the AI about it as a labelled "Option" produced a plan the engineer
+    // could never find on screen to check.
     recommendedPlanOverride?: BlendPlan,
     concise?: boolean,
   ): AdviseRequest => {
     const recommended = recommendedPlanOverride ?? best;
-    const alternatives = recommendedPlanOverride
-      ? [best, ...topPlans.slice(1)].filter(
-          (p): p is BlendPlan => !!p && !sameAllocation(p.allocation, recommendedPlanOverride.allocation),
-        )
-      : topPlans.slice(1);
+    const alternatives = topPlans
+      .slice(1)
+      .filter((p) => !recommendedPlanOverride || !sameAllocation(p.allocation, recommendedPlanOverride.allocation));
     return {
         production: {
           millCapacityMtHr: millCapacity,
