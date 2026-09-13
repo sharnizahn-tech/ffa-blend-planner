@@ -2082,7 +2082,7 @@ export default function Home() {
           {mobileTab === "overview" && (
             <>
               {metrics}
-              <div className="grid gap-4 xl:grid-cols-[13fr_12fr] xl:items-start">
+              <div className="grid gap-4 xl:grid-cols-[13fr_12fr] xl:items-stretch">
                 <RoutingRecommendationCard
                   copy={copy}
                   incomingCPO={incomingCPO}
@@ -2270,7 +2270,7 @@ function RoutingRecommendationCard({
   const confidenceColor = confidence === "high" ? "#8ff0bb" : confidence === "medium" ? "#ffd39c" : "#ffb4a8";
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-[#0d2e21] shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.4)]">
+    <section className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-[#0d2e21] shadow-[0_1px_2px_rgba(15,45,32,0.04),0_10px_28px_-18px_rgba(15,45,32,0.4)]">
       <div className="absolute inset-0">
         <Image
           src="/Oil.png"
@@ -2284,7 +2284,7 @@ function RoutingRecommendationCard({
         <div className="absolute inset-0 bg-gradient-to-r from-[#0d2e21]/75 via-[#0d2e21]/55 to-[#0d2e21]/10" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0d2e21]/70 via-[#0d2e21]/30 to-[#0d2e21]/10" />
       </div>
-      <div className="relative p-4 sm:p-6">
+      <div className="relative flex h-full flex-col p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15 text-[#8ff0bb]">
@@ -2329,10 +2329,17 @@ function RoutingRecommendationCard({
           {copy.blendSituation.verifyHint}
         </p>
 
+        {/* Absorbs any extra height once this card is stretched to match
+           Tank status's row (see the grid's items-stretch), so the button
+           settles near the bottom instead of leaving a gap under the hint
+           text — collapses to 0 and changes nothing when the two cards are
+           already the same natural height. */}
+        <div className="flex-1" />
+
         <button
           type="button"
           onClick={onViewBlend}
-          className="btn-touch mt-4 w-[calc(100%-88px)] bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] sm:w-auto"
+          className="btn-touch mt-4 w-[calc(100%-88px)] self-start bg-[#00b14f] text-white shadow-[0_4px_14px_rgba(0,177,79,0.35)] hover:bg-[#00a047] sm:w-auto"
         >
           {copy.blendSituation.viewRecommendedBlend}
           <ChevronRight size={16} />
