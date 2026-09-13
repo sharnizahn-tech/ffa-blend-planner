@@ -428,6 +428,12 @@ export default function Home() {
     "loading",
   );
   const hydratedRef = useRef(false);
+  // The `updatedAt` this tab last knows to be true — echoed back on every
+  // save so the server can tell "I'm saving my own most-recent load" from
+  // "someone else (another tab, another engineer with this same link)
+  // saved something newer while I was working." See saveConflict below.
+  const lastKnownUpdatedAtRef = useRef<string | null>(null);
+  const [saveConflict, setSaveConflict] = useState(false);
 
   const [tanks, setTanks] = useState(initialTanks);
   const [millCapacity, setMillCapacity] = useState(0);
@@ -530,6 +536,7 @@ export default function Home() {
     if (!millId) return;
     let cancelled = false;
     hydratedRef.current = false;
+    setSaveConflict(false);
     setMillLoadState("loading");
 
     fetch(`/api/mills/${millId}`)
@@ -562,6 +569,7 @@ export default function Home() {
         setAutoTransfer(state.autoTransfer);
         setLang(state.lang);
         setSetupComplete(state.setupComplete ?? true);
+        lastKnownUpdatedAtRef.current = typeof state.updatedAt === "string" ? state.updatedAt : null;
         // Marks hydration complete on the NEXT tick, after all the setters
         // above have committed — otherwise the save effect (which watches
         // these same fields) would fire once with stale pre-load values
@@ -595,7 +603,10 @@ export default function Home() {
   // the initial fetch above has actually hydrated state, so we never save
   // the hardcoded demo defaults over a mill's real saved data.
   useEffect(() => {
-    if (!millId || !hydratedRef.current || millLoadState !== "ready") return;
+    // Once a conflict is detected we stop trying to save silently — every
+    // further edit would just be rejected the same way, and worse, could
+    // train the engineer to ignore the banner. They need to reload first.
+    if (!millId || !hydratedRef.current || millLoadState !== "ready" || saveConflict) return;
     const payload: MillStateInput = {
       tanks,
       millCapacity,
@@ -620,18 +631,29 @@ export default function Home() {
       fetch(`/api/mills/${millId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }).catch(() => {
-        // Best-effort — a transient failure here isn't worth interrupting
-        // the engineer's work with an error banner; the next change will
-        // simply try saving again.
-      });
+        body: JSON.stringify({ ...payload, expectedUpdatedAt: lastKnownUpdatedAtRef.current }),
+      })
+        .then(async (res) => {
+          if (res.status === 409) {
+            setSaveConflict(true);
+            return;
+          }
+          if (!res.ok) return; // transient failure — next change retries anyway
+          const data = (await res.json()) as { updatedAt?: string };
+          if (typeof data.updatedAt === "string") lastKnownUpdatedAtRef.current = data.updatedAt;
+        })
+        .catch(() => {
+          // Best-effort — a transient failure here isn't worth interrupting
+          // the engineer's work with an error banner; the next change will
+          // simply try saving again.
+        });
     }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     millId,
     millLoadState,
+    saveConflict,
     tanks,
     millCapacity,
     hours,
@@ -1861,6 +1883,18 @@ export default function Home() {
         }}
         aria-hidden
       />
+      {saveConflict && (
+        <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 bg-[#92441f] px-4 py-2.5 text-sm text-white sm:px-8">
+          <span>{copy.saveConflict.message}</span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="btn-touch shrink-0 bg-white text-[#92441f]"
+          >
+            {copy.saveConflict.reload}
+          </button>
+        </div>
+      )}
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#123c2c] text-white">
         <div className="mx-auto flex max-w-[1440px] items-center gap-3 px-4 py-3 sm:px-8 xl:h-[88px] xl:gap-4 xl:px-12 xl:py-0">
           {/* Left: branding */}

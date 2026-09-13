@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { getMillState, saveMillState, isValidMillId, millStateInputSchema } from "@/lib/millStore";
+import {
+  getMillState,
+  saveMillState,
+  isValidMillId,
+  millStateInputSchema,
+  MillSaveConflictError,
+} from "@/lib/millStore";
 
 export const runtime = "nodejs";
 
@@ -41,10 +47,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     );
   }
 
+  // Not part of millStateInputSchema (it's request-level metadata, never
+  // persisted) — a client that omits it saves unconditionally.
+  const expectedUpdatedAt =
+    typeof body === "object" && body !== null && "expectedUpdatedAt" in body
+      ? (body as { expectedUpdatedAt?: unknown }).expectedUpdatedAt
+      : undefined;
+
   try {
-    await saveMillState(id, parsed.data);
-    return NextResponse.json({ ok: true });
+    const result = await saveMillState(
+      id,
+      parsed.data,
+      typeof expectedUpdatedAt === "string" ? expectedUpdatedAt : undefined,
+    );
+    return NextResponse.json({ ok: true, updatedAt: result.updatedAt });
   } catch (error) {
+    if (error instanceof MillSaveConflictError) {
+      return NextResponse.json(
+        {
+          error: "This mill was updated elsewhere since it was loaded. Reload to see the latest before saving again.",
+          currentUpdatedAt: error.currentUpdatedAt,
+        },
+        { status: 409 },
+      );
+    }
     console.error("Failed to save mill state:", error);
     return NextResponse.json({ error: "Could not save. Try again shortly." }, { status: 500 });
   }

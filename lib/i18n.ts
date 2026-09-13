@@ -11,6 +11,11 @@ export const translations = {
     ready: "Ready",
     footer:
       "Decision-support tool only · Final transfer requires authorised engineer verification",
+    saveConflict: {
+      message:
+        "This mill was updated elsewhere since you loaded it. Your changes here won't be saved until you reload.",
+      reload: "Reload",
+    },
     nav: { overview: "Overview", production: "Production", despatch: "Despatch", transfer: "Transfer" },
     flow: {
       overview: "Step 1 of 4 — Check today's status and the AI recommendation.",
@@ -574,6 +579,11 @@ export const translations = {
     ready: "Sedia",
     footer:
       "Alat sokongan keputusan sahaja · Pemindahan akhir memerlukan pengesahan jurutera berwibawa",
+    saveConflict: {
+      message:
+        "Kilang ini telah dikemas kini di tempat lain sejak anda memuatkannya. Perubahan anda di sini tidak akan disimpan sehingga anda muat semula.",
+      reload: "Muat Semula",
+    },
     nav: { overview: "Ringkasan", production: "Pengeluaran", despatch: "Despatch", transfer: "Pemindahan" },
     flow: {
       overview: "Langkah 1/4 — Semak status hari ini dan cadangan AI.",

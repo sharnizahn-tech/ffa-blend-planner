@@ -184,9 +184,41 @@ export async function getMillState(millId: string): Promise<MillState | null> {
   }
 }
 
-export async function saveMillState(millId: string, state: MillStateInput): Promise<void> {
+/** Thrown when `expectedUpdatedAt` no longer matches what's actually stored
+ *  — someone else (another tab, another engineer with the same link) saved
+ *  in between this client's last load and this save. Carries the real
+ *  current `updatedAt` so the caller can decide what to tell the user. */
+export class MillSaveConflictError extends Error {
+  constructor(public readonly currentUpdatedAt: string) {
+    super("Mill data was changed elsewhere since it was loaded.");
+    this.name = "MillSaveConflictError";
+  }
+}
+
+/** `expectedUpdatedAt`, when given, must match the mill's current stored
+ *  `updatedAt` or the save is rejected with MillSaveConflictError instead of
+ *  silently overwriting someone else's more recent change. This is a
+ *  read-then-write check, not a single atomic operation — a genuine
+ *  same-instant race between two saves could still both pass it — but it
+ *  closes the much more common real gap: two engineers with the same
+ *  no-login link, one working from a page loaded hours earlier. Omit
+ *  `expectedUpdatedAt` to save unconditionally (used only for the very
+ *  first save of a brand-new mill, which has no prior version to conflict
+ *  with). */
+export async function saveMillState(
+  millId: string,
+  state: MillStateInput,
+  expectedUpdatedAt?: string | null,
+): Promise<{ updatedAt: string }> {
   if (!isValidMillId(millId)) throw new Error("Invalid mill id");
-  const withTimestamp: MillState = { ...state, updatedAt: new Date().toISOString() };
+  if (expectedUpdatedAt) {
+    const current = await getMillState(millId);
+    if (current && current.updatedAt !== expectedUpdatedAt) {
+      throw new MillSaveConflictError(current.updatedAt);
+    }
+  }
+  const updatedAt = new Date().toISOString();
+  const withTimestamp: MillState = { ...state, updatedAt };
   await client().send(
     new PutObjectCommand({
       Bucket: bucketName(),
@@ -195,6 +227,7 @@ export async function saveMillState(millId: string, state: MillStateInput): Prom
       ContentType: "application/json",
     }),
   );
+  return { updatedAt };
 }
 
 /** Creates a brand-new mill with default demo data and returns its ID. */
