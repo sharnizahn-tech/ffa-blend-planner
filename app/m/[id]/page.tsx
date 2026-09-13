@@ -1910,7 +1910,7 @@ export default function Home() {
         className="fixed inset-0 -z-10 bg-cover bg-center"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(244,246,242,0.42), rgba(244,246,242,0.42)), url(/Background.png)",
+            "linear-gradient(rgba(244,246,242,0.5), rgba(244,246,242,0.5)), url(/Background.png)",
         }}
         aria-hidden
       />
