@@ -16,6 +16,14 @@ export const translations = {
         "This mill was updated elsewhere since you loaded it. Your changes here won't be saved until you reload.",
       reload: "Reload",
     },
+    undoLastSave: {
+      button: "Undo last save",
+      confirm: "Undo your last save? This restores the mill to how it was just before that save.",
+      cancel: "Cancel",
+      dismiss: "Dismiss",
+      nothingToUndo: "There's nothing to undo — no earlier save is available.",
+      failed: "Couldn't undo. Try again shortly.",
+    },
     nav: { overview: "Overview", production: "Production", despatch: "Despatch", transfer: "Transfer" },
     flow: {
       overview: "Step 1 of 4 — Check today's status and the AI recommendation.",
@@ -583,6 +591,14 @@ export const translations = {
       message:
         "Kilang ini telah dikemas kini di tempat lain sejak anda memuatkannya. Perubahan anda di sini tidak akan disimpan sehingga anda muat semula.",
       reload: "Muat Semula",
+    },
+    undoLastSave: {
+      button: "Buat asal simpanan terakhir",
+      confirm: "Buat asal simpanan terakhir anda? Ini akan memulihkan kilang seperti sebelum simpanan itu.",
+      cancel: "Batal",
+      dismiss: "Tutup",
+      nothingToUndo: "Tiada apa untuk dibuat asal — tiada simpanan terdahulu tersedia.",
+      failed: "Gagal buat asal. Cuba lagi sebentar.",
     },
     nav: { overview: "Ringkasan", production: "Pengeluaran", despatch: "Despatch", transfer: "Pemindahan" },
     flow: {

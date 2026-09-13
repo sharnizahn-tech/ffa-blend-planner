@@ -12,6 +12,7 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   HeadObjectCommand,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 import { z } from "zod";
@@ -158,6 +159,14 @@ function objectKey(millId: string): string {
   return `mills/${millId}.json`;
 }
 
+/** One level of undo, not a full history: whatever was live just before the
+ *  most recent save, so a fat-fingered edit or an accidental confirm can be
+ *  reverted. Overwritten on every save, cleared on every undo — a single
+ *  safety net, not a redo-able stack. */
+function previousObjectKey(millId: string): string {
+  return `mills/${millId}.previous.json`;
+}
+
 export async function millExists(millId: string): Promise<boolean> {
   if (!isValidMillId(millId)) return false;
   try {
@@ -211,14 +220,41 @@ export async function saveMillState(
   expectedUpdatedAt?: string | null,
 ): Promise<{ updatedAt: string }> {
   if (!isValidMillId(millId)) throw new Error("Invalid mill id");
-  if (expectedUpdatedAt) {
-    const current = await getMillState(millId);
-    if (current && current.updatedAt !== expectedUpdatedAt) {
-      throw new MillSaveConflictError(current.updatedAt);
+  // Read whatever's currently live both to check for a conflict AND to
+  // snapshot it for one-level undo — the same read serves both purposes,
+  // so this isn't an extra round trip beyond what the conflict check
+  // already needed.
+  const current = await getMillState(millId);
+  if (expectedUpdatedAt && current && current.updatedAt !== expectedUpdatedAt) {
+    throw new MillSaveConflictError(current.updatedAt);
+  }
+  // A no-op save — the data is byte-for-byte what's already stored, most
+  // commonly the client re-hydrating and immediately re-submitting exactly
+  // what it just loaded — must not touch the undo slot or bump `updatedAt`.
+  // Otherwise every page load would silently overwrite the ONE real
+  // previous version with a duplicate of the current one, so "undo" would
+  // restore nothing the moment the page is reloaded — exactly the case a
+  // real engineer would most want undo to survive.
+  if (current) {
+    const { updatedAt: _currentUpdatedAt, ...currentData } = current;
+    if (JSON.stringify(currentData) === JSON.stringify(state)) {
+      return { updatedAt: current.updatedAt };
     }
   }
   const updatedAt = new Date().toISOString();
   const withTimestamp: MillState = { ...state, updatedAt };
+  // Snapshot whatever was live just before this save — nothing to snapshot
+  // on a mill's very first save, when `current` is null.
+  if (current) {
+    await client().send(
+      new PutObjectCommand({
+        Bucket: bucketName(),
+        Key: previousObjectKey(millId),
+        Body: JSON.stringify(current),
+        ContentType: "application/json",
+      }),
+    );
+  }
   await client().send(
     new PutObjectCommand({
       Bucket: bucketName(),
@@ -228,6 +264,46 @@ export async function saveMillState(
     }),
   );
   return { updatedAt };
+}
+
+export async function getPreviousMillState(millId: string): Promise<MillState | null> {
+  if (!isValidMillId(millId)) return null;
+  try {
+    const res = await client().send(
+      new GetObjectCommand({ Bucket: bucketName(), Key: previousObjectKey(millId) }),
+    );
+    const body = await res.Body?.transformToString();
+    if (!body) return null;
+    return JSON.parse(body) as MillState;
+  } catch (err: unknown) {
+    const name = (err as { name?: string })?.name;
+    if (name === "NoSuchKey" || name === "NotFound") return null;
+    throw err;
+  }
+}
+
+/** Restores the mill to whatever was live just before its most recent
+ *  save, and clears the undo slot — a single one-shot revert, not a
+ *  redo-able stack. Returns null when there's nothing to undo (no prior
+ *  save, or undo already used since the last save). */
+export async function undoLastSave(millId: string): Promise<MillState | null> {
+  if (!isValidMillId(millId)) return null;
+  const previous = await getPreviousMillState(millId);
+  if (!previous) return null;
+  const updatedAt = new Date().toISOString();
+  const restored: MillState = { ...previous, updatedAt };
+  await client().send(
+    new PutObjectCommand({
+      Bucket: bucketName(),
+      Key: objectKey(millId),
+      Body: JSON.stringify(restored),
+      ContentType: "application/json",
+    }),
+  );
+  await client().send(
+    new DeleteObjectCommand({ Bucket: bucketName(), Key: previousObjectKey(millId) }),
+  );
+  return restored;
 }
 
 /** Creates a brand-new mill with default demo data and returns its ID. */

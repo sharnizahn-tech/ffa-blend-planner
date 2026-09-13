@@ -30,6 +30,10 @@ const send = vi.fn(async (command: unknown) => {
     }
     return {};
   }
+  if (cmd.__type === "delete") {
+    store.delete(cmd.input.Key);
+    return {};
+  }
   throw new Error(`unhandled fake command ${cmd.__type}`);
 });
 
@@ -47,6 +51,7 @@ vi.mock("@aws-sdk/client-s3", () => ({
   GetObjectCommand: fakeCommand("get"),
   PutObjectCommand: fakeCommand("put"),
   HeadObjectCommand: fakeCommand("head"),
+  DeleteObjectCommand: fakeCommand("delete"),
 }));
 
 process.env.R2_ENDPOINT ??= "https://example.test";
@@ -54,8 +59,16 @@ process.env.R2_ACCESS_KEY_ID ??= "test-key";
 process.env.R2_SECRET_ACCESS_KEY ??= "test-secret";
 process.env.R2_BUCKET_NAME ??= "test-bucket";
 
-const { getMillState, saveMillState, millExists, isValidMillId, MillSaveConflictError, defaultMillState } =
-  await import("./millStore");
+const {
+  getMillState,
+  saveMillState,
+  millExists,
+  isValidMillId,
+  MillSaveConflictError,
+  defaultMillState,
+  getPreviousMillState,
+  undoLastSave,
+} = await import("./millStore");
 
 function sampleState() {
   const base = defaultMillState();
@@ -120,5 +133,89 @@ describe("saveMillState / getMillState round-trip", () => {
     // there's nothing to conflict with.
     const result = await saveMillState(id, sampleState(), "2020-01-01T00:00:00.000Z");
     expect(result.updatedAt).toBeTruthy();
+  });
+
+  it("a no-op save (identical data) is a true no-op: same updatedAt, no write dispatched", async () => {
+    const id = "99999999-9999-9999-9999-999999999999";
+    // sampleState() mints a fresh buyerProfiles[0].id each call (it's
+    // Date.now()-based) — reuse ONE object so both saves are genuinely
+    // identical, not just similar.
+    const state = sampleState();
+    const first = await saveMillState(id, state);
+    send.mockClear();
+    const second = await saveMillState(id, state);
+    expect(second.updatedAt).toBe(first.updatedAt);
+    // The one call that DOES happen is the read to check for a no-op —
+    // no PutObjectCommand (current-state save or undo-slot snapshot).
+    const putCalls = send.mock.calls.filter((c) => (c[0] as { __type: string }).__type === "put");
+    expect(putCalls.length).toBe(0);
+  });
+
+  it("a no-op save does not clobber a REAL previous version with a duplicate of the current one", async () => {
+    // This is the exact bug this fix closes: state A saved, state B saved
+    // (so undo can restore A) — then something re-submits B unchanged
+    // (e.g. a page re-hydrating). Undo must still restore A, not B.
+    const id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const stateA = sampleState();
+    stateA.tankerLoadMt = 11;
+    await saveMillState(id, stateA);
+
+    const stateB = sampleState();
+    stateB.tankerLoadMt = 22;
+    await saveMillState(id, stateB);
+
+    // A no-op re-save of the CURRENT state (B) — must not touch the undo slot.
+    await saveMillState(id, stateB);
+
+    const restored = await undoLastSave(id);
+    expect(restored?.tankerLoadMt).toBe(11);
+  });
+});
+
+describe("undo (one level)", () => {
+  beforeEach(() => {
+    store.clear();
+    send.mockClear();
+  });
+
+  it("has nothing to undo before any save has happened", async () => {
+    const id = "55555555-5555-5555-5555-555555555555";
+    expect(await getPreviousMillState(id)).toBeNull();
+    expect(await undoLastSave(id)).toBeNull();
+  });
+
+  it("has nothing to undo after only ONE save (nothing came before it)", async () => {
+    const id = "66666666-6666-6666-6666-666666666666";
+    await saveMillState(id, sampleState());
+    expect(await getPreviousMillState(id)).toBeNull();
+    expect(await undoLastSave(id)).toBeNull();
+  });
+
+  it("restores the state from just before the most recent save", async () => {
+    const id = "77777777-7777-7777-7777-777777777777";
+    const first = sampleState();
+    first.tankerLoadMt = 40;
+    await saveMillState(id, first);
+
+    const second = sampleState();
+    second.tankerLoadMt = 99; // the "fat-fingered" change
+    await saveMillState(id, second);
+
+    const restored = await undoLastSave(id);
+    expect(restored?.tankerLoadMt).toBe(40); // back to what it was before the last save
+
+    const loaded = await getMillState(id);
+    expect(loaded?.tankerLoadMt).toBe(40);
+    expect(loaded?.updatedAt).toBe(restored?.updatedAt);
+  });
+
+  it("is a single one-shot revert, not a redo-able stack", async () => {
+    const id = "88888888-8888-8888-8888-888888888888";
+    await saveMillState(id, sampleState());
+    await saveMillState(id, sampleState());
+
+    expect(await undoLastSave(id)).not.toBeNull();
+    // The undo slot is cleared after use — undoing again finds nothing.
+    expect(await undoLastSave(id)).toBeNull();
   });
 });

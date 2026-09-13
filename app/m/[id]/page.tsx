@@ -23,6 +23,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Scale,
   Settings2,
   ShieldCheck,
@@ -596,6 +597,36 @@ export default function Home() {
     if (millLoadState === "ready" && lastCalculatedAt === null) setLastCalculatedAt(new Date());
   }, [millLoadState, lastCalculatedAt]);
   const refreshCalculations = () => setLastCalculatedAt(new Date());
+
+  // One level of undo — restores whatever was live just before the mill's
+  // most recent save. Confirmed via an in-app banner rather than
+  // window.confirm()/alert(): native dialogs are suppressed in some
+  // embedded/automated contexts (confirmed while testing this feature),
+  // so a real confirm click can silently do nothing. A full page reload
+  // after success is the simplest way to reflect the restored state
+  // correctly across every derived value, rather than re-threading ~20
+  // individual setters.
+  const [undoStatus, setUndoStatus] = useState<"idle" | "confirming" | "loading" | "nothing" | "failed">(
+    "idle",
+  );
+  const handleUndoConfirm = async () => {
+    if (!millId) return;
+    setUndoStatus("loading");
+    try {
+      const res = await fetch(`/api/mills/${millId}/undo`, { method: "POST" });
+      if (res.status === 404) {
+        setUndoStatus("nothing");
+        return;
+      }
+      if (!res.ok) {
+        setUndoStatus("failed");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setUndoStatus("failed");
+    }
+  };
 
   // Debounced save: any change to the mill's persisted fields is written
   // back a moment after typing/clicking settles, so every other device on
@@ -1895,6 +1926,42 @@ export default function Home() {
           </button>
         </div>
       )}
+      {undoStatus !== "idle" && (
+        <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 bg-[#173f30] px-4 py-2.5 text-sm text-white sm:px-8">
+          <span>
+            {undoStatus === "confirming" && copy.undoLastSave.confirm}
+            {undoStatus === "loading" && copy.undoLastSave.button + "…"}
+            {undoStatus === "nothing" && copy.undoLastSave.nothingToUndo}
+            {undoStatus === "failed" && copy.undoLastSave.failed}
+          </span>
+          {undoStatus === "confirming" ? (
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={handleUndoConfirm}
+                className="btn-touch bg-white text-[#173f30]"
+              >
+                {copy.undoLastSave.button}
+              </button>
+              <button
+                type="button"
+                onClick={() => setUndoStatus("idle")}
+                className="btn-touch border border-white/40 bg-transparent text-white"
+              >
+                {copy.undoLastSave.cancel}
+              </button>
+            </div>
+          ) : undoStatus !== "loading" ? (
+            <button
+              type="button"
+              onClick={() => setUndoStatus("idle")}
+              className="btn-touch shrink-0 bg-white text-[#173f30]"
+            >
+              {copy.undoLastSave.dismiss}
+            </button>
+          ) : null}
+        </div>
+      )}
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#123c2c] text-white">
         <div className="mx-auto flex max-w-[1440px] items-center gap-3 px-4 py-3 sm:px-8 xl:h-[88px] xl:gap-4 xl:px-12 xl:py-0">
           {/* Left: branding */}
@@ -1944,6 +2011,20 @@ export default function Home() {
 
           {/* Right: controls */}
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUndoStatus("confirming")}
+              disabled={undoStatus === "loading"}
+              title={copy.undoLastSave.button}
+              aria-label={copy.undoLastSave.button}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/15 bg-white/10 text-white/80 transition-colors hover:bg-white/20 hover:text-white disabled:opacity-50"
+            >
+              {undoStatus === "loading" ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RotateCcw size={16} />
+              )}
+            </button>
             <LanguageToggle lang={lang} onChange={setLanguage} />
             <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs md:flex">
               <span className="h-2 w-2 rounded-full bg-[#00e676]" />
